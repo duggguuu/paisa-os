@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, getBook, setBook } from './lib';
@@ -18,6 +18,8 @@ import { Budgets } from './pages/Budgets';
 import { QuickAdd, type QuickAddPreset } from './components/QuickAdd';
 import { TxnDetail } from './components/TxnDetail';
 import { Icon } from './components/Icons';
+import { LockScreen } from './components/Security';
+import { More } from './pages/More';
 
 interface Ui {
   openAdd: (preset?: QuickAddPreset) => void;
@@ -30,10 +32,18 @@ const UiCtx = createContext<Ui>(null as any);
 export const useUi = () => useContext(UiCtx);
 
 export function App() {
-  const status = useQuery({ queryKey: ['auth'], queryFn: () => api('/api/auth/status') });
+  const qc = useQueryClient();
+  // staleTime 0: re-checked whenever the app comes back to the foreground, so the lock shows straight away.
+  const status = useQuery({ queryKey: ['auth'], queryFn: () => api('/api/auth/status'), staleTime: 0 });
+  useEffect(() => {
+    const locked = () => qc.invalidateQueries({ queryKey: ['auth'] });
+    window.addEventListener('paisa:locked', locked);
+    return () => window.removeEventListener('paisa:locked', locked);
+  }, [qc]);
   if (status.isLoading) return <div className="main"><div className="skeleton" style={{ width: 120, marginTop: 40 }} /></div>;
   if (status.isError) return <div className="main"><p className="error">Can't reach the server. Check your connection and reload.</p></div>;
-  if (!status.data.user) return <Login setupNeeded={status.data.setupNeeded} />;
+  if (!status.data.user) return <Login setupNeeded={status.data.setupNeeded} passkeyLogin={status.data.passkeyLogin} />;
+  if (status.data.user.locked) return <LockScreen email={status.data.user.email} />;
   return <Shell />;
 }
 
@@ -61,20 +71,21 @@ function Shell() {
 
   const links: [string, string, string][] = [
     ['/', 'Home', 'home'],
-    ['/activity', 'Activity', 'activity'],
+    ['/activity', 'Trans.', 'book'],
     ['/stats', 'Stats', 'stats'],
-    ['/goals', 'Goals', 'target'],
     ['/accounts', 'Accounts', 'accounts'],
+    ['/more', 'More', 'more'],
   ];
 
   return (
     <UiCtx.Provider value={ui}>
       <div className="app">
         <nav className="sidebar" aria-label="Main">
-          <div className="brand"><span className="brand-mark" aria-hidden>₹</span>Paisa OS</div>
-          {links.map(([to, label, icon]) => (
+          <div className="brand"><img src="/logo-mark.png" alt="" className="logo-img" />Paisa OS</div>
+          {links.filter(([to]) => to !== '/more').map(([to, label, icon]) => (
             <NavLink key={to} to={to} end={to === '/'}><Icon name={icon} />{label}</NavLink>
           ))}
+          <NavLink to="/goals"><Icon name="target" />Goals</NavLink>
           <div className="nav-group">Plan</div>
           <NavLink to="/copilot"><Icon name="sparkle" />AI Copilot</NavLink>
           <NavLink to="/budgets"><Icon name="pie" />Budget Planner</NavLink>
@@ -107,16 +118,15 @@ function Shell() {
             <Route path="/goals" element={<Goals />} />
             <Route path="/copilot" element={<Copilot />} />
             <Route path="/budgets" element={<Budgets />} />
+            <Route path="/more" element={<More />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
-        <nav className="bottom-nav" aria-label="Main">
-          <div className="pill">
-            {links.map(([to, label, icon]) => (
-              <NavLink key={to} to={to} end={to === '/'} aria-label={label} title={label}><Icon name={icon} /></NavLink>
-            ))}
-          </div>
-          <button className="fab" aria-label="Add transaction" title="Add transaction" onClick={() => setAdd({})}><Icon name="plus" /></button>
+        <button className="fab-float" aria-label="Add transaction" title="Add transaction" onClick={() => setAdd({})}><Icon name="plus" /></button>
+        <nav className="tabbar" aria-label="Main">
+          {links.map(([to, label, icon]) => (
+            <NavLink key={to} to={to} end={to === '/'}><Icon name={icon} /><span>{label}</span></NavLink>
+          ))}
         </nav>
       </div>
       {add && <QuickAdd preset={add} onClose={() => setAdd(null)} />}

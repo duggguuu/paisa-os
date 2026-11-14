@@ -209,3 +209,15 @@ export async function transactionsFor(tx: Tx, bookId: string, r: Range, category
       and t.occurred_on >= ${r.from} and t.occurred_on < ${r.to}
     group by t.id order by t.occurred_on desc, t.created_at desc limit 200`;
 }
+
+/** Income by top-level income category (for the Income side of the Stats pie). */
+export async function byIncomeCategory(tx: Tx, bookId: string, r: Range) {
+  const rows = await tx<{ id: string; name: string; icon: string | null; amount: number }[]>`
+    select coalesce(c.parent_id, c.id) as id, max(coalesce(pc.name, c.name)) as name, max(coalesce(pc.icon, c.icon)) as icon,
+           (-sum(p.amount))::bigint as amount
+    from txn t join posting p on p.txn_id = t.id join account c on c.id = p.account_id left join account pc on pc.id = c.parent_id
+    where t.book_id = ${bookId} and t.status = 'posted' and c.class = 'income'
+      and t.occurred_on >= ${r.from} and t.occurred_on < ${r.to}
+    group by 1 having sum(p.amount) <> 0 order by amount desc`;
+  return rows.map((x) => ({ ...x, amount: Number(x.amount) }));
+}

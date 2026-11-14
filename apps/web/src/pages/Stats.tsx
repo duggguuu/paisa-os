@@ -1,32 +1,24 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, money, compact, pct, periodLabel, addDays, todayIST, KIND_ICON } from '../lib';
-import { TrendChart, SpendCalendar, Donut, toSlices, OTHER_COLOR, type Slice } from '../components/Charts';
-import { tint } from '../components/Icons';
+import { api, money, periodLabel, addDays, todayIST } from '../lib';
+import { TrendChart, PieLabeled, pieSlices } from '../components/Charts';
+import { CategoryTable, usePlanner } from '../components/Planner';
 import { TxnRow } from '../components/TxnRow';
+import { Icon } from '../components/Icons';
 
 type Period = 'week' | 'month' | 'year';
-type View = 'categories' | 'merchants' | 'accounts' | 'people';
-const PERIOD_WORD: Record<Period, string> = { week: 'last week', month: 'last month', year: 'last year' };
-const SAME_POINT: Record<Period, string> = { week: 'same day last week', month: 'same point last month', year: 'same point last year' };
+type Tab = 'stats' | 'budget' | 'note';
+const P_SHORT: Record<Period, string> = { week: 'W', month: 'M', year: 'Y' };
 
-function Delta({ cur, base, word, invert = false }: { cur: number; base: number | null; word: string; invert?: boolean }) {
-  if (base === null) return null;
-  if (cur === 0 && base > 0) return <span>none yet</span>;
-  if (base === 0) return cur > 0 ? <span className="delta up">new vs {word}</span> : null;
-  const d = (cur - base) / Math.abs(base);
-  if (Math.abs(d) < 0.005) return <span>no change vs {word}</span>;
-  const up = d > 0;
-  const bad = invert ? !up : up;
-  return <span className={`delta ${bad ? 'up' : 'down'}`}>{up ? '▲' : '▼'} {pct(Math.abs(d))} vs {word}</span>;
-}
-
-function DeltaPill({ cur, base, word }: { cur: number; base: number | null; word: string }) {
-  if (base === null || base === 0) return null;
-  const d = (cur - base) / Math.abs(base);
-  if (Math.abs(d) < 0.005) return <div className="pill">Same as {word}</div>;
-  const up = d > 0;
-  return <div className={`pill ${up ? 'bad' : 'good'}`}>{up ? '▲' : '▼'} {pct(Math.abs(d))} {up ? 'more' : 'less'} than {word}</div>;
+/** A list row with a coloured % badge, like a classic money-manager breakdown. */
+function ShareRow({ color, share, icon, name, amount, onClick }: { color: string; share: number; icon?: string | null; name: string; amount: number; onClick?: () => void }) {
+  return (
+    <button className="share-row" onClick={onClick} disabled={!onClick}>
+      <span className="badge num" style={{ background: color }}>{Math.round(share * 100)}%</span>
+      <span className="sname">{icon ? `${icon} ` : ''}{name}</span>
+      <span className="num samt">{money(amount)}</span>
+    </button>
+  );
 }
 
 export function Stats() {
@@ -34,223 +26,123 @@ export function Stats() {
   const navigate = useNavigate();
   const period = (params.get('period') as Period) || 'month';
   const anchor = params.get('anchor') || todayIST();
-  const view = (params.get('view') as View) || 'categories';
+  const tab = (params.get('tab') as Tab) || 'stats';
+  const side = params.get('side') === 'income' ? 'income' : 'expense';
   const categoryId = params.get('category');
   const set = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries(patch)) v === null ? next.delete(k) : next.set(k, v);
     setParams(next, { replace: true });
   };
-
   const q = useQuery({
     queryKey: ['stats', period, anchor, categoryId],
     queryFn: () => api<any>(`/api/stats?period=${period}&anchor=${anchor}${categoryId ? `&categoryId=${categoryId}` : ''}`),
     placeholderData: (prev) => prev,
   });
+  const planner = usePlanner();
   const s = q.data;
   const today = todayIST();
-  const isCurrent = s && s.range.from <= today && today < s.range.to;
+
+  const rows = !s ? [] : side === 'income' && !categoryId ? s.incomeCategories : s.categories;
+  const slices = pieSlices(rows.map((c: any) => ({ id: c.id, name: c.name, icon: c.icon, amount: c.amount })));
+  const merchantSlices = s ? pieSlices(s.merchants.map((m: any) => ({ key: m.name, name: m.name, amount: m.amount }))) : [];
 
   return (
     <>
-      <div className="page-head">
-        <h1 className="page-title">Stats</h1>
-        <div className="seg" role="tablist" aria-label="Period">
-          {(['week', 'month', 'year'] as Period[]).map((p) => (
-            <button key={p} className={period === p ? 'on' : ''} onClick={() => set({ period: p, anchor: null, category: null })}>
-              {p === 'week' ? 'W' : p === 'month' ? 'M' : 'Y'}
-            </button>
-          ))}
+      <div className="stats-top">
+        <div className="seg">
+          {(['stats', 'budget', 'note'] as Tab[]).map((t) => <button key={t} className={tab === t ? 'on' : ''} onClick={() => set({ tab: t === 'stats' ? null : t, category: null })}>{t === 'stats' ? 'Stats' : t === 'budget' ? 'Budget' : 'Note'}</button>)}
         </div>
+        <label className="period-pick">
+          <select value={period} onChange={(e) => set({ period: e.target.value, anchor: null, category: null })} aria-label="Period">
+            <option value="week">Weekly</option><option value="month">Monthly</option><option value="year">Yearly</option>
+          </select>
+          <span>{P_SHORT[period]}</span><Icon name="chevron" />
+        </label>
       </div>
 
-      <div className="spread" style={{ marginBottom: 14 }}>
-        <button className="btn small" aria-label="Previous period" onClick={() => s && set({ anchor: addDays(s.range.from, -1) })}>‹</button>
-        <div style={{ fontWeight: 600, fontSize: 17 }}>{s ? periodLabel(period, s.range.from, s.range.to) : '…'}{isCurrent ? <span className="faint small"> · so far</span> : null}</div>
-        <button className="btn small" aria-label="Next period" disabled={!s || s.range.to > today} onClick={() => s && set({ anchor: s.range.to })}>›</button>
+      <div className="month-nav">
+        <button aria-label="Previous" onClick={() => s && set({ anchor: addDays(s.range.from, -1) })}><Icon name="back" /></button>
+        <b>{s ? periodLabel(period, s.range.from, s.range.to) : '…'}</b>
+        <button aria-label="Next" disabled={!s || s.range.to > today} onClick={() => s && set({ anchor: s.range.to })}><Icon name="chevron" /></button>
       </div>
 
-      {!s ? <div className="card"><div className="skeleton" /></div> : (
+      {tab !== 'budget' && s && (
+        <div className="side-tabs">
+          <button className={side === 'income' ? 'on' : ''} onClick={() => set({ side: 'income', category: null })}>Income <span className="num">{money(s.summary.earned)}</span></button>
+          <button className={side === 'expense' ? 'on' : ''} onClick={() => set({ side: null })}>Exp. <span className="num">{money(s.summary.spent)}</span></button>
+        </div>
+      )}
+
+      {!s ? <div className="card"><div className="skeleton" /></div> : tab === 'stats' ? (
         <>
-          <div className="hero stats-hero">
-            <button className="tile" onClick={() => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&kind=expense`)}>
-              <div className="hero-label">Spent{isCurrent ? ' so far' : ''}</div>
-              <div className="hero-num num">{money(s.summary.spent, { whole: true })}</div>
-            </button>
-            <DeltaPill cur={s.summary.spent} base={s.previousSummary?.spent ?? null} word={s.comparedToDate ? SAME_POINT[period] : PERIOD_WORD[period]} />
-            <div className="hero-stats">
-              <button className="tile" onClick={() => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&kind=income`)}>
-                <span>Earned</span><b className="num">{s.summary.noIncomeLogged ? '—' : compact(s.summary.earned)}</b>
-              </button>
-              <div><span>Saved</span><b className="num">{s.summary.noIncomeLogged ? '—' : `${compact(s.summary.saved)} · ${pct(s.summary.savingsRate)}`}</b></div>
-              <div><span>Per day</span><b className="num">{compact(s.summary.avgDailySpend)}</b></div>
+          {categoryId && (
+            <div className="spread" style={{ margin: '8px 0' }}>
+              <button className="btn small" onClick={() => set({ category: null })}>‹ All categories</button>
+              <span className="small muted num">{money(s.categories.reduce((t: number, r: any) => t + r.amount, 0))}</span>
             </div>
-          </div>
-
-          <div className="section">
-            <div className="seg full" role="tablist" aria-label="Breakdown">
-              {(['categories', 'merchants', 'accounts', 'people'] as View[]).map((v) => (
-                <button key={v} className={view === v ? 'on' : ''} onClick={() => set({ view: v })}>{v[0].toUpperCase() + v.slice(1)}</button>
-              ))}
-            </div>
-          </div>
-
-          {view !== 'people' && (() => {
-            const rows: Slice[] = view === 'categories' ? s.categories.map((c: any) => ({ key: c.id, name: c.name, icon: c.icon, amount: c.amount }))
-              : view === 'merchants' ? s.merchants.map((m: any) => ({ key: m.name, name: m.name, amount: m.amount }))
-              : s.accounts.map((a: any) => ({ key: a.id, name: a.name, icon: KIND_ICON[a.kind], amount: a.amount }));
-            const total = rows.reduce((t, r) => t + Math.max(r.amount, 0), 0);
-            if (!total) return null;
-            const pick = (key: string) => view === 'categories' ? set({ category: key })
-              : navigate(`/activity?from=${s.range.from}&to=${s.range.to}&${view === 'merchants' ? `q=${encodeURIComponent(key)}` : `accountId=${key}`}`);
-            return (
-              <div className="section">
-                <div className="card"><Donut rows={rows} total={total} label={categoryId ? 'In this category' : 'Spent'} onPick={pick} /></div>
+          )}
+          {slices.length === 0 ? <div className="empty">No {side === 'income' ? 'income' : 'spending'} in this period.</div> : (
+            <>
+              <div className="card pie-card"><PieLabeled slices={slices} onPick={side === 'expense' && !categoryId ? (id) => set({ category: id }) : undefined} /></div>
+              <div className="list" style={{ marginTop: 10 }}>
+                {slices.map((sl) => (
+                  <ShareRow key={sl.key} color={sl.color} share={sl.share} icon={sl.icon} name={sl.name} amount={sl.amount}
+                    onClick={sl.rest ? undefined : side === 'expense' && !categoryId ? () => set({ category: sl.key }) : () => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&categoryId=${sl.key}`)} />
+                ))}
               </div>
-            );
-          })()}
-
-          <div className="section">
-            {view === 'categories' && <CategoryBars s={s} period={period} word={s.comparedToDate ? SAME_POINT[period] : PERIOD_WORD[period]} categoryId={categoryId} onDrill={(id) => set({ category: id })} onBack={() => set({ category: null })} />}
-            {view === 'merchants' && <SimpleBars rows={s.merchants.map((m: any) => ({ key: m.name, icon: '🏷️', name: m.name, amount: m.amount, sub: `${m.count} ${m.count === 1 ? 'payment' : 'payments'}` }))}
-              total={s.summary.spent} empty="No spending at merchants in this period." onPick={(r) => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&q=${encodeURIComponent(r.key)}`)} />}
-            {view === 'accounts' && <SimpleBars rows={s.accounts.map((a: any) => ({ key: a.id, icon: KIND_ICON[a.kind] ?? '•', name: a.name, amount: a.amount, sub: 'paid from this account' }))}
-              total={s.summary.spent} empty="No spending in this period." onPick={(r) => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&accountId=${r.key}`)} />}
-            {view === 'people' && <People rows={s.people} />}
-          </div>
-
+            </>
+          )}
           {categoryId && s.transactions.length > 0 && (
             <div className="section">
               <div className="section-title">Transactions</div>
-              <div className="list">
-                {s.transactions.map((t: any) => <DrillTxn key={t.id} t={t} />)}
-              </div>
+              <div className="list">{s.transactions.map((t: any) => <TxnRow key={t.id} t={{ ...t, merchant: t.title, postings: [{ kind: 'category', name: t.category, icon: null, amount: t.amount }], source: 'manual', status: 'posted' }} />)}</div>
             </div>
           )}
-
-          {!categoryId && s.trend.length > 0 && (
+          {!categoryId && side === 'expense' && s.trend.length > 0 && (
             <div className="section">
-              <div className="section-title">Spending trend</div>
+              <div className="section-title">Trend</div>
               <div className="card"><TrendChart points={s.trend} period={period} onPick={(from) => set({ anchor: from })} /></div>
             </div>
           )}
-
-          {!categoryId && period === 'month' && (
-            <div className="section">
-              <div className="section-title">Day by day</div>
-              <div className="card">
-                <SpendCalendar from={s.range.from} to={s.range.to} days={s.daily} today={today}
-                  onPick={(d) => navigate(`/activity?from=${d}&to=${addDays(d, 1)}`)} />
-                <div className="tiny faint" style={{ marginTop: 10 }}>
-                  Darker = more spent. Green dot = a day with no spending. {s.daily.length ? '' : 'Nothing spent yet.'}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!categoryId && (
-            <div className="section">
-              <div className="section-title">Not counted as spending</div>
-              <div className="list">
-                {s.excluded.length === 0 && <div className="empty">No transfers, card payments or investments this period.</div>}
-                {s.excluded.map((e: any) => (
-                  <div className="item" key={e.bucket} style={{ cursor: 'default' }}>
-                    <div className="grow"><div className="title">{e.bucket}</div><div className="sub">{e.count} {e.count === 1 ? 'transfer' : 'transfers'}</div></div>
-                    <div className="amt num">{money(e.amount, { whole: true })}</div>
-                  </div>
-                ))}
-              </div>
-              <p className="tiny faint" style={{ margin: '8px 2px' }}>Moving money between your own accounts, paying a card bill, investing and lending don't change what you spent, so they're kept out of the totals above.</p>
-            </div>
-          )}
+        </>
+      ) : tab === 'note' ? (
+        merchantSlices.length === 0 ? <div className="empty">No notes or merchants in this period.</div> : (
+          <div className="list" style={{ marginTop: 6 }}>
+            {merchantSlices.map((sl) => (
+              <ShareRow key={sl.key} color={sl.color} share={sl.share} name={sl.name} amount={sl.amount}
+                onClick={sl.rest ? undefined : () => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&q=${encodeURIComponent(sl.key)}`)} />
+            ))}
+          </div>
+        )
+      ) : (
+        <>
+          {period !== 'month' || s.range.to <= today || s.range.from > today
+            ? <p className="small muted">Budgets are monthly. Switch to this month to see and edit them.</p>
+            : planner.data && <BudgetTab planner={planner.data} />}
         </>
       )}
     </>
   );
 }
 
-function CategoryBars({ s, period, word, categoryId, onDrill, onBack }: { s: any; period: Period; word: string; categoryId: string | null; onDrill: (id: string) => void; onBack: () => void }) {
-  const rows: any[] = s.categories;
-  const drilled = categoryId ? rows : null;
-  if (!rows.length) return <div className="list"><div className="empty">No spending in this period.</div></div>;
-  const scale = Math.max(...rows.map((r) => Math.max(r.amount, r.budget ?? 0)), 1);
-  const { colorOf } = toSlices(rows.map((r) => ({ key: r.id, name: r.name, amount: r.amount })));
+function BudgetTab({ planner }: { planner: any }) {
+  const cats = useQuery({ queryKey: ['categories'], queryFn: () => api<any[]>('/api/categories') });
+  const byId = new Map(planner.categories.map((c: any) => [c.id, c]));
+  const rows = (cats.data ?? []).filter((c) => c.class === 'expense' && !c.parent_id).map((c) => byId.get(c.id) ?? { id: c.id, name: c.name, icon: c.icon, spent: 0, budget: null, used: null, status: null })
+    .sort((a: any, b: any) => (b.budget !== null ? 1 : 0) - (a.budget !== null ? 1 : 0) || b.spent - a.spent);
+  const b = planner.budgetUsed;
   return (
     <>
-      {drilled && (
-        <div className="spread" style={{ marginBottom: 8 }}>
-          <button className="btn small" onClick={onBack}>‹ All categories</button>
-          <span className="small muted num">{money(rows.reduce((t, r) => t + r.amount, 0), { whole: true })}</span>
+      {b.budget > 0 && (
+        <div className="totals" style={{ marginTop: 4 }}>
+          <div><span>Budget</span><b className="num">{money(b.budget, { whole: true })}</b></div>
+          <div><span>Spent</span><b className="num exp">{money(b.spent, { whole: true })}</b></div>
+          <div><span>Left</span><b className="num inc">{money(b.budget - b.spent, { whole: true })}</b></div>
         </div>
       )}
-      <div className="list bars">
-        {rows.map((r) => {
-          const over = r.budget !== null && r.amount > r.budget;
-          return (
-            <button key={r.id} className="bar-row" onClick={() => onDrill(r.id)}
-              aria-label={`${r.name}: ${money(r.amount, { whole: true })}`}>
-              <span className="icon avatar sm" style={tint(r.icon ?? r.name)} aria-hidden>{r.icon ?? '•'}</span>
-              <span className="name"><span>{r.name}</span><span className="tiny faint">{pct(r.share)}</span></span>
-              <span className="value num">{money(r.amount, { whole: true })}</span>
-              <span className="meter">
-                <span className={`fill ${over ? 'over' : ''}`} style={{ width: `${(Math.max(r.amount, 0) / scale) * 100}%`, ...(over ? {} : { background: colorOf.get(r.id) ?? OTHER_COLOR }) }} />
-                {r.budget !== null && <span className="budget" style={{ left: `${(r.budget / scale) * 100}%` }} title={`Budget ${money(r.budget, { whole: true })}`} />}
-              </span>
-              <span className="meta">
-                <Delta cur={r.amount} base={r.previous} word={word} />
-                {r.avg3 !== null && r.avg3 > 0 && <span>usual {compact(r.avg3)}</span>}
-                {r.budget !== null && <span className={over ? 'delta up' : ''}>{over ? `${compact(r.amount - r.budget)} over budget` : `${compact(r.budget - r.amount)} left of ${compact(r.budget)}`}</span>}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      {!categoryId && <p className="tiny faint" style={{ margin: '8px 2px' }}>"Usual" is your average over the 3 previous {period}s. The tick on a bar marks its budget.</p>}
+      <CategoryTable rows={rows} editable />
+      <p className="tiny faint" style={{ margin: '8px 2px' }}>Type a monthly budget and tap away to save; clear it to remove.</p>
     </>
   );
-}
-
-function SimpleBars({ rows, total, empty, onPick }: { rows: { key: string; icon: string; name: string; amount: number; sub: string }[]; total: number; empty: string; onPick: (r: any) => void }) {
-  if (!rows.length) return <div className="list"><div className="empty">{empty}</div></div>;
-  const max = Math.max(...rows.map((r) => r.amount), 1);
-  const { colorOf } = toSlices(rows);
-  return (
-    <div className="list bars">
-      {rows.map((r) => (
-        <button key={r.key} className="bar-row" onClick={() => onPick(r)}>
-          <span className="icon avatar sm" style={tint(r.icon + r.name)} aria-hidden>{r.icon}</span>
-          <span className="name"><span>{r.name}</span><span className="tiny faint">{total > 0 ? pct(r.amount / total) : ''}</span></span>
-          <span className="value num">{money(r.amount, { whole: true })}</span>
-          <span className="meter"><span className="fill" style={{ width: `${(Math.max(r.amount, 0) / max) * 100}%`, background: colorOf.get(r.key) ?? OTHER_COLOR }} /></span>
-          <span className="meta"><span>{r.sub}</span></span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function People({ rows }: { rows: any[] }) {
-  if (!rows.length) return <div className="list"><div className="empty">No money lent or received from people in this period. Add people under Accounts to track who owes you.</div></div>;
-  return (
-    <div className="list">
-      {rows.map((p) => (
-        <div className="item" key={p.id} style={{ cursor: 'default' }}>
-          <div className="avatar" style={tint(p.name)} aria-hidden>🧑</div>
-          <div className="grow">
-            <div className="title">{p.name}</div>
-            <div className="sub">Lent {money(p.lent, { whole: true })} · got back {money(p.received, { whole: true })}</div>
-          </div>
-          <div className="amt">
-            <div className="num" style={{ fontWeight: 600 }}>{money(p.outstanding, { whole: true })}</div>
-            <div className="tiny faint">{p.outstanding > 0 ? 'owes you' : p.outstanding < 0 ? 'you owe' : 'settled'}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function DrillTxn({ t }: { t: any }) {
-  // Stats returns a compact row; reuse TxnRow's look with the fields it needs.
-  return <TxnRow t={{ ...t, merchant: t.title, postings: [{ kind: 'category', name: t.category, icon: null, amount: t.amount }], source: 'manual', status: 'posted' }} />;
 }

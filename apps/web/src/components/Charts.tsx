@@ -208,3 +208,68 @@ export function OverviewBars({ spent, budget }: { spent: number; budget: number 
     </div>
   );
 }
+
+export const PIE_COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)', 'var(--s6)', 'var(--s7)', 'var(--s8)', 'var(--s9)', 'var(--s10)'];
+
+/** Slices for the labelled pie: top 9 by size, the rest folded into "Other", each with a colour. */
+export function pieSlices<T extends { amount: number; name: string; icon?: string | null; id?: string; key?: string }>(rows: T[]) {
+  const pos = rows.filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount);
+  const total = pos.reduce((s, r) => s + r.amount, 0) || 1;
+  const top = pos.length > 10 ? pos.slice(0, 9) : pos;
+  const rest = pos.slice(top.length);
+  const out = top.map((r, i) => ({ key: String(r.id ?? r.key ?? r.name), name: r.name, icon: r.icon ?? null, amount: r.amount, share: r.amount / total, color: PIE_COLORS[i % PIE_COLORS.length], rest: false }));
+  if (rest.length) {
+    const amt = rest.reduce((s, r) => s + r.amount, 0);
+    out.push({ key: '__other', name: `Other (${rest.length})`, icon: null, amount: amt, share: amt / total, color: 'var(--s-other)', rest: true });
+  }
+  return out;
+}
+
+/** Pie with outside labels and leader lines; labels are spaced so they never overlap. */
+export function PieLabeled({ slices, onPick }: { slices: ReturnType<typeof pieSlices>; onPick?: (key: string) => void }) {
+  if (!slices.length) return null;
+  const W = 400, H = 250, cx = W / 2, cy = H / 2, R = 78;
+  let a0 = -Math.PI / 2;
+  const arcs = slices.map((s) => {
+    const a1 = a0 + s.share * Math.PI * 2;
+    const mid = (a0 + a1) / 2;
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    const p = (a: number, r = R) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    const [x0, y0] = p(a0), [x1, y1] = p(a1);
+    const d = s.share >= 0.9999 ? `M${cx} ${cy - R}A${R} ${R} 0 1 1 ${cx - 0.01} ${cy - R}Z` : `M${cx} ${cy}L${x0.toFixed(2)} ${y0.toFixed(2)}A${R} ${R} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}Z`;
+    a0 = a1;
+    return { ...s, d, mid };
+  });
+  // Labels: slices ≥ 2%, split left/right, then pushed apart vertically.
+  const GAP = 28;
+  const labels = arcs.filter((a) => a.share >= 0.02).map((a) => {
+    const right = Math.cos(a.mid) >= 0;
+    return { ...a, right, y: cy + (R + 22) * Math.sin(a.mid), ex: cx + (R + 6) * Math.cos(a.mid), ey: cy + (R + 6) * Math.sin(a.mid) };
+  });
+  for (const side of [true, false]) {
+    const group = labels.filter((l) => l.right === side).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < group.length; i++) if (group[i].y - group[i - 1].y < GAP) group[i].y = group[i - 1].y + GAP;
+    const overflow = group.length ? group[group.length - 1].y - (H - 14) : 0;
+    if (overflow > 0) for (const g of group) g.y -= overflow;
+    for (let i = group.length - 2; i >= 0; i--) if (group[i + 1].y - group[i].y < GAP) group[i].y = group[i + 1].y - GAP;
+  }
+  const short = (s: string) => (s.length > 10 ? `${s.slice(0, 9)}…` : s);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" className="pie" role="img" aria-label={slices.map((s) => `${s.name} ${Math.round(s.share * 1000) / 10}%`).join(', ')}>
+      {arcs.map((a) => (
+        <path key={a.key} d={a.d} fill={a.color} stroke="var(--surface)" strokeWidth="1.5" style={{ cursor: onPick && !a.rest ? 'pointer' : 'default' }}
+          onClick={() => !a.rest && onPick?.(a.key)}><title>{a.name}: {(a.share * 100).toFixed(1)}%</title></path>
+      ))}
+      {labels.map((l) => {
+        const lx = l.right ? cx + R + 26 : cx - R - 26;
+        return (
+          <g key={l.key}>
+            <path d={`M${l.ex.toFixed(1)} ${l.ey.toFixed(1)} Q${(l.right ? lx - 10 : lx + 10).toFixed(1)} ${l.y.toFixed(1)} ${lx.toFixed(1)} ${l.y.toFixed(1)}`} fill="none" stroke={l.color} strokeWidth="1.2" />
+            <text x={l.right ? lx + 4 : lx - 4} y={l.y - 2} textAnchor={l.right ? 'start' : 'end'} fontSize="12.5" fontWeight="650" fill="var(--ink)">{l.icon ? `${l.icon} ` : ''}{short(l.name)}</text>
+            <text x={l.right ? lx + 4 : lx - 4} y={l.y + 12} textAnchor={l.right ? 'start' : 'end'} fontSize="11.5" fill="var(--ink-2)">{(l.share * 100).toFixed(1)} %</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}

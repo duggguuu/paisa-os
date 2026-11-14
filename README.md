@@ -30,7 +30,7 @@ createdb paisa_test
 npm test
 ```
 
-There are 43 API tests (ledger, API, recurring, imports, CAS, Splitwise, insights), plus 18 parser tests run by `npm run test:web` (voice, bank statements, receipts, CAS, Splitwise exports). They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
+There are 45 API tests (ledger, API, recurring, imports, CAS, Splitwise, insights), plus 18 parser tests run by `npm run test:web` (voice, bank statements, receipts, CAS, Splitwise exports). They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
 
 ## Deploy for free (Render + Neon)
 
@@ -91,11 +91,29 @@ Tap **Say it** on Home, or the mic in the Add sheet, and say something like:
 
 The sentence fills in the form: amount, place, category, account, date and split. You check it and tap Save, and nothing is saved automatically. The parsing happens on your device, with no AI service involved. Speech-to-text uses the browser's own engine: Chrome, and Safari with Siri turned on. If the mic isn't available (some iPhone home-screen apps block it), tap the text box and use the 🎤 key on the iPhone keyboard. Typed or dictated sentences are understood the same way.
 
+## Face ID
+
+**Settings → Face ID → Set up Face ID on this device**, then turn on **Lock Paisa** and pick how long it can sit idle (1, 5, 15 or 60 minutes).
+- When you come back after that long, Paisa asks for Face ID before showing anything. The server enforces this: a locked session can't read any data.
+- The login screen also gets **Log in with Face ID**.
+- This uses passkeys (WebAuthn): Face ID unlocks a key that never leaves your phone, and the server stores only the public key.
+- Passkeys are tied to the app's web address. If you move to a new domain, set Face ID up again.
+- Removing your last passkey turns the lock off automatically, so you can't get locked out. Your password always works.
+
+## Themes
+
+Tap 🎨 on Home, or the three round buttons on **More**:
+- **Dark mode:** cycles Auto → Dark → Light.
+- **High contrast:** on or off.
+- **Theme:** Monotone, Pastel, Cyber, Brass, Editorial, Terracotta, Forest, Risograph, Sepia, Glass (default), Spider-Verse or Spider-Verse 2.
+
+Appearance is saved on each device. It's also under Settings → Appearance.
+
 ## Install on iPhone
 
 1. Open the app's URL in **Safari**.
 2. Tap **Share**, then **Add to Home Screen**, then **Add**.
-3. Open **Paisa** from the home screen. It runs full-screen like an app. Log in once more inside it, because home-screen apps keep their own login, separate from Safari's.
+3. Open **Paisa** from the home screen. (After an icon change, delete the old home-screen icon and add it again; iOS caches icons.) It runs full-screen like an app. Log in once more inside it, because home-screen apps keep their own login, separate from Safari's.
 
 ## Bills & recurring
 

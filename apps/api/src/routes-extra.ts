@@ -88,6 +88,40 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
   api.post('/api/goals/:id/boost', async (req) => goals.boost(sql, B(req), P(req), goals.BoostInput.parse(req.body)));
   api.get('/api/goals/:id/contributions', async (req) => goals.contributions(sql, B(req), P(req)));
 
+  // Trans. screen: per-day and per-month income/expense
+  api.get('/api/trans/month', async (req) => {
+    const q = z.object({ anchor: date.optional() }).parse(req.query);
+    const { periodContaining } = await import('./money.js');
+    const range = periodContaining('month', q.anchor ?? todayIST(), req.book!.month_start_day);
+    const days = await sql<{ day: string; income: number; expense: number }[]>`
+      select t.occurred_on::text as day,
+        coalesce(-sum(p.amount) filter (where a.class = 'income'), 0)::bigint as income,
+        coalesce(sum(p.amount) filter (where a.class = 'expense'), 0)::bigint as expense
+      from txn t join posting p on p.txn_id = t.id join account a on a.id = p.account_id
+      where t.book_id = ${B(req)} and t.status = 'posted' and t.kind <> 'opening'
+        and t.occurred_on >= ${range.from} and t.occurred_on < ${range.to}
+      group by 1 order by 1`;
+    const income = days.reduce((s, d) => s + Number(d.income), 0), expense = days.reduce((s, d) => s + Number(d.expense), 0);
+    return { range, income, expense, total: income - expense, days };
+  });
+  api.get('/api/trans/year', async (req) => {
+    const q = z.object({ year: z.coerce.number().int().min(2000).max(2100) }).parse(req.query);
+    const { periodContaining, shiftPeriod } = await import('./money.js');
+    const msd = req.book!.month_start_day;
+    const first = periodContaining('month', `${q.year}-01-${String(msd).padStart(2, '0')}`, msd);
+    const months = Array.from({ length: 12 }, (_, i) => shiftPeriod('month', first, i, msd));
+    const rows = await sql<{ idx: number; income: number; expense: number }[]>`
+      select r.idx::int as idx,
+        coalesce(-sum(p.amount) filter (where a.class = 'income'), 0)::bigint as income,
+        coalesce(sum(p.amount) filter (where a.class = 'expense'), 0)::bigint as expense
+      from unnest(${months.map((m) => m.from)}::date[], ${months.map((m) => m.to)}::date[]) with ordinality as r(f, t, idx)
+      left join txn x on x.book_id = ${B(req)} and x.status = 'posted' and x.kind <> 'opening' and x.occurred_on >= r.f and x.occurred_on < r.t
+      left join posting p on p.txn_id = x.id
+      left join account a on a.id = p.account_id
+      group by r.idx order by r.idx`;
+    return months.map((m, i) => ({ ...m, income: Number(rows[i]?.income ?? 0), expense: Number(rows[i]?.expense ?? 0) }));
+  });
+
   // Budget planner + financial health
   api.get('/api/planner', async (req) => planner(sql, B(req), req.book!.month_start_day));
   api.get('/api/health-score', async (req) => healthScore(sql, B(req), req.book!.month_start_day));

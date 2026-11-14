@@ -25,6 +25,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
+  if (res.status === 423 && typeof window !== 'undefined') window.dispatchEvent(new Event('paisa:locked'));
   if (!res.ok) throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText);
   return data as T;
 }

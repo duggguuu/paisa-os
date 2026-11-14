@@ -59,8 +59,15 @@ const fakeFetch: typeof fetch = async (input: any) => {
 
 const req = async (method: string, path: string, body?: unknown) => {
   const res = await app.inject({ method: method as any, url: path, payload: body as any, headers: { cookie } });
+  // Keep cookies by name, like a browser (the Face ID challenge cookie sits beside the session cookie).
   const set = res.headers['set-cookie'];
-  if (set) cookie = String(Array.isArray(set) ? set[0] : set).split(';')[0];
+  for (const c of set ? (Array.isArray(set) ? set : [set]) : []) {
+    const [pair] = String(c).split(';');
+    const name = pair.split('=')[0];
+    const jar = new Map(cookie ? cookie.split('; ').map((x) => [x.split('=')[0], x] as [string, string]) : []);
+    if (/=;|=$|Max-Age=0|Expires=Thu, 01 Jan 1970/i.test(String(c))) jar.delete(name); else jar.set(name, pair);
+    cookie = [...jar.values()].join('; ');
+  }
   return { status: res.statusCode, body: res.body ? JSON.parse(res.body) : null };
 };
 
@@ -327,4 +334,47 @@ test('copilot (local engine) answers from the data', async () => {
   assert.match(await ask('How can I save more each month?'), /income|Trimming|budget/);
   assert.match(await ask("what's my financial health score?"), /\/100/);
   assert.match(await ask('how much did I spend on groceries'), /Groceries|couldn't find/);
+});
+
+test('Trans. month and year totals match the ledger', async () => {
+  const m = (await req('GET', `/api/trans/month?anchor=${today}`)).body;
+  const home = (await req('GET', '/api/home')).body;
+  assert.equal(m.expense, home.monthSummary.spent);
+  assert.equal(m.income, home.monthSummary.earned);
+  assert.equal(m.total, m.income - m.expense);
+  const y = (await req('GET', `/api/trans/year?year=${today.slice(0, 4)}`)).body;
+  assert.equal(y.length, 12);
+  assert.equal(y.find((r: any) => r.from === m.range.from).expense, m.expense);
+  const s = (await req('GET', '/api/stats?period=month')).body;
+  assert.ok(Array.isArray(s.incomeCategories));
+});
+
+test('app lock: server refuses a locked session until Face ID unlocks it', async () => {
+  // Without a passkey the lock can't be turned on.
+  let r = await req('PUT', '/api/security', { lockEnabled: true });
+  assert.equal(r.status, 400);
+  // Register a (fake) passkey row directly; real ones come from the phone.
+  const [u] = await sql<{ id: string }[]>`select id from app_user limit 1`;
+  await sql`insert into webauthn_credential (id, user_id, public_key) values ('test-cred', ${u.id}, '\\x00')`;
+  assert.equal((await req('GET', '/api/auth/status')).body.passkeyLogin, true);
+  r = await req('PUT', '/api/security', { lockEnabled: true, lockMinutes: 5 });
+  assert.equal(r.status, 200);
+  assert.equal((await req('GET', '/api/accounts')).status, 200, 'unlocked right after turning it on');
+  await req('POST', '/api/auth/lock');
+  r = await req('GET', '/api/accounts');
+  assert.equal(r.status, 423, 'locked sessions get 423');
+  const st = (await req('GET', '/api/auth/status')).body;
+  assert.equal(st.user.locked, true);
+  r = await req('POST', '/api/auth/unlock/options', {});
+  assert.equal(r.status, 200);
+  assert.ok(r.body.challenge && r.body.allowCredentials.some((c: any) => c.id === 'test-cred'));
+  r = await req('POST', '/api/auth/unlock/verify', { response: { id: 'test-cred', rawId: 'test-cred', type: 'public-key', response: {} } });
+  assert.ok(r.status >= 400, 'a bogus assertion is rejected');
+  assert.equal((await req('GET', '/api/accounts')).status, 423);
+  // Removing the last passkey turns the lock off (so you can't be locked out).
+  await sql`update session set unlocked_until = now() + interval '5 minutes'`;
+  await req('DELETE', '/api/passkeys/test-cred');
+  assert.equal((await req('GET', '/api/auth/status')).body.user.lockEnabled, false);
+  await sql`update session set unlocked_until = now() - interval '1 minute'`;
+  assert.equal((await req('GET', '/api/accounts')).status, 200, 'no lock when it is off');
 });
