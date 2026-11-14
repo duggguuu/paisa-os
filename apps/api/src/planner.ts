@@ -121,14 +121,19 @@ export async function healthScore(sql: Sql, bookId: string, monthStartDay: numbe
     tip: budgeted.length ? (ok < budgeted.length ? 'Check the categories marked Behind in the Budget Planner.' : null) : 'Set a few budgets for your biggest categories.',
   });
 
-  // 4. Card debt
-  const dues = nw.accounts.filter((a) => a.kind === 'credit_card' || a.kind === 'loan').reduce((s, a) => s + Math.max(a.balance, 0), 0);
-  const debtRatio = avgIncome > 0 ? dues / avgIncome : dues > 0 ? 1 : 0;
+  // 4. Debt: card dues against a month's income, and loan EMIs as a share of income (≤30% is the usual ceiling)
+  const dues = nw.accounts.filter((a) => a.kind === 'credit_card').reduce((s, a) => s + Math.max(a.balance, 0), 0);
+  const loans = nw.accounts.filter((a) => a.kind === 'loan' && a.balance > 0);
+  const emi = loans.reduce((s, a: any) => s + Number(a.meta?.emi ?? 0), 0);
+  const cardRatio = avgIncome > 0 ? dues / avgIncome : dues > 0 ? 1 : 0;
+  const emiRatio = avgIncome > 0 ? emi / avgIncome : emi > 0 ? 1 : 0;
+  const cardScore = clamp(100 - (cardRatio / 0.5) * 100);
+  const emiScore = clamp(emiRatio <= 0.2 ? 100 : 100 - ((emiRatio - 0.2) / 0.3) * 100);
   parts.push({
-    key: 'debt', label: 'Card & loan dues', weight: 15,
-    score: clamp(100 - (debtRatio / 0.5) * 100),
-    detail: dues ? `${r(dues)} owed (${Math.round(debtRatio * 100)}% of a month's income)` : 'Nothing owed on cards or loans',
-    tip: debtRatio > 0.3 ? 'Pay card bills in full to avoid 36–42% yearly interest.' : null,
+    key: 'debt', label: 'Debt & EMIs', weight: 15,
+    score: Math.min(cardScore, emiScore),
+    detail: [dues ? `${r(dues)} on cards` : 'No card dues', emi ? `EMIs ${r(emi)}/month (${Math.round(emiRatio * 100)}% of income)` : null].filter(Boolean).join(' · '),
+    tip: emiRatio > 0.3 ? 'EMIs above 30% of income squeeze savings; prepaying the costliest loan helps most.' : cardRatio > 0.3 ? 'Pay card bills in full to avoid 36–42% yearly interest.' : null,
   });
 
   // 5. Spending trend

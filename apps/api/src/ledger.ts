@@ -196,7 +196,7 @@ export async function createTxn(sql: Sql, bookId: string, input: TxnInput, actor
 export async function createRawTxn(tx: Tx, bookId: string, t: {
   kind: 'expense' | 'income' | 'transfer' | 'split' | 'adjustment';
   date: string; merchant?: string | null; description?: string | null; note?: string | null;
-  source: 'splitwise' | 'import' | 'recurring' | 'system'; externalRef?: string | null; importBatchId?: string | null;
+  source: 'splitwise' | 'import' | 'recurring' | 'system'; externalRef?: string | null; importBatchId?: string | null; recurringId?: string | null;
   postings: PostingDraft[];
 }, actor: string): Promise<string> {
   const lines = t.postings.filter((p) => p.amount !== 0);
@@ -204,9 +204,9 @@ export async function createRawTxn(tx: Tx, bookId: string, t: {
   need(lines.reduce((s, p) => s + p.amount, 0) === 0, 'unbalanced', 'postings must sum to zero');
   await loadAccounts(tx, bookId, [...new Set(lines.map((p) => p.accountId))]);
   const [row] = await tx<{ id: string }[]>`
-    insert into txn (book_id, kind, occurred_on, description, merchant, note, source, external_ref, import_batch_id)
+    insert into txn (book_id, kind, occurred_on, description, merchant, note, source, external_ref, import_batch_id, recurring_id)
     values (${bookId}, ${t.kind}, ${t.date}, ${t.description ?? t.merchant ?? null}, ${t.merchant ?? null}, ${t.note ?? null},
-            ${t.source}, ${t.externalRef ?? null}, ${t.importBatchId ?? null})
+            ${t.source}, ${t.externalRef ?? null}, ${t.importBatchId ?? null}, ${t.recurringId ?? null})
     returning id`;
   for (const p of lines) await tx`insert into posting (txn_id, account_id, amount, memo) values (${row.id}, ${p.accountId}, ${p.amount}, ${p.memo ?? null})`;
   await audit(tx, bookId, 'txn', row.id, 'create', null, { ...t, postings: lines }, actor);

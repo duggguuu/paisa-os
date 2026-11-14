@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, money, shortDate, todayIST, addDays } from '../lib';
@@ -20,6 +21,7 @@ export function Splitwise() {
   return (
     <>
       <h1 className="page-title">Splitwise</h1>
+      <p className="small muted" style={{ margin: '0 2px 10px' }}>Just know the total? <Link to="/debts?seg=owed" style={{ color: 'var(--accent)' }}>Type your overall Splitwise balance</Link>.</p>
       <ScreenshotBalances />
       <details className="card" style={{ marginTop: 14 }}>
         <summary className="small">Also bring in individual expenses (spreadsheet export or API)</summary>

@@ -13,6 +13,8 @@ import * as goals from './goals.js';
 import { planner, healthScore } from './planner.js';
 import * as copilot from './copilot.js';
 import * as stuff from './stuff.js';
+import * as debts from './debts.js';
+import * as fds from './fds.js';
 import { todayIST } from './money.js';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -164,6 +166,15 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
     }
     return { date: day, people: out };
   });
+
+  // Owe & owed: people, Splitwise total, lent, loans
+  api.get('/api/debts', async (req) => debts.listDebts(sql, B(req)));
+  api.post('/api/debts', async (req) => debts.setDebt(sql, B(req), debts.DebtInput.parse(req.body)));
+  api.post('/api/loans', async (req) => debts.createLoan(sql, B(req), debts.LoanInput.parse(req.body)));
+  // Fixed deposits, grouped by bank
+  api.get('/api/fds', async (req) => fds.listFds(sql, B(req)));
+  api.post('/api/fds', async (req) => fds.createFd(sql, B(req), fds.FdInput.parse(req.body)));
+  api.post('/api/fds/:id/mature', async (req) => fds.matureFd(sql, B(req), (req.params as any).id, fds.MatureInput.parse(req.body)));
 
   // Budget planner + financial health
   api.get('/api/planner', async (req) => planner(sql, B(req), req.book!.month_start_day));

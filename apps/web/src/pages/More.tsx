@@ -6,6 +6,8 @@ import { useUi } from '../App';
 
 const ITEMS: [string, string, string, string][] = [
   ['/stuff', 'wallet', 'Stuff', 'What you own, want and asked about; log buys and sales'],
+  ['/debts', 'users', 'Owe & owed', 'Owed to me, I owe, lent, loans & EMIs'],
+  ['/fds', 'wallet', 'Fixed deposits', 'FDs by bank, maturity dates and interest'],
   ['/goals', 'target', 'Goals', 'Savings goals and finish dates'],
   ['/budgets', 'pie', 'Budget Planner', 'Budgets, overview and health score'],
   ['/recurring', 'repeat', 'Bills & recurring', 'Rent, SIPs, subscriptions, salary'],

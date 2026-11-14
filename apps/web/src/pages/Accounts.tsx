@@ -7,7 +7,8 @@ import { Sheet, useUi } from '../App';
 
 const GROUPS: [string, string, (a: any) => boolean][] = [
   ['Money you can spend', 'Bank accounts, cash and wallets', (a) => ['bank', 'cash', 'wallet'].includes(a.kind)],
-  ['Savings and investments', '', (a) => ['fd', 'investment'].includes(a.kind)],
+  ['Fixed deposits', '', (a) => a.kind === 'fd'],
+  ['Investments', '', (a) => a.kind === 'investment'],
   ['People who owe you', '', (a) => a.kind === 'receivable'],
   ['You owe', 'Credit cards, loans', (a) => a.class === 'liability'],
 ];
@@ -33,6 +34,7 @@ export function Accounts() {
     <>
       <div className="page-head">
         <h1 className="page-title">Accounts</h1>
+        <Link to="/debts" className="btn small">Owe &amp; owed</Link>
         <button className="btn small" onClick={() => setAdding('bank')}>+ Add</button>
       </div>
       {!n ? <div className="card"><div className="skeleton" /></div> : (
@@ -49,7 +51,7 @@ export function Accounts() {
             const total = items.reduce((s: number, a: any) => s + a.balance, 0);
             return (
               <div className="section" key={title}>
-                <div className="section-title"><span>{title}</span><span className="num" style={{ textTransform: 'none', letterSpacing: 0 }}>{compact(total)}</span></div>
+                <div className="section-title"><span>{title}{title === 'Fixed deposits' && <Link to="/fds" style={{ color: 'var(--accent)', marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>by bank →</Link>}</span><span className="num" style={{ textTransform: 'none', letterSpacing: 0 }}>{compact(total)}</span></div>
                 <div className="list">
                   {items.map((a: any) => (
                     <button key={a.id} className="item" onClick={() => setEditing(a)}>

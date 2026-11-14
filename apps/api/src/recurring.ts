@@ -7,7 +7,8 @@
  */
 import { z } from 'zod';
 import type { Sql, Tx } from './db.js';
-import { createTxn, LedgerError, audit } from './ledger.js';
+import { createTxn, createRawTxn, LedgerError, audit } from './ledger.js';
+import { emiSplit } from './debts.js';
 import { addDays, todayIST, type Range } from './money.js';
 
 const id = z.string().uuid();
@@ -155,8 +156,23 @@ export async function logDue(sql: Sql, bookId: string, ruleId: string, opts: { a
     : { kind: rule.kind as 'expense' | 'income', amount, accountId: rule.account_id, categoryId: rule.category_id, ...common };
   let txnId: string;
   try {
-    txnId = (await createTxn(sql, bookId, input, actor, { recurringId: rule.id })).id;
+    // A loan EMI: interest is spending (Interest paid), the rest pays the loan down.
+    const split = rule.kind === 'transfer' ? await emiSplit(sql, bookId, rule.to_account_id, amount, common.date) : null;
+    if (split) {
+      txnId = await sql.begin((tx) => createRawTxn(tx, bookId, {
+        kind: 'transfer', date: common.date, merchant: common.merchant, source: 'recurring', externalRef: common.externalRef, recurringId: rule.id,
+        note: `EMI: ₹${Math.round(split.principal / 100).toLocaleString('en-IN')} principal + ₹${Math.round(split.interest / 100).toLocaleString('en-IN')} interest`,
+        postings: [
+          { accountId: rule.account_id, amount: -amount },
+          { accountId: rule.to_account_id, amount: split.principal, memo: 'Principal' },
+          { accountId: split.interestCategoryId, amount: split.interest, memo: 'Interest' },
+        ],
+      }, actor));
+    } else {
+      txnId = (await createTxn(sql, bookId, input, actor, { recurringId: rule.id })).id;
+    }
   } catch (e: any) {
+    if (e?.code === '23505') e = { code: 'duplicate_ref' };
     if (e?.code !== 'duplicate_ref') throw e;
     // Already logged (another device, or auto-post raced us): just move on.
     const [t] = await sql<{ id: string }[]>`select id from txn where book_id = ${bookId} and external_ref = ${common.externalRef} and status = 'posted'`;

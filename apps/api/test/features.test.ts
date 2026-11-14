@@ -436,3 +436,84 @@ test('people balances from a Splitwise screenshot set each balance exactly', asy
   assert.equal(await bal('Priya Shah'), 0, 'settled up');
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
+
+test('loans: Bajaj Finance numbers, principal vs total, EMI split into interest + principal', async () => {
+  const { loanMath, principalFromTotal } = await import('../src/debts.js');
+  // ₹24,32,149 at 12.99% with a ₹25,487 EMI can't be the principal: monthly interest would exceed the EMI.
+  assert.equal(loanMath(2432149_00, 12.99, 25487_00).emiTooSmall, true);
+  let r = await req('POST', '/api/loans', { lender: 'Bajaj Finance', mode: 'principal', amount: 2432149_00, rate: 12.99, emi: 25487_00, emiDay: 5, fromAccountId: A['Axis Bank'].id });
+  assert.equal(r.status, 422);
+  assert.match(r.body.message, /total of your remaining EMIs/);
+  // As the total of remaining EMIs: ~95.4 EMIs, principal ≈ ₹15.1 lakh.
+  const p = principalFromTotal(2432149_00, 12.99, 25487_00);
+  assert.ok(p > 1500000_00 && p < 1525000_00, `principal ${p}`);
+  r = await req('POST', '/api/loans', { lender: 'Bajaj Finance', mode: 'total', amount: 2432149_00, rate: 12.99, emi: 25487_00, emiDay: 5, fromAccountId: A['Axis Bank'].id });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.principal, p);
+  assert.equal(r.body.monthsLeft, 96);
+  const loanBal = await bal('Bajaj Finance loan');
+  assert.equal(loanBal, p, 'outstanding = principal');
+  const d = (await req('GET', '/api/debts')).body;
+  const loan = d.loans.find((l: any) => l.name === 'Bajaj Finance loan');
+  assert.equal(loan.emi, 25487_00);
+  assert.ok(loan.nextEmi, 'EMI is a recurring bill');
+  // Log one EMI: interest = outstanding × 12.99%/12 is spending; the rest reduces the loan.
+  const spentBefore = (await req('GET', `/api/trans/month?anchor=${loan.nextEmi}`)).body.expense;
+  const axisBefore = await bal('Axis Bank');
+  await sql`update recurring_rule set next_due = ${today} where id = ${loan.ruleId}`;
+  r = await req('POST', `/api/recurring/${loan.ruleId}/log`, {});
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const interest = Math.round(p * 0.1299 / 12);
+  assert.equal(await bal('Axis Bank'), axisBefore - 25487_00);
+  assert.equal(await bal('Bajaj Finance loan'), p - (25487_00 - interest));
+  const spentAfter = (await req('GET', `/api/trans/month?anchor=${today}`)).body.expense;
+  assert.ok(spentAfter >= interest, 'interest counts as spending');
+  void spentBefore;
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
+
+test('owe & owed: type balances directly, Splitwise overall, lent', async () => {
+  let r = await req('POST', '/api/debts', { segment: 'splitwise', amount: 2350_00, direction: 'owed' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  r = await req('POST', '/api/debts', { segment: 'iowe', name: 'Neha', amount: 800_00 });
+  r = await req('POST', '/api/debts', { segment: 'lent', name: 'Arjun', amount: 15000_00, note: 'Bike repair, back by Dec' });
+  const d = (await req('GET', '/api/debts')).body;
+  assert.ok(d.owed.some((x: any) => x.name === 'Splitwise (overall)' && x.balance === 2350_00));
+  assert.ok(d.iowe.some((x: any) => x.name === 'Neha' && x.balance === -800_00));
+  assert.ok(d.lent.some((x: any) => x.name === 'Arjun' && x.balance === 15000_00 && x.note));
+  assert.ok(!d.owed.some((x: any) => x.name === 'Arjun'), 'lent is its own segment');
+  // Updating to a new total replaces, not adds.
+  await req('POST', '/api/debts', { segment: 'splitwise', amount: 500_00, direction: 'iowe' });
+  assert.equal(await bal('Splitwise (overall)'), -500_00);
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
+
+test('FDs: grouped by bank, maturity value, maturing pays principal + interest income', async () => {
+  const { fdValue } = await import('../src/fds.js');
+  // ₹1,00,000 at 7% for a year, quarterly: 1,07,185.90
+  assert.equal(fdValue(1_00_000_00, 7, 365), 1_07_185_90);
+  const start = '2026-01-01', maturity = '2027-01-01';
+  let r = await req('POST', '/api/fds', { bank: 'SBI', principal: 1_00_000_00, rate: 7, start, maturity });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  r = await req('POST', '/api/fds', { bank: 'SBI', principal: 50_000_00, rate: 6.5, start, maturity: '2026-06-01' });
+  assert.equal(r.body.name, 'SBI FD 2', 'second FD at the same bank gets a new name');
+  const axisBefore = await bal('Axis Bank');
+  r = await req('POST', '/api/fds', { bank: 'HDFC Bank', principal: 20_000_00, rate: 7.25, start: today, maturity: '2028-01-01', fromAccountId: A['Axis Bank'].id });
+  assert.equal(await bal('Axis Bank'), axisBefore - 20_000_00, 'paid from Axis');
+  let f = (await req('GET', '/api/fds')).body;
+  const sbi = f.banks.find((b: any) => b.bank === 'SBI');
+  assert.equal(sbi.items.length, 2);
+  assert.equal(sbi.principal, 1_50_000_00);
+  assert.ok(f.banks.some((b: any) => b.bank === 'HDFC Bank'));
+  // Mature the June one into Axis: interest is income.
+  const june = sbi.items.find((x: any) => x.maturity === '2026-06-01');
+  assert.equal(june.matured, true);
+  const before = await bal('Axis Bank');
+  r = await req('POST', `/api/fds/${june.id}/mature`, { toAccountId: A['Axis Bank'].id });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(await bal('Axis Bank'), before + june.atMaturity);
+  assert.ok(r.body.interest > 0);
+  f = (await req('GET', '/api/fds')).body;
+  assert.equal(f.banks.find((b: any) => b.bank === 'SBI').items.length, 1, 'matured FD is closed');
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
