@@ -4,6 +4,7 @@ import { api, money, shortDate, todayIST, addDays } from '../lib';
 import { useUi } from '../App';
 import { tint } from '../components/Icons';
 import { parseSplitwiseCsv, guessMe, type SwCsvFile } from '../splitwise-csv';
+import { parseSplitwiseBalances, type Balance } from '../orders';
 
 const RANGES: [string, () => string | null][] = [
   ['This month', () => todayIST().slice(0, 8) + '01'],
@@ -19,7 +20,11 @@ export function Splitwise() {
   return (
     <>
       <h1 className="page-title">Splitwise</h1>
-      {st.data.link ? <ApiSync link={st.data.link} /> : <SpreadsheetImport />}
+      <ScreenshotBalances />
+      <details className="card" style={{ marginTop: 14 }}>
+        <summary className="small">Also bring in individual expenses (spreadsheet export or API)</summary>
+        <div style={{ marginTop: 12 }}>{st.data.link ? <ApiSync link={st.data.link} /> : <SpreadsheetImport />}</div>
+      </details>
     </>
   );
 }
@@ -44,10 +49,10 @@ function SpreadsheetImport() {
   const people = [...new Set(files.flatMap((f) => f.people))];
   const since = RANGES[range][1]();
 
-  async function addFiles(list: FileList) {
+  async function addFiles(list: File[]) {
     setErr(null); setResult(null);
     const parsed: SwCsvFile[] = [];
-    for (const f of Array.from(list)) {
+    for (const f of list) {
       try { parsed.push(parseSplitwiseCsv(await f.text(), f.name)); } catch (e: any) { setErr(e.message); }
     }
     const all = [...files.filter((x) => !parsed.some((p) => p.name === x.name)), ...parsed];
@@ -94,7 +99,7 @@ function SpreadsheetImport() {
           <li>Upload all the files here together.</li>
         </ol>
         <label className="dropzone">
-          <input type="file" accept=".csv,text/csv" multiple onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
+          <input type="file" accept=".csv,text/csv" multiple onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) addFiles(fs); }} />
           <b>{files.length ? `${files.length} file${files.length > 1 ? 's' : ''}: ${files.map((f) => f.name).join(', ')}` : 'Choose Splitwise exports'}</b>
           <span className="tiny faint">{files.length ? 'Tap to add more' : 'CSV files, read on this device'}</span>
         </label>
@@ -311,5 +316,69 @@ function ResultCard({ r }: { r: any }) {
         {r.errors?.length ? `${r.errors.length} couldn't be imported: ${r.errors.slice(0, 2).join('; ')}` : ''}
       </p>
     </div></div>
+  );
+}
+
+/** Read balances from screenshots of Splitwise's Friends list and set each person to match. */
+function ScreenshotBalances() {
+  const qc = useQueryClient();
+  const { toast } = useUi();
+  const [rows, setRows] = useState<(Balance & { keep: boolean })[] | null>(null);
+  const [scan, setScan] = useState<{ p: number; label: string } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<any | null>(null);
+  async function read(files: File[]) {
+    setErr(null); setDone(null); setScan({ p: 0, label: 'Starting…' });
+    try {
+      const { ocrImages } = await import('../receipt');
+      const texts = await ocrImages(files, (p, label) => setScan({ p, label }));
+      const seen = new Map<string, Balance>();
+      for (const t of texts) for (const b of parseSplitwiseBalances(t)) if (!seen.has(b.name.toLowerCase())) seen.set(b.name.toLowerCase(), b);
+      if (!seen.size) { setErr("Couldn't find balances. Use the Friends tab, where each row says \"owes you\" or \"you owe\"."); return; }
+      setRows([...seen.values()].map((b) => ({ ...b, keep: true })));
+    } catch (e: any) { setErr(e.message); } finally { setScan(null); }
+  }
+  async function apply() {
+    const balances = (rows ?? []).filter((r) => r.keep).map(({ name, amount }) => ({ name, amount }));
+    try {
+      const r = await api<any>('/api/people/balances', { method: 'POST', body: { balances } });
+      setDone(r); setRows(null);
+      await qc.invalidateQueries();
+      toast(`Updated ${r.people.length} people`);
+    } catch (e: any) { setErr(e.message); }
+  }
+  return (
+    <div className="card">
+      <b>From screenshots</b>
+      <p className="small muted" style={{ marginTop: 4 }}>In the Splitwise app, open <b>Friends</b> and screenshot the list (scroll and take more if needed). Paisa reads who owes whom and sets each person's balance in Accounts to match.</p>
+      {!rows && (
+        <label className="dropzone">
+          <input type="file" accept="image/*" multiple onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) read(fs); }} />
+          <b>Add Splitwise screenshots</b><span className="tiny faint">Read on this phone</span>
+        </label>
+      )}
+      {scan && <div className="scan-progress" style={{ marginTop: 10 }}><span style={{ width: `${Math.round(scan.p * 100)}%` }} /><em>{scan.label}</em></div>}
+      {rows && (
+        <>
+          <div className="list" style={{ margin: '10px 0' }}>
+            {rows.map((r, k) => (
+              <div key={k} className="buy-row">
+                <input type="checkbox" checked={r.keep} onChange={(e) => setRows((xs) => xs!.map((x, j) => (j === k ? { ...x, keep: e.target.checked } : x)))} aria-label={`Include ${r.name}`} />
+                <input className="input" value={r.name} onChange={(e) => setRows((xs) => xs!.map((x, j) => (j === k ? { ...x, name: e.target.value } : x)))} />
+                <select className="input" value={r.amount > 0 ? 'owes' : r.amount < 0 ? 'owe' : 'settled'} onChange={(e) => setRows((xs) => xs!.map((x, j) => (j === k ? { ...x, amount: e.target.value === 'settled' ? 0 : (e.target.value === 'owes' ? 1 : -1) * Math.abs(x.amount) } : x)))}>
+                  <option value="owes">owes you</option><option value="owe">you owe</option><option value="settled">settled</option>
+                </select>
+                <input className="input num paid" inputMode="decimal" value={Math.abs(r.amount) / 100} onChange={(e) => setRows((xs) => xs!.map((x, j) => (j === k ? { ...x, amount: Math.sign(x.amount || 1) * Math.round(Number(e.target.value || 0) * 100) } : x)))} />
+              </div>
+            ))}
+          </div>
+          <button className="btn accent block" onClick={apply}>Update {rows.filter((r) => r.keep).length} balances</button>
+          <button className="btn block" style={{ marginTop: 8 }} onClick={() => setRows(null)}>Start over</button>
+        </>
+      )}
+      {done && <p className="small" style={{ marginBottom: 0 }}>✓ {done.people.map((p: any) => `${p.accountName}${p.created ? ' (new)' : ''}: ${p.balance > 0 ? 'owes you' : p.balance < 0 ? 'you owe' : 'settled'} ${money(Math.abs(p.balance), { whole: true })}`).join(' · ')}</p>}
+      {err && <p className="error">{err}</p>}
+      <p className="tiny faint" style={{ marginBottom: 0 }}>Balances are set with an adjustment, so they never count as spending.</p>
+    </div>
   );
 }

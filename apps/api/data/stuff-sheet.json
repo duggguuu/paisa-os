@@ -1,0 +1,927 @@
+[
+ {
+  "list": "own",
+  "name": "Olive green quarter-zip sweater",
+  "category": "Clothes — tops",
+  "notes": "Uniqlo"
+ },
+ {
+  "list": "own",
+  "name": "Petrol/teal textured Bocle crew sweater",
+  "category": "Clothes — tops",
+  "notes": "Rare Rabbit"
+ },
+ {
+  "list": "own",
+  "name": "Black fitted turtleneck",
+  "category": "Clothes — tops",
+  "notes": "Louis Philippe"
+ },
+ {
+  "list": "own",
+  "name": "Boxy-fit black overshirt",
+  "category": "Clothes — tops",
+  "notes": "Snitch, Siraj Collection"
+ },
+ {
+  "list": "own",
+  "name": "Dark grey cropped full-sleeve overshirt",
+  "category": "Clothes — tops"
+ },
+ {
+  "list": "own",
+  "name": "Indigo workwear utility shirt, half-sleeve",
+  "category": "Clothes — tops",
+  "notes": "Cropped, boxy, thick structured cotton, drawstring hem, hidden placket"
+ },
+ {
+  "list": "own",
+  "name": "Tan/khaki utility overshirt, full-sleeve",
+  "category": "Clothes — tops",
+  "notes": "Cropped, boxy, thick structured cotton, drawstring hem"
+ },
+ {
+  "list": "own",
+  "name": "Dark grey corduroy button shirt",
+  "category": "Clothes — tops",
+  "notes": "Thin, tuckable; can read dark brown from a distance"
+ },
+ {
+  "list": "own",
+  "name": "Powder blue Oxford shirt",
+  "category": "Clothes — tops",
+  "notes": "Slightly oversized"
+ },
+ {
+  "list": "own",
+  "name": "Olive green linen shirt",
+  "category": "Clothes — tops"
+ },
+ {
+  "list": "own",
+  "name": "Navy denim half-sleeve shirt",
+  "category": "Clothes — tops",
+  "notes": "Loose fit"
+ },
+ {
+  "list": "own",
+  "name": "White AIRism t-shirt",
+  "category": "Clothes — tops",
+  "notes": "Uniqlo"
+ },
+ {
+  "list": "own",
+  "name": "Dark grey henley t-shirt",
+  "category": "Clothes — tops"
+ },
+ {
+  "list": "own",
+  "name": "Dark grey cropped crew-neck t-shirt",
+  "category": "Clothes — tops"
+ },
+ {
+  "list": "own",
+  "name": "Brown bomber jacket",
+  "category": "Clothes — outerwear"
+ },
+ {
+  "list": "own",
+  "name": "Rust-brown short zip-up jacket",
+  "category": "Clothes — outerwear",
+  "notes": "Very thin; rust / khaki-ish brown"
+ },
+ {
+  "list": "own",
+  "name": "Navy denim jacket",
+  "category": "Clothes — outerwear"
+ },
+ {
+  "list": "own",
+  "name": "Black jeans",
+  "category": "Clothes — bottoms"
+ },
+ {
+  "list": "own",
+  "name": "Indigo navy pants",
+  "category": "Clothes — bottoms",
+  "notes": "Zara, mid-rise"
+ },
+ {
+  "list": "own",
+  "name": "Mocha brown linen-canvas pants",
+  "category": "Clothes — bottoms",
+  "notes": "Dressy; tight on you"
+ },
+ {
+  "list": "own",
+  "name": "Dark grey oversized baggy jeans",
+  "category": "Clothes — bottoms"
+ },
+ {
+  "list": "own",
+  "name": "Black cargo pants",
+  "category": "Clothes — bottoms"
+ },
+ {
+  "list": "own",
+  "name": "Light grey dress pants",
+  "category": "Clothes — bottoms",
+  "notes": "Slim fit"
+ },
+ {
+  "list": "own",
+  "name": "Off-white jeans",
+  "category": "Clothes — bottoms",
+  "notes": "Loose fit"
+ },
+ {
+  "list": "own",
+  "name": "New Balance 2002R",
+  "category": "Footwear",
+  "notes": "Navy/grey Protection Pack"
+ },
+ {
+  "list": "own",
+  "name": "New Balance 530",
+  "category": "Footwear"
+ },
+ {
+  "list": "own",
+  "name": "Adidas Gazelle",
+  "category": "Footwear",
+  "notes": "Navy, white stripes, white sole"
+ },
+ {
+  "list": "own",
+  "name": "Puma sneakers",
+  "category": "Footwear",
+  "notes": "Clean white"
+ },
+ {
+  "list": "own",
+  "name": "Black derby shoes",
+  "category": "Footwear"
+ },
+ {
+  "list": "own",
+  "name": "MacBook Air M1",
+  "category": "Tech"
+ },
+ {
+  "list": "own",
+  "name": "iPhone 16",
+  "category": "Tech"
+ },
+ {
+  "list": "own",
+  "name": "iPad (2021)",
+  "category": "Tech"
+ },
+ {
+  "list": "own",
+  "name": "Samsung Smart Monitor M7 32\" 4K",
+  "category": "Tech",
+  "notes": "Runs off the MacBook via HDMI"
+ },
+ {
+  "list": "own",
+  "name": "Ambrane USB-C to HDMI cable",
+  "category": "Tech"
+ },
+ {
+  "list": "own",
+  "name": "PlayStation 5",
+  "category": "Tech"
+ },
+ {
+  "list": "own",
+  "name": "Sennheiser Momentum 4 Wireless",
+  "category": "Audio",
+  "notes": "80th Anniversary edition, bought at ₹17,688; main headphones"
+ },
+ {
+  "list": "own",
+  "name": "Beyerdynamic DT 770 NC",
+  "category": "Audio"
+ },
+ {
+  "list": "own",
+  "name": "JBL Tune 770NC",
+  "category": "Audio",
+  "notes": "Gym / rough use"
+ },
+ {
+  "list": "own",
+  "name": "Koss Porta Pro",
+  "category": "Audio"
+ },
+ {
+  "list": "own",
+  "name": "boAt Airdopes 621",
+  "category": "Audio",
+  "notes": "Gym / rough use"
+ },
+ {
+  "list": "own",
+  "name": "Edifier bookshelf speakers",
+  "category": "Audio",
+  "notes": "Background listening"
+ },
+ {
+  "list": "own",
+  "name": "Royal Enfield Meteor 350",
+  "category": "Bike & riding",
+  "notes": "Fireball Orange, bought May 2026"
+ },
+ {
+  "list": "own",
+  "name": "Royal Enfield full-face helmet",
+  "category": "Bike & riding"
+ },
+ {
+  "list": "own",
+  "name": "Rynox mesh riding jacket",
+  "category": "Bike & riding",
+  "notes": "About ₹10,000"
+ },
+ {
+  "list": "own",
+  "name": "De'Longhi Dedica EC685",
+  "category": "Coffee",
+  "notes": "Espresso machine"
+ },
+ {
+  "list": "own",
+  "name": "Moka pot",
+  "category": "Coffee"
+ },
+ {
+  "list": "own",
+  "name": "French press",
+  "category": "Coffee"
+ },
+ {
+  "list": "own",
+  "name": "LEGO Speed Champions Mercedes W15",
+  "category": "Collectibles",
+  "notes": "F1 2024 grid"
+ },
+ {
+  "list": "own",
+  "name": "LEGO Speed Champions Red Bull RB20",
+  "category": "Collectibles",
+  "notes": "F1 2024 grid"
+ },
+ {
+  "list": "own",
+  "name": "LEGO Disney Pixar Lamp",
+  "category": "Collectibles"
+ },
+ {
+  "list": "want",
+  "name": "Timex Marlin silver-tone stainless steel watch (TW2W10400UJ)",
+  "category": "Watch",
+  "price": 1449500,
+  "store": "Timex India",
+  "link": "https://shop.timexindia.com/products/timex-men-silver-tone-analogue-round-stainless-steel-dial-watch-tw2w10400uj",
+  "notes": "40 mm, steel bracelet, 50 m water resistance",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Dark green overshirt",
+  "category": "Clothes",
+  "price": 299900,
+  "store": "H&M",
+  "link": "https://www2.hm.com/en_in/productpage.1351283001.html",
+  "notes": "Relaxed fit, cotton canvas",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Loose straight jeans, beige",
+  "category": "Clothes",
+  "price": 299900,
+  "store": "H&M",
+  "link": "https://www2.hm.com/en_in/productpage.1357868008.html",
+  "notes": "Dropped crotch; photos look browner than 'beige'",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Green/white striped short-sleeve shirt",
+  "category": "Clothes",
+  "price": 199900,
+  "store": "H&M",
+  "link": "https://www2.hm.com/en_in/productpage.1309692005.html",
+  "notes": "Regular fit, cotton-viscose-poly blend",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Printed cotton poplin shirt, dark blue/white check",
+  "category": "Clothes",
+  "price": 229900,
+  "store": "H&M",
+  "link": "https://www2.hm.com/en_in/productpage.1363609001.html",
+  "notes": "Relaxed fit",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Cotton henley, dark brown",
+  "category": "Clothes",
+  "price": 199900,
+  "store": "H&M",
+  "link": "https://www2.hm.com/en_in/productpage.1365507002.html",
+  "notes": "Regular fit, cotton jersey",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Waffled henley, dark dusty red",
+  "category": "Clothes",
+  "price": 229900,
+  "store": "H&M",
+  "link": "https://www2.hm.com/en_in/productpage.1357940002.html",
+  "notes": "Regular fit, cotton blend",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Black & white double checkered flannel shirt",
+  "category": "Clothes",
+  "price": 179900,
+  "store": "5feet11",
+  "link": "https://www.5feet11.com/products/black-and-white-double-checkered-flannel-shirt?variant=53629438361781",
+  "notes": "100% cotton flannel, slightly oversized; site also lists the colour as blue/white",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Soft fall relaxed fit shirt, russet",
+  "category": "Clothes",
+  "price": 142200,
+  "store": "YUR",
+  "link": "https://yurofficial.com/products/soft-fall-relaxed-fit-shirt-russet?variant=49178066976886",
+  "notes": "On sale from ₹2,699; 100% recycled polyester",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "100% linen relaxed fit shirt, Blush Cloud",
+  "category": "Clothes",
+  "price": 243200,
+  "store": "YUR",
+  "link": "https://yurofficial.com/products/100-linen-relaxed-fit-shirt-blush-cloud?variant=43337168126070",
+  "notes": "On sale from ₹3,650; burnt-rose colour",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "AGARO Elite gooseneck kettle, 600 ml, black",
+  "category": "Coffee",
+  "price": 131900,
+  "store": "Amazon",
+  "link": "https://amzn.in/d/01zEL7Ke",
+  "notes": "Gooseneck for pour-over; MRP ₹2,499",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "The Bean Co Roasters glass coffee dripper",
+  "category": "Coffee",
+  "price": 54900,
+  "store": "Amazon",
+  "link": "https://amzn.in/d/01kPjSfE",
+  "notes": "Borosilicate glass dripper; MRP ₹899",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Sipologie Chemex-style pour-over, 600 ml",
+  "category": "Coffee",
+  "price": 199900,
+  "store": "Amazon",
+  "link": "https://amzn.in/d/0h0Qibaj",
+  "notes": "Steel filter, 3 cups; does the same job as the Pour Demitasse carafe",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "COMMA Frost desk & shelf clock, green",
+  "category": "Home decor",
+  "price": 210000,
+  "store": "Amazon",
+  "link": "https://amzn.in/d/002J8W1X",
+  "notes": "21 × 12 cm, battery; 6 colours; MRP ₹3,195",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "House of Quirk iron garment rack, white",
+  "category": "Furniture",
+  "price": 99900,
+  "store": "Amazon",
+  "link": "https://amzn.in/d/01oLAQ0Q",
+  "notes": "150 × 41 × 110 cm, 8 hooks + bottom shelf; MRP ₹2,999",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "LEDO 6-slot watch box, black & grey",
+  "category": "Watch",
+  "price": 49900,
+  "store": "Amazon",
+  "link": "https://amzn.in/d/01Z9891z",
+  "notes": "Velvet lining, glass top; MRP ₹1,499",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Timemore C3 ESP Pro grinder",
+  "category": "Coffee",
+  "store": "Brewing Gadgets",
+  "notes": "Key upgrade for the Dedica",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Pour Demitasse \"The Gentleman\" carafe",
+  "category": "Coffee",
+  "store": "Pour Demitasse",
+  "notes": "Chemex-style carafe; you likely need this or the Sipologie, not both",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "want",
+  "name": "Tangzu Fudu Verse II IEMs",
+  "category": "Audio",
+  "price": 699900,
+  "notes": "Shortlisted; needs a better USB-C dongle (₹2–5k)",
+  "meta": {
+   "status": "Want"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "5feet11 Cobalt Blue Checkered Flannel Shirt",
+  "category": "Clothes",
+  "price": 179900,
+  "notes": "Too many overshirts already; bright cobalt clashes with your earth tones",
+  "meta": {
+   "verdict": "Skip",
+   "asked_when": "Nov 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Uniqlo Zip Up Short Jacket",
+  "category": "Clothes",
+  "notes": "Check sleeve length against your bomber first",
+  "meta": {
+   "verdict": "Buy — Natural, XL",
+   "asked_when": "Nov 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Uniqlo :C plaid padded jacket",
+  "category": "Clothes",
+  "notes": "Cold-weather / travel piece only",
+  "meta": {
+   "verdict": "Dark brown, size L",
+   "asked_when": "Nov 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Tattersall check button-down shirt (cream/tan/navy)",
+  "category": "Clothes",
+  "notes": "Wrinkles fast; don't size down",
+  "meta": {
+   "verdict": "Buy — wear it relaxed",
+   "asked_when": "Oct 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Sporty shell jacket",
+  "category": "Clothes",
+  "notes": "Keep layers under it thin",
+  "meta": {
+   "verdict": "Grey over charcoal",
+   "asked_when": "Oct 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Bialetti moka pot (vs Agaro)",
+  "category": "Coffee",
+  "notes": "Price gap is mostly import + brand",
+  "meta": {
+   "verdict": "Skip if your pot still seals",
+   "asked_when": "Oct 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Uniqlo waffle henley",
+  "category": "Clothes",
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Uniqlo olive barrel jeans",
+  "category": "Clothes",
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Uniqlo lambswool crew neck",
+  "category": "Clothes",
+  "price": 299000,
+  "notes": "Camel, olive or cream",
+  "meta": {
+   "verdict": "Maybe — the one knit worth owning",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Uniqlo souffle half-zip, dark brown",
+  "category": "Clothes",
+  "price": 349000,
+  "meta": {
+   "verdict": "Maybe — instead of the lambswool, not both",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Uniqlo sweatshirt",
+  "category": "Clothes",
+  "price": 249000,
+  "meta": {
+   "verdict": "Only if you have a real gap",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Uniqlo fleece button-up pullover, rust",
+  "category": "Clothes",
+  "price": 299000,
+  "notes": "Travel-only in Bangalore",
+  "meta": {
+   "verdict": "Skip",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Uniqlo souffle crew neck",
+  "category": "Clothes",
+  "price": 299000,
+  "notes": "Lambswool does the same job better",
+  "meta": {
+   "verdict": "Skip",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Andamen Sienna Rust European linen shirt",
+  "category": "Clothes",
+  "price": 559900,
+  "notes": "Creases hard; top of fair price",
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Andamen gold rust canvas overshirt",
+  "category": "Clothes",
+  "price": 459900,
+  "notes": "Too heavy for the climate",
+  "meta": {
+   "verdict": "Skip",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "5feet11 chambray blue linen cropped shirt",
+  "category": "Clothes",
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Chapter2 baby pink linen shirt",
+  "category": "Clothes",
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Ikoho Painkiller Derby, black",
+  "category": "Footwear",
+  "notes": "You own black derbies — mark Yes if these are them",
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Casio GA-2100 CasiOak, all-black",
+  "category": "Watch",
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Casio AE-1200WHL Royale, tan",
+  "category": "Watch",
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Casio GM-2100",
+  "category": "Watch",
+  "meta": {
+   "verdict": "Step-up later",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Verte URBN watch",
+  "category": "Watch",
+  "notes": "Prebook risk",
+  "meta": {
+   "verdict": "Third watch only",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Armaf Club de Nuit Intense Man",
+  "category": "Fragrance",
+  "meta": {
+   "verdict": "Core pick",
+   "asked_when": "Jul 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Afnan 9PM",
+  "category": "Fragrance",
+  "meta": {
+   "verdict": "Core pick",
+   "asked_when": "Jul 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Lattafa Khamrah",
+  "category": "Fragrance",
+  "meta": {
+   "verdict": "Evening option",
+   "asked_when": "Jul 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Sennheiser Momentum 4 (80th Anniv.)",
+  "category": "Audio",
+  "price": 1768800,
+  "meta": {
+   "verdict": "Clear buy",
+   "asked_when": "Jul 2026",
+   "bought": "Yes"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Sony WH-1000XM5 / Sennheiser HD 560S / AirPods Pro 3",
+  "category": "Audio",
+  "meta": {
+   "verdict": "Went with Momentum 4",
+   "asked_when": "Jul 2026",
+   "bought": "No"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Simgot EW300 / Truthear Hexa IEMs",
+  "category": "Audio",
+  "meta": {
+   "verdict": "Alternatives to the Fudu Verse II",
+   "asked_when": "Jul 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Tunable-white USB bias light strip",
+  "category": "Tech",
+  "notes": "For the M7 monitor",
+  "meta": {
+   "verdict": "Buy this over sync lights",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Govee TV Backlight 3 Lite",
+  "category": "Tech",
+  "meta": {
+   "verdict": "Skip for a 32\" monitor",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Samsung Smart Monitor M7 32\"",
+  "category": "Tech",
+  "price": 2900000,
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Aug 2026",
+   "bought": "Yes"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "LEGO Speed Champions Red Bull RB20",
+  "category": "Collectibles",
+  "meta": {
+   "verdict": "Buy next",
+   "asked_when": "Aug 2026",
+   "bought": "Yes"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "LEGO Speed Champions McLaren MCL38",
+  "category": "Collectibles",
+  "price": 223900,
+  "meta": {
+   "verdict": "Alternative if looks win",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "LEGO Speed Champions Ferrari SF-24",
+  "category": "Collectibles",
+  "price": 262900,
+  "notes": "Poor discount",
+  "meta": {
+   "verdict": "Skip",
+   "asked_when": "Aug 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "New Balance 2002R (navy/grey)",
+  "category": "Footwear",
+  "meta": {
+   "verdict": "Buy",
+   "asked_when": "Jun 2026",
+   "bought": "Yes"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "New Balance 1906R",
+  "category": "Footwear",
+  "meta": {
+   "verdict": "Secondary shoe at best",
+   "asked_when": "Jun 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Onitsuka Tiger Mexico 66",
+  "category": "Footwear",
+  "notes": "Asics GEL-1130 suggested instead",
+  "meta": {
+   "verdict": "Overpriced for comfort",
+   "asked_when": "Jul 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Superdry graphic tee",
+  "category": "Clothes",
+  "price": 212600,
+  "meta": {
+   "verdict": "Skip",
+   "asked_when": "Jun 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Superdry Sport 2-in-1 shorts",
+  "category": "Clothes",
+  "price": 315600,
+  "notes": "Under Armour pair was ₹1,125",
+  "meta": {
+   "verdict": "Overpriced",
+   "asked_when": "Jun 2026"
+  }
+ },
+ {
+  "list": "asked",
+  "name": "Books: We Free the Stars / Slow Gods / Record of a Spaceborn Few / The Book at War",
+  "category": "Books",
+  "meta": {
+   "verdict": "Undecided",
+   "asked_when": "Jun 2026"
+  }
+ },
+ {
+  "list": "dropped",
+  "name": "CE-rated riding gloves",
+  "category": "Bike & riding",
+  "notes": "Upgrade over current gloves"
+ },
+ {
+  "list": "dropped",
+  "name": "Kevlar riding jeans with CE knee armour",
+  "category": "Bike & riding",
+  "notes": "Preferred over strap-on knee guards"
+ },
+ {
+  "list": "dropped",
+  "name": "Short/mid riding shoes with ankle protection",
+  "category": "Bike & riding"
+ },
+ {
+  "list": "dropped",
+  "name": "Rain shell for riding",
+  "category": "Bike & riding"
+ },
+ {
+  "list": "dropped",
+  "name": "Solace Air-X V2 mesh jacket",
+  "category": "Bike & riding",
+  "store": "Solace",
+  "notes": "Bought a Rynox mesh jacket instead"
+ }
+]

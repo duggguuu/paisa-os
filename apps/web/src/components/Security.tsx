@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { startAuthentication, startRegistration, browserSupportsWebAuthn, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
 import { api } from '../lib';
@@ -6,32 +6,68 @@ import { Icon } from './Icons';
 
 /** Friendly message for the ways a Face ID prompt can fail. */
 function faceIdError(e: any): string {
-  if (e?.name === 'NotAllowedError') return 'Face ID was cancelled or timed out. Try again.';
+  if (e?.name === 'NotAllowedError') return 'Face ID was cancelled or didn\'t start. Tap the button again.';
   if (e?.name === 'InvalidStateError') return 'This device already has Face ID set up for Paisa.';
   return e?.message ?? 'Face ID failed.';
 }
 
-export async function loginWithFaceId() {
-  const optionsJSON = await api<any>('/api/auth/passkey/options', { method: 'POST', body: {} });
-  const response = await startAuthentication({ optionsJSON });
-  await api('/api/auth/passkey/verify', { method: 'POST', body: { response } });
+/**
+ * Safari only shows Face ID if the request starts right after the tap. Asking the server for a
+ * challenge first (a slow network, or Render waking up) uses up that window, so the prompt is
+ * silently refused. So we fetch the challenge *before* the tap and keep it fresh: the tap then
+ * goes straight to Face ID. (Challenges live 120 s on the server; we refresh every 90 s.)
+ */
+function usePrefetchedOptions(path: string, enabled = true) {
+  const [opts, setOpts] = useState<{ json: any; at: number } | null>(null);
+  const load = useCallback(async () => {
+    try { setOpts({ json: await api<any>(path, { method: 'POST', body: {} }), at: Date.now() }); }
+    catch { setOpts(null); }
+  }, [path]);
+  useEffect(() => {
+    if (!enabled) return;
+    load();
+    const t = setInterval(load, 90_000);
+    const onShow = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onShow); };
+  }, [enabled, load]);
+  /** Fresh options right now: the prefetched ones if young enough, else fetched (slower). */
+  const take = async () => {
+    const fresh = opts && Date.now() - opts.at < 100_000 ? opts.json : await api<any>(path, { method: 'POST', body: {} });
+    setOpts(null);
+    return fresh;
+  };
+  return { ready: !!opts, take, reload: load };
 }
 
-export async function unlockWithFaceId() {
-  const optionsJSON = await api<any>('/api/auth/unlock/options', { method: 'POST', body: {} });
-  const response = await startAuthentication({ optionsJSON });
-  await api('/api/auth/unlock/verify', { method: 'POST', body: { response } });
+export function useFaceIdLogin(enabled: boolean) {
+  const o = usePrefetchedOptions('/api/auth/passkey/options', enabled);
+  return {
+    ready: o.ready,
+    async run() {
+      try {
+        const optionsJSON = await o.take();
+        const response = await startAuthentication({ optionsJSON });
+        await api('/api/auth/passkey/verify', { method: 'POST', body: { response } });
+      } catch (e: any) { o.reload(); throw new Error(faceIdError(e)); }
+    },
+  };
 }
 
 /** Full-screen lock. Shown whenever the server says the session is locked. */
 export function LockScreen({ email }: { email?: string }) {
   const qc = useQueryClient();
+  const o = usePrefetchedOptions('/api/auth/unlock/options');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function unlock() {
     setErr(null); setBusy(true);
-    try { await unlockWithFaceId(); await qc.invalidateQueries(); }
-    catch (e: any) { setErr(faceIdError(e)); }
+    try {
+      const optionsJSON = await o.take();          // instant when prefetched: keeps Safari's tap window
+      const response = await startAuthentication({ optionsJSON });
+      await api('/api/auth/unlock/verify', { method: 'POST', body: { response } });
+      await qc.invalidateQueries();
+    } catch (e: any) { setErr(faceIdError(e)); o.reload(); }
     finally { setBusy(false); }
   }
   return (
@@ -39,7 +75,7 @@ export function LockScreen({ email }: { email?: string }) {
       <img src="/logo-mark.png" alt="" className="lock-logo" />
       <h1>Paisa is locked</h1>
       {email && <p className="muted small">{email}</p>}
-      <button className="btn accent" onClick={unlock} disabled={busy} autoFocus><Icon name="faceid" /> {busy ? 'Checking…' : 'Unlock with Face ID'}</button>
+      <button className="btn accent" onClick={unlock} disabled={busy}><Icon name="faceid" /> {busy ? 'Checking…' : o.ready ? 'Unlock with Face ID' : 'Getting ready…'}</button>
       {err && <p className="error">{err}</p>}
       <button className="btn small" style={{ marginTop: 18 }} onClick={async () => { await api('/api/auth/logout', { method: 'POST' }); window.location.href = '/'; }}>Log out instead</button>
     </div>
@@ -57,17 +93,18 @@ export function SecuritySettings() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const u = status.data?.user;
+  const reg = usePrefetchedOptions('/api/passkeys/register/options', avail.data !== false);
 
   async function addDevice() {
     setErr(null); setBusy(true);
     try {
-      const optionsJSON = await api<any>('/api/passkeys/register/options', { method: 'POST', body: {} });
+      const optionsJSON = await reg.take();
       const response = await startRegistration({ optionsJSON });
       const name = /iPhone/.test(navigator.userAgent) ? 'iPhone' : /iPad/.test(navigator.userAgent) ? 'iPad' : /Mac/.test(navigator.userAgent) ? 'Mac' : 'This device';
       await api('/api/passkeys/register/verify', { method: 'POST', body: { response, deviceName: name } });
       await qc.invalidateQueries({ queryKey: ['passkeys'] });
       await qc.invalidateQueries({ queryKey: ['auth'] });
-    } catch (e: any) { setErr(faceIdError(e)); } finally { setBusy(false); }
+    } catch (e: any) { setErr(faceIdError(e)); reg.reload(); } finally { setBusy(false); }
   }
   async function setLock(lockEnabled: boolean, lockMinutes?: number) {
     setErr(null);

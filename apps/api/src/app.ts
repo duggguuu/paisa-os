@@ -369,7 +369,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     // Export: everything in the book as JSON (CSV export is built from this in the web app)
     api.get('/api/export', async (req, reply) => {
       const b = B(req);
-      const [accounts, txns, postings, budgets, holdings, recurring, imports, goals, goalContributions] = await Promise.all([
+      const [accounts, txns, postings, budgets, holdings, recurring, imports, goals, goalContributions, stuffItems] = await Promise.all([
         sql`select * from account where book_id = ${b}`,
         sql`select * from txn where book_id = ${b}`,
         sql`select p.* from posting p join txn t on t.id = p.txn_id where t.book_id = ${b}`,
@@ -379,10 +379,11 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
         sql`select * from import_batch where book_id = ${b}`,
         sql`select * from goal where book_id = ${b}`,
         sql`select * from goal_contribution where book_id = ${b}`,
+        sql`select * from stuff_item where book_id = ${b}`,
       ]);
       reply.header('Content-Disposition', `attachment; filename="paisa-export-${todayIST()}.json"`);
       // Secrets (Kite, Splitwise keys) are deliberately left out.
-      return { exportedAt: new Date().toISOString(), accounts, txns, postings, budgets, holdings, recurring, imports, goals, goalContributions };
+      return { exportedAt: new Date().toISOString(), accounts, txns, postings, budgets, holdings, recurring, imports, goals, goalContributions, stuff: stuffItems };
     });
 
     // Demo book: reset to fresh sample data

@@ -30,7 +30,7 @@ createdb paisa_test
 npm test
 ```
 
-There are 45 API tests (ledger, API, recurring, imports, CAS, Splitwise, insights), plus 18 parser tests run by `npm run test:web` (voice, bank statements, receipts, CAS, Splitwise exports). They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
+There are 47 API tests (ledger, API, recurring, imports, CAS, Splitwise, insights), plus 21 parser tests run by `npm run test:web` (voice, bank statements, receipts, CAS, Splitwise exports and screenshots, and real OCR of an H&M order). They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
 
 ## Deploy for free (Render + Neon)
 
@@ -90,6 +90,25 @@ Tap **Say it** on Home, or the mic in the Add sheet, and say something like:
 - "dinner 1800 on HDFC card split with Aditi and Rohan"
 
 The sentence fills in the form: amount, place, category, account, date and split. You check it and tap Save, and nothing is saved automatically. The parsing happens on your device, with no AI service involved. Speech-to-text uses the browser's own engine: Chrome, and Safari with Siri turned on. If the mic isn't available (some iPhone home-screen apps block it), tap the text box and use the 🎤 key on the iPhone keyboard. Typed or dictated sentences are understood the same way.
+
+## Stuff (own / want / asked about / sold)
+
+**More → Stuff** has your lists: Own, Want, Asked, Sold and Dropped.
+- **Import my sheet** brings in "Yash's Stuff" as it was on 14 Nov 2026. That snapshot is bundled in `apps/api/data/stuff-sheet.json`.
+- **I bought…:** add order screenshots (one or several; they can overlap) or type a sentence such as "bought an Anker charger for 2,499 from Amazon on HDFC card".
+  - Screenshots are read on your phone. Paisa finds each item, its size and colour, what you paid and the order total. If a screenshot cuts off a line total, it works it out from the order total.
+  - Saving logs **one expense** for the order. Each item goes to **Own**.
+  - Items on your **Want** list (matched by product code, e.g. H&M article numbers, or by name) move to Own instead of being added twice.
+  - Logging the same order again doesn't duplicate anything.
+- **Sold it:** type something like "sold my PS5 for 30k into Axis", or pick the item. The money is recorded as income and the item moves from Own to Sold.
+- The bundled "Yash's Stuff" sheet lives in claude.ai, and the app can't write to it directly. To mirror changes there, ask Claude to sync it. Settings → Export includes your Stuff.
+
+## Splitwise balances from screenshots
+
+**More → Splitwise → From screenshots:** screenshot the Friends list in the Splitwise app (several if it scrolls).
+- Paisa reads each "owes you ₹X", "you owe ₹X" or "settled up" line, lets you check them, and then sets each person's balance in Accounts to match.
+- New people are created automatically.
+- Balances are set with an adjustment, so they never count as spending.
 
 ## Face ID
 

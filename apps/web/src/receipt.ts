@@ -5,33 +5,54 @@
  */
 export interface ReceiptGuess { amount: string | null; date: string | null; merchant: string | null; text: string }
 
-/** Shrink and grey-scale the photo: faster OCR, usually better accuracy. */
+/**
+ * Shrink, grey-scale and boost contrast. Dark screenshots (white text on black, like the H&M
+ * app) are inverted first: Tesseract reads dark-on-light far more reliably.
+ */
 async function prepare(file: File): Promise<HTMLCanvasElement> {
   const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
+  const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
-  const g = c.getContext('2d')!;
-  g.filter = 'grayscale(1) contrast(1.35)';
+  const g = c.getContext('2d', { willReadFrequently: true })!;
   g.drawImage(bmp, 0, 0, c.width, c.height);
+  const img = g.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 4) sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  const dark = sum / (d.length / 4) < 110;
+  let lo = 255, hi = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    let y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    if (dark) y = 255 - y;
+    d[i] = d[i + 1] = d[i + 2] = y;
+    if (y < lo) lo = y; if (y > hi) hi = y;
+  }
+  const span = Math.max(hi - lo, 1);
+  for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = ((d[i] - lo) * 255) / span;
+  g.putImageData(img, 0, 0);
   return c;
 }
 
-export async function scanReceipt(file: File, onProgress?: (p: number, label: string) => void): Promise<ReceiptGuess> {
-  onProgress?.(0.05, 'Preparing photo…');
-  const img = await prepare(file);
-  onProgress?.(0.15, 'Loading reader (first time only)…');
+/** OCR one or more images with a single worker. Returns each image's text in order. */
+export async function ocrImages(files: File[], onProgress?: (p: number, label: string) => void): Promise<string[]> {
+  onProgress?.(0.05, 'Loading reader (first time only)…');
   const { createWorker } = await import('tesseract.js');
+  let idx = 0;
   const worker = await createWorker('eng', 1, {
-    logger: (m: any) => { if (m.status === 'recognizing text') onProgress?.(0.3 + m.progress * 0.65, 'Reading receipt…'); },
+    logger: (m: any) => { if (m.status === 'recognizing text') onProgress?.(0.15 + ((idx + m.progress) / files.length) * 0.8, `Reading ${files.length > 1 ? `screenshot ${idx + 1} of ${files.length}` : 'image'}…`); },
   });
   try {
-    const { data } = await worker.recognize(img);
+    const out: string[] = [];
+    for (idx = 0; idx < files.length; idx++) out.push((await worker.recognize(await prepare(files[idx]))).data.text);
     onProgress?.(1, 'Done');
-    return { ...parseReceipt(data.text), text: data.text };
-  } finally {
-    await worker.terminate();
-  }
+    return out;
+  } finally { await worker.terminate(); }
+}
+
+export async function scanReceipt(file: File, onProgress?: (p: number, label: string) => void): Promise<ReceiptGuess> {
+  const [text] = await ocrImages([file], onProgress);
+  return { ...parseReceipt(text), text };
 }
 
 const MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];

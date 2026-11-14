@@ -27,6 +27,7 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
     await sql.begin(async (tx) => {
       await tx`delete from holding_snapshot where book_id = ${bookId}`;
       await tx`delete from budget where book_id = ${bookId}`;
+      await tx`delete from stuff_item where book_id = ${bookId}`;
       await tx`delete from txn where book_id = ${bookId}`;
       // Anything that points at the demo accounts goes before them.
       await tx`delete from recurring_rule where book_id = ${bookId}`;

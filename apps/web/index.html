@@ -25,8 +25,28 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/favicon.png" type="image/png" />
     <title>Paisa OS</title>
+    <style>
+      /* Splash: drawn by the browser before any app code loads. */
+      #splash { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+        background: #f1f3f7; transition: opacity 260ms ease, visibility 260ms; font-family: -apple-system, system-ui, sans-serif; }
+      html[data-mode="dark"] #splash { background: #09090b; }
+      #splash img { width: 112px; height: 112px; object-fit: contain; animation: splash-in 520ms cubic-bezier(.2,.8,.2,1) both; }
+      #splash .spin { width: 26px; height: 26px; border-radius: 50%; border: 3px solid rgba(255,107,107,0.25); border-top-color: #ff6b6b; animation: spin 800ms linear infinite; }
+      #splash .slow { font-size: 13px; color: #8a8f99; opacity: 0; transition: opacity 400ms; text-align: center; padding: 0 24px; }
+      #splash.waking .slow { opacity: 1; }
+      #splash.done { opacity: 0; visibility: hidden; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes splash-in { from { opacity: 0; transform: scale(0.86); } }
+      @media (prefers-reduced-motion: reduce) { #splash img, #splash .spin { animation: none; } }
+    </style>
   </head>
   <body>
+    <div id="splash" role="status" aria-label="Loading Paisa">
+      <img src="/logo-mark.png" alt="" />
+      <div class="spin"></div>
+      <div class="slow">Waking up the server… this takes up to a minute after it's been idle.</div>
+    </div>
+    <script>setTimeout(function () { var s = document.getElementById('splash'); if (s && !s.classList.contains('done')) s.classList.add('waking'); }, 4000);</script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -399,3 +399,13 @@ body { font-size: 14px; line-height: 1.4; }
 .dhead .grow { flex: 1; }
 .tabbar { background: var(--surface); }
 .theme-opt .nm { white-space: nowrap; }
+
+/* ---------- Stuff ---------- */
+.buy-row { display: flex; gap: 8px; align-items: center; padding: 8px 10px; }
+.buy-row + .buy-row { border-top: 1px solid var(--border); }
+.buy-row .grow { flex: 1; min-width: 0; }
+.buy-row .input { min-height: 36px; padding: 6px 9px; }
+.buy-row .paid { width: 92px; flex: none; text-align: right; }
+.buy-row select.input { width: 104px; flex: none; }
+.buy-row input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.stuff-link { display: block; width: 100%; text-align: left; margin-bottom: 10px; padding: 9px 12px; border-radius: 12px; border: 1px dashed var(--border-strong); background: var(--surface-2); color: var(--ink-2); font-size: 12.5px; cursor: pointer; }

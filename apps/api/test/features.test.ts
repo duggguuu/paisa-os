@@ -378,3 +378,61 @@ test('app lock: server refuses a locked session until Face ID unlocks it', async
   await sql`update session set unlocked_until = now() - interval '1 minute'`;
   assert.equal((await req('GET', '/api/accounts')).status, 200, 'no lock when it is off');
 });
+
+test('stuff: sheet import, purchase moves Want→Own by product code, sell moves Own→Sold', async () => {
+  let r = await req('POST', '/api/stuff/import-sheet');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.added, 114);
+  r = await req('POST', '/api/stuff/import-sheet');
+  assert.equal(r.body.added, 0, 'importing twice adds nothing');
+  const want0 = (await req('GET', '/api/stuff?list=want')).body.length;
+  // The H&M order from the screenshots: 6 lines, ₹11,675.20 paid.
+  const lines = [
+    ['Regular Fit Cotton Henley Top', '1365507002013', 'Dark brown', 'L', 159920],
+    ['Relaxed Fit Printed Cotton Poplin Shirt', '1363609001013', 'Dark blue/Street Archives', 'L', 183920],
+    ['Loose Straight Jeans', '1357868008021', 'Beige', '30/32', 239920],
+    ['Regular Fit Waffled Henley Top', '1357940002013', 'Dark dusty red', 'L', 183920],
+    ['Overshirt', '1351283001013', 'Dark green', 'L', 239920],
+    ['Regular Fit Shirt', '1309692005013', 'Green/White striped', 'L', 159920],
+  ];
+  const spentBefore = (await req('GET', '/api/home')).body.monthSummary.spent;
+  r = await req('POST', '/api/stuff/purchase', {
+    accountId: A['Axis Bank'].id, categoryId: C['Apparel'], store: 'H&M', total: 1167520,
+    items: lines.map(([name, artNo, colour, size, paid]) => ({ name, artNo, colour, size, paid, brand: 'H&M', category: 'Clothes' })),
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.movedFromWant.length, 6, `all six were on the Want list: ${JSON.stringify(r.body)}`);
+  assert.equal((await req('GET', '/api/home')).body.monthSummary.spent, spentBefore + 1167520);
+  assert.equal((await req('GET', '/api/stuff?list=want')).body.length, want0 - 6);
+  const own = (await req('GET', '/api/stuff?list=own')).body;
+  const jeans = own.find((i: any) => i.name === 'Loose straight jeans, beige');
+  assert.equal(jeans.price, 239920);
+  assert.equal(jeans.meta.size, '30/32');
+  // Logging the same order again doesn't duplicate anything in Own.
+  const ownCount = (await req('GET', '/api/stuff?list=own')).body.length;
+  r = await req('POST', '/api/stuff/purchase', {
+    accountId: A['Axis Bank'].id, categoryId: C['Apparel'], store: 'H&M', total: 1167520,
+    items: lines.map(([name, artNo, colour, size, paid]) => ({ name, artNo, colour, size, paid, brand: 'H&M' })),
+  });
+  assert.equal(r.body.alreadyOwned.length, 6);
+  assert.equal((await req('GET', '/api/stuff?list=own')).body.length, ownCount);
+  // A brand-new item (not on Want) is added to Own.
+  r = await req('POST', '/api/stuff/purchase', { accountId: A['Axis Bank'].id, categoryId: C['Electronics'], total: 249900, items: [{ name: 'Anker 65W charger', category: 'Tech' }] });
+  assert.deepEqual(r.body.addedToOwn, ['Anker 65W charger']);
+  // Sell the PS5.
+  const ps5 = own.find((i: any) => i.name === 'PlayStation 5');
+  r = await req('POST', '/api/stuff/sell', { itemId: ps5.id, price: 3000000, accountId: A['Axis Bank'].id, categoryId: C['Other income'], buyer: 'OLX buyer' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.ok(!(await req('GET', '/api/stuff?list=own')).body.some((i: any) => i.id === ps5.id), 'sold items leave Own');
+  assert.equal((await req('GET', '/api/stuff?list=sold')).body[0].sold_price, 3000000);
+});
+
+test('people balances from a Splitwise screenshot set each balance exactly', async () => {
+  let r = await req('POST', '/api/people/balances', { balances: [{ name: 'Rohan', amount: -400_00 }, { name: 'Priya Shah', amount: 1250_00 }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(await bal('Priya Shah'), 1250_00);
+  assert.equal(r.body.people.find((p: any) => p.name === 'Priya Shah').created, true);
+  r = await req('POST', '/api/people/balances', { balances: [{ name: 'Priya Shah', amount: 0 }] });
+  assert.equal(await bal('Priya Shah'), 0, 'settled up');
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});

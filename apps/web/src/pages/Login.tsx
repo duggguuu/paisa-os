@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib';
-import { loginWithFaceId } from '../components/Security';
+import { useFaceIdLogin } from '../components/Security';
 import { Icon } from '../components/Icons';
 
 export function Login({ setupNeeded, passkeyLogin }: { setupNeeded: boolean; passkeyLogin?: boolean }) {
@@ -10,6 +10,7 @@ export function Login({ setupNeeded, passkeyLogin }: { setupNeeded: boolean; pas
   const [password, setPassword] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const faceId = useFaceIdLogin(!setupNeeded && !!passkeyLogin);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,8 +42,8 @@ export function Login({ setupNeeded, passkeyLogin }: { setupNeeded: boolean; pas
         {!setupNeeded && passkeyLogin && (
           <button className="btn block" style={{ marginTop: 12 }} disabled={busy} onClick={async () => {
             setErr(null); setBusy(true);
-            try { await loginWithFaceId(); await qc.invalidateQueries({ queryKey: ['auth'] }); }
-            catch (e: any) { setErr(e?.name === 'NotAllowedError' ? 'Face ID was cancelled. Try again or use your password.' : e.message); }
+            try { await faceId.run(); await qc.invalidateQueries({ queryKey: ['auth'] }); }
+            catch (e: any) { setErr(e.message); }
             finally { setBusy(false); }
           }}><Icon name="faceid" /> Log in with Face ID</button>
         )}

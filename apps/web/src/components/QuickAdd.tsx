@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, money, parseRupees, todayIST, addDays, uuid, shortDate } from '../lib';
 import { Sheet, useUi } from '../App';
 import { Icon } from './Icons';
+import { useNavigate } from 'react-router-dom';
 import { parseSpoken, speechSupported, listen, type Draft } from '../voice';
 
 export interface QuickAddPreset {
@@ -20,6 +21,7 @@ function lastAccount(): string | null {
 export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose: () => void }) {
   const qc = useQueryClient();
   const { toast } = useUi();
+  const navigate = useNavigate();
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => api<any[]>('/api/accounts') });
   const categories = useQuery({ queryKey: ['categories'], queryFn: () => api<any[]>('/api/categories') });
   const idemKey = useMemo(() => uuid(), []);
@@ -236,6 +238,11 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
               : heard ? <div className="tiny muted" style={{ margin: '6px 2px 0' }}>Filled from {heard.startsWith('receipt:') ? heard : `"${heard}"`}. Check it, then Save.</div>
               : <div className="tiny faint" style={{ margin: '6px 2px 0' }}>Say it ("1,200 at DMart from Axis yesterday") or 📷 scan a receipt.</div>}
           </div>
+        )}
+        {!edit && (
+          <button type="button" className="stuff-link" onClick={() => { onClose(); navigate('/stuff?buy=1'); }}>
+            🛍️ Bought things (clothes, gadgets…)? Add the order screenshots: it logs the expense and adds them to your Stuff ›
+          </button>
         )}
         {!edit || edit.kind !== 'split' ? (
           <div className="seg full" role="tablist" style={{ marginBottom: 12 }}>

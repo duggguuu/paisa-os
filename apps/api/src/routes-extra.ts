@@ -12,6 +12,7 @@ import { insights } from './insights.js';
 import * as goals from './goals.js';
 import { planner, healthScore } from './planner.js';
 import * as copilot from './copilot.js';
+import * as stuff from './stuff.js';
 import { todayIST } from './money.js';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -120,6 +121,48 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
       left join account a on a.id = p.account_id
       group by r.idx order by r.idx`;
     return months.map((m, i) => ({ ...m, income: Number(rows[i]?.income ?? 0), expense: Number(rows[i]?.expense ?? 0) }));
+  });
+
+  // Stuff (own / want / asked / dropped / sold)
+  api.get('/api/stuff', async (req) => stuff.list(sql, B(req), (req.query as any)?.list));
+  api.post('/api/stuff', async (req) => ({ id: await stuff.create(sql, B(req), stuff.ItemInput.parse(req.body)) }));
+  api.put('/api/stuff/:id', async (req) => { await stuff.update(sql, B(req), P(req), stuff.ItemInput.parse(req.body)); return { ok: true }; });
+  api.delete('/api/stuff/:id', async (req) => { await stuff.remove(sql, B(req), P(req)); return { ok: true }; });
+  api.post('/api/stuff/import', async (req) => {
+    const b = z.object({ items: z.array(stuff.ItemInput).max(2000) }).parse(req.body);
+    return stuff.importItems(sql, B(req), b.items);
+  });
+  api.post('/api/stuff/import-sheet', async (req) => stuff.importItems(sql, B(req), stuff.sheetSnapshot().map((i) => stuff.ItemInput.parse(i))));
+  api.post('/api/stuff/purchase', async (req) => stuff.purchase(sql, B(req), stuff.PurchaseInput.parse(req.body)));
+  api.post('/api/stuff/sell', async (req) => stuff.sell(sql, B(req), stuff.SaleInput.parse(req.body)));
+  api.get('/api/stuff/export', async (req) => stuff.exportAll(sql, B(req)));
+
+  // People balances from a Splitwise screenshot: set each person's balance to match.
+  api.post('/api/people/balances', async (req) => {
+    const b = z.object({
+      date: date.optional(),
+      balances: z.array(z.object({ name: z.string().trim().min(1).max(60), amount: z.number().int().min(-1e12).max(1e12) })).min(1).max(200),
+    }).parse(req.body);
+    const day = b.date ?? todayIST();
+    const people = await sql<{ id: string; name: string }[]>`select id, name from account where book_id = ${B(req)} and kind = 'receivable' and not is_archived`;
+    const out: { name: string; accountName: string; created: boolean; adjusted: number; balance: number }[] = [];
+    for (const p of b.balances) {
+      const n = p.name.toLowerCase(), first = n.split(' ')[0];
+      let acc = people.find((x) => x.name.toLowerCase() === n)
+        ?? people.find((x) => x.name.toLowerCase().split(' ')[0] === first && (x.name.split(' ').length === 1 || n.split(' ').length === 1));
+      let created = false;
+      if (!acc) {
+        const [row] = await sql<{ id: string }[]>`
+          insert into account (book_id, class, kind, name, icon, meta) values (${B(req)}, 'asset', 'receivable', ${p.name.slice(0, 60)}, '🧑', ${sql.json({ source: 'splitwise-screenshot' })})
+          returning id`;
+        acc = { id: row.id, name: p.name };
+        people.push(acc);
+        created = true;
+      }
+      const adjusted = await adjustBalance(sql, B(req), acc.id, day, p.amount, 'splitwise');
+      out.push({ name: p.name, accountName: acc.name, created, adjusted, balance: p.amount });
+    }
+    return { date: day, people: out };
   });
 
   // Budget planner + financial health

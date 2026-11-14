@@ -121,3 +121,49 @@ test('Splitwise export: rows, person columns, total row ignored, "you" guessed a
   const friend2 = parseSplitwiseCsv('Date,Description,Category,Cost,Currency,Riya T,Yash G\n2026-04-02,Cab,Taxi,400,INR,-200,200\n', 'Riya.csv');
   assert.equal(guessMe([group, friend, friend2]), 'Yash G');
 });
+
+test('orders: the H&M order from real OCR of three overlapping screenshots', async () => {
+  const { parseOrderText, mergeOrders } = await import('../src/orders.ts');
+  const ocr = JSON.parse(fs.readFileSync(new URL('./hm-ocr.json', import.meta.url), 'utf8'));
+  const o = mergeOrders(['13', '14', '15'].map((k) => parseOrderText(ocr[k])));
+  assert.equal(o.store, 'H&M');
+  assert.equal(o.total, 1167520);
+  assert.equal(o.payment, 'UPI');
+  assert.deepEqual(o.items.map((i) => i.name), ['Regular Fit Cotton Henley Top', 'Relaxed Fit Printed Cotton Poplin Shirt', 'Loose Straight Jeans', 'Regular Fit Waffled Henley Top', 'Overshirt', 'Regular Fit Shirt']);
+  assert.deepEqual(o.items.map((i) => i.artNo), ['1365507002013', '1363609001013', '1357868008021', '1357940002013', '1351283001013', '1309692005013']);
+  assert.deepEqual(o.items.map((i) => i.paid), [159920, 183920, 239920, 183920, 239920, 159920], 'last line total comes from the order total');
+  assert.equal(o.items.reduce((s, i) => s + (i.paid ?? 0), 0), o.total);
+  assert.equal(o.items[2].size, '30/32');
+  assert.equal(o.items[2].category, 'Clothes — bottoms');
+  assert.equal(o.items[0].colour, 'Dark brown');
+});
+
+test('orders: bought/sold sentences', async () => {
+  const { parseStuffSentence } = await import('../src/orders.ts');
+  let s = parseStuffSentence('bought an Anker charger for 2,499 and a USB-C cable for 499 from Amazon on HDFC card');
+  assert.equal(s.kind, 'buy');
+  assert.deepEqual(s.items, [{ name: 'Anker charger', amount: 249900 }, { name: 'USB-C cable', amount: 49900 }]);
+  assert.equal(s.total, 299800);
+  assert.equal(s.store, 'Amazon');
+  s = parseStuffSentence('sold my PlayStation 5 for 30k');
+  assert.equal(s.kind, 'sell');
+  assert.deepEqual(s.items, [{ name: 'PlayStation 5', amount: 3000000 }]);
+});
+
+test('splitwise: balances from a friends-list screenshot', async () => {
+  const { parseSplitwiseBalances } = await import('../src/orders.ts');
+  const ocr = `9:41
+Overall, you are owed ₹2,350.00
+Rohan Sharma
+owes you
+₹1,200.00
+Aditi
+you owe
+₹450.00
+Kabir M owes you ₹1,600.00
+Meera settled up
+Q Friends Groups Activity Account`;
+  assert.deepEqual(parseSplitwiseBalances(ocr), [
+    { name: 'Rohan Sharma', amount: 120000 }, { name: 'Aditi', amount: -45000 }, { name: 'Kabir M', amount: 160000 }, { name: 'Meera', amount: 0 },
+  ]);
+});

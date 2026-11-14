@@ -5,6 +5,7 @@ import { AppearanceButtons, ThemeList, ModeSeg } from '../components/Appearance'
 import { useUi } from '../App';
 
 const ITEMS: [string, string, string, string][] = [
+  ['/stuff', 'wallet', 'Stuff', 'What you own, want and asked about; log buys and sales'],
   ['/goals', 'target', 'Goals', 'Savings goals and finish dates'],
   ['/budgets', 'pie', 'Budget Planner', 'Budgets, overview and health score'],
   ['/recurring', 'repeat', 'Bills & recurring', 'Rent, SIPs, subscriptions, salary'],

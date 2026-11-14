@@ -20,6 +20,7 @@ import { TxnDetail } from './components/TxnDetail';
 import { Icon } from './components/Icons';
 import { LockScreen } from './components/Security';
 import { More } from './pages/More';
+import { Stuff } from './pages/Stuff';
 
 interface Ui {
   openAdd: (preset?: QuickAddPreset) => void;
@@ -40,7 +41,16 @@ export function App() {
     window.addEventListener('paisa:locked', locked);
     return () => window.removeEventListener('paisa:locked', locked);
   }, [qc]);
-  if (status.isLoading) return <div className="main"><div className="skeleton" style={{ width: 120, marginTop: 40 }} /></div>;
+  // Hide the splash (index.html) once we know where to go; keep it up at least briefly so it doesn't flash.
+  useEffect(() => {
+    if (status.isLoading) return;
+    const el = document.getElementById('splash');
+    if (!el) return;
+    const shownFor = performance.now();
+    const t = setTimeout(() => { el.classList.add('done'); setTimeout(() => el.remove(), 400); }, Math.max(0, 700 - shownFor));
+    return () => clearTimeout(t);
+  }, [status.isLoading]);
+  if (status.isLoading) return null;
   if (status.isError) return <div className="main"><p className="error">Can't reach the server. Check your connection and reload.</p></div>;
   if (!status.data.user) return <Login setupNeeded={status.data.setupNeeded} passkeyLogin={status.data.passkeyLogin} />;
   if (status.data.user.locked) return <LockScreen email={status.data.user.email} />;
@@ -86,6 +96,7 @@ function Shell() {
             <NavLink key={to} to={to} end={to === '/'}><Icon name={icon} />{label}</NavLink>
           ))}
           <NavLink to="/goals"><Icon name="target" />Goals</NavLink>
+          <NavLink to="/stuff"><Icon name="wallet" />Stuff</NavLink>
           <div className="nav-group">Plan</div>
           <NavLink to="/copilot"><Icon name="sparkle" />AI Copilot</NavLink>
           <NavLink to="/budgets"><Icon name="pie" />Budget Planner</NavLink>
@@ -119,6 +130,7 @@ function Shell() {
             <Route path="/copilot" element={<Copilot />} />
             <Route path="/budgets" element={<Budgets />} />
             <Route path="/more" element={<More />} />
+            <Route path="/stuff" element={<Stuff />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
