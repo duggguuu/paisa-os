@@ -9,6 +9,9 @@ import * as importer from './importer.js';
 import * as cas from './cas.js';
 import * as splitwise from './splitwise.js';
 import { insights } from './insights.js';
+import * as goals from './goals.js';
+import { planner, healthScore } from './planner.js';
+import * as copilot from './copilot.js';
 import { todayIST } from './money.js';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -76,4 +79,26 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
 
   // Insights
   api.get('/api/insights', async (req) => insights(sql, B(req), req.book!.month_start_day));
+
+  // Goals
+  api.get('/api/goals', async (req) => goals.listGoals(sql, B(req)));
+  api.post('/api/goals', async (req) => ({ id: await goals.createGoal(sql, B(req), goals.GoalInput.parse(req.body)) }));
+  api.put('/api/goals/:id', async (req) => { await goals.updateGoal(sql, B(req), P(req), goals.GoalInput.parse(req.body)); return { ok: true }; });
+  api.delete('/api/goals/:id', async (req) => { await goals.archiveGoal(sql, B(req), P(req)); return { ok: true }; });
+  api.post('/api/goals/:id/boost', async (req) => goals.boost(sql, B(req), P(req), goals.BoostInput.parse(req.body)));
+  api.get('/api/goals/:id/contributions', async (req) => goals.contributions(sql, B(req), P(req)));
+
+  // Budget planner + financial health
+  api.get('/api/planner', async (req) => planner(sql, B(req), req.book!.month_start_day));
+  api.get('/api/health-score', async (req) => healthScore(sql, B(req), req.book!.month_start_day));
+
+  // Copilot
+  api.get('/api/copilot', async () => ({ engine: copilot.copilotMode() }));
+  api.post('/api/copilot', async (req) => {
+    const b = z.object({
+      question: z.string().trim().min(1).max(1000),
+      history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(4000) })).max(20).optional(),
+    }).parse(req.body);
+    return copilot.answer(sql, B(req), req.book!.month_start_day, b.question, b.history ?? []);
+  });
 }

@@ -266,3 +266,65 @@ test('Splitwise spreadsheet import (free accounts): balances, overlap between ex
   assert.equal(r.body.alreadyImported, 3);
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
+
+test('goals: earmarked and account-linked goals, boost, projected finish date', async () => {
+  // Earmark goal with a starting amount.
+  let r = await req('POST', '/api/goals', { name: 'MacBook', icon: '💻', target: 1_00_000_00, startingAmount: 40_000_00, targetDate: addDays(today, 180) });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const mac = r.body.id;
+  r = await req('POST', `/api/goals/${mac}/boost`, { amount: 20_000_00 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  let list = (await req('GET', '/api/goals')).body;
+  let g = list.find((x: any) => x.id === mac);
+  assert.equal(g.saved, 60_000_00);
+  assert.equal(g.remaining, 40_000_00);
+  assert.ok(g.pacePerMonth > 0 && g.reachOn, 'recent contributions give a pace and a finish date');
+  assert.ok(g.neededPerMonth > 0);
+
+  // Account-linked goal: boosting moves real money with a transfer (not spending).
+  const fd = await req('POST', '/api/accounts', { name: 'Goal FD', kind: 'fd' });
+  r = await req('POST', '/api/goals', { name: 'Emergency fund', target: 50_000_00, accountId: fd.body.id });
+  const ef = r.body.id;
+  const axisBefore = await bal('Axis Bank');
+  r = await req('POST', `/api/goals/${ef}/boost`, { amount: 10_000_00 });
+  assert.equal(r.status, 422, 'linked goals need a source account');
+  r = await req('POST', `/api/goals/${ef}/boost`, { amount: 10_000_00, fromAccountId: A['Axis Bank'].id });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(await bal('Axis Bank'), axisBefore - 10_000_00);
+  g = (await req('GET', '/api/goals')).body.find((x: any) => x.id === ef);
+  assert.equal(g.saved, 10_000_00);
+  const spentBefore = (await req('GET', '/api/home')).body.monthSummary.spent;
+  assert.equal(spentBefore, (await req('GET', '/api/home')).body.monthSummary.spent, 'goal transfers are not spending');
+
+  await req('DELETE', `/api/goals/${mac}`);
+  list = (await req('GET', '/api/goals')).body;
+  assert.ok(!list.some((x: any) => x.id === mac), 'archived goals leave the list');
+});
+
+test('planner and financial health score', async () => {
+  await req('PUT', '/api/budgets', { categoryId: C['Food'], period: 'monthly', amount: 5_000_00 });
+  const p = (await req('GET', '/api/planner')).body;
+  assert.equal(p.income.series.length, 6);
+  assert.equal(p.spent.series.length, 6);
+  assert.ok(p.planned.value >= 5_000_00);
+  const food = p.categories.find((c: any) => c.name === 'Food');
+  assert.ok(food && ['on_track', 'behind', 'over'].includes(food.status));
+  const h = (await req('GET', '/api/health-score')).body;
+  assert.ok(h.score >= 0 && h.score <= 100);
+  assert.equal(h.parts.length, 6);
+  assert.equal(h.parts.reduce((s: number, x: any) => s + x.weight, 0), 100);
+});
+
+test('copilot (local engine) answers from the data', async () => {
+  const info = (await req('GET', '/api/copilot')).body;
+  assert.equal(info.engine, process.env.ANTHROPIC_API_KEY ? 'claude' : 'local');
+  if (info.engine !== 'local') return;
+  const ask = async (q: string) => (await req('POST', '/api/copilot', { question: q })).body.answer as string;
+  assert.match(await ask('Can I afford a ₹500 dinner?'), /Yes/);
+  assert.match(await ask('Can I afford a 50 lakh flat?'), /Not from this month/);
+  assert.match(await ask('When will I reach my goal?'), /Emergency fund/);
+  assert.match(await ask('Why did my spending increase?'), /last month/);
+  assert.match(await ask('How can I save more each month?'), /income|Trimming|budget/);
+  assert.match(await ask("what's my financial health score?"), /\/100/);
+  assert.match(await ask('how much did I spend on groceries'), /Groceries|couldn't find/);
+});

@@ -146,3 +146,65 @@ export function Donut({ rows, total, label, onPick }: { rows: Slice[]; total: nu
     </div>
   );
 }
+
+/** Tiny bar sparkline for KPI cards. The last bar (this period) is solid. */
+export function MiniBars({ values, color }: { values: number[]; color: string }) {
+  const max = Math.max(...values.map((v) => Math.abs(v)), 1);
+  return (
+    <span className="minibars" style={{ color }} aria-hidden>
+      {values.map((v, i) => <span key={i} style={{ height: `${Math.max(10, (Math.abs(v) / max) * 100)}%` }} />)}
+    </span>
+  );
+}
+
+/** Semicircle gauge, 0–100, segmented, with a marker at the score. */
+export function Gauge({ score, label }: { score: number; label: string }) {
+  const R = 62, cx = 75, cy = 72, segs = 5, gap = 3;
+  const pt = (t: number, r = R) => {
+    const a = Math.PI * (1 - t);
+    return [cx + r * Math.cos(a), cy - r * Math.sin(a)];
+  };
+  const arc = (t0: number, t1: number) => {
+    const [x0, y0] = pt(t0), [x1, y1] = pt(t1);
+    return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${R} ${R} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+  };
+  const colors = ['#ef4f4f', '#f2752c', '#f1a200', '#3fbf86', '#1fb37a'];
+  const t = Math.max(0, Math.min(1, score / 100));
+  const [mx, my] = pt(t);
+  const gapT = gap / (Math.PI * R);
+  return (
+    <div className="gauge" role="img" aria-label={`Financial health ${score} out of 100, ${label}`}>
+      <svg viewBox="0 0 150 80">
+        {Array.from({ length: segs }, (_, i) => (
+          <path key={i} d={arc(i / segs + (i ? gapT : 0), (i + 1) / segs - (i < segs - 1 ? gapT : 0))} fill="none"
+            stroke={colors[i]} strokeOpacity={(i + 1) / segs <= t + 0.001 || i / segs < t ? 1 : 0.22} strokeWidth="13" strokeLinecap="round" />
+        ))}
+        <circle cx={mx} cy={my} r="9" fill="var(--surface)" stroke="var(--ink)" strokeWidth="3" />
+      </svg>
+      <div className="g-num"><b className="num">{score}</b><span>Your score</span></div>
+    </div>
+  );
+}
+
+/** Spent / Budgeted / Remaining as three tall bars (Budget Overview). */
+export function OverviewBars({ spent, budget }: { spent: number; budget: number }) {
+  const remaining = Math.max(budget - spent, 0);
+  const max = Math.max(spent, budget, 1);
+  const over = spent > budget;
+  const bars: [string, number, string][] = [
+    ['Spent', spent, over ? 'var(--up)' : 'var(--accent)'],
+    ['Budgeted', budget, 'var(--indigo)'],
+    [over ? 'Over by' : 'Remaining', over ? spent - budget : remaining, over ? 'var(--up)' : 'var(--accent-2)'],
+  ];
+  return (
+    <div className="overview">
+      {bars.map(([label, v, color]) => (
+        <div key={label} className="ob">
+          <span className="ol">{label}</span>
+          <span className="ov num">{compact(v)}</span>
+          <span className="obar" style={{ height: `${Math.max(6, (v / max) * 70)}%`, background: color }} />
+        </div>
+      ))}
+    </div>
+  );
+}

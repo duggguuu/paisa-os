@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
-import { api, money, compact, pct, periodLabel, todayIST } from '../lib';
+import { api, money, compact, periodLabel, todayIST } from '../lib';
 import { Icon, tint } from '../components/Icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { InsightCard, type Insight } from './Insights';
-import { RuleSheet } from './Recurring';
+import { type Insight } from './Insights';
+import { KpiCards, HealthCard, AiCard, CategoryTable, usePlanner, useHealth } from '../components/Planner';
+import { GoalBar, ReachPill, BoostSheet, type Goal } from './Goals';
 import { dayLabel, shortDate } from '../lib';
 import { useUi } from '../App';
 import { TxnRow } from '../components/TxnRow';
@@ -14,12 +15,14 @@ export function Home() {
   const { openAdd } = useUi();
   const home = useQuery({ queryKey: ['home'], queryFn: () => api<any>('/api/home') });
   const recent = useQuery({ queryKey: ['txns', 'recent'], queryFn: () => api<any[]>('/api/txns?limit=6') });
-  const stats = useQuery({ queryKey: ['stats', 'month', 'now'], queryFn: () => api<any>('/api/stats?period=month') });
+  const planner = usePlanner();
+  const health = useHealth();
+  const goals = useQuery({ queryKey: ['goals'], queryFn: () => api<Goal[]>('/api/goals') });
+  const [boost, setBoost] = useState<Goal | null>(null);
   const [showWhy, setShowWhy] = useState(false);
   const qc = useQueryClient();
   const { toast } = useUi();
   const ins = useQuery({ queryKey: ['insights'], queryFn: () => api<Insight[]>('/api/insights'), staleTime: 5 * 60_000 });
-  const [rule, setRule] = useState<Record<string, unknown> | null>(null);
   async function act(r: any, what: 'log' | 'skip') {
     try {
       await api(`/api/recurring/${r.id}/${what}`, { method: 'POST', body: {} });
@@ -33,7 +36,6 @@ export function Home() {
   if (!h) return <div className="card"><div className="skeleton" style={{ width: '40%' }} /><div className="skeleton" style={{ marginTop: 12, height: 40 }} /></div>;
 
   const sts = h.safeToSpend;
-  const budgets = (stats.data?.categories ?? []).filter((c: any) => c.budget !== null);
   const noAccountsYet = h.netWorth.accounts.every((a: any) => a.balance === 0) && recent.data?.length === 0;
 
   // Month progress + a per-day allowance, so the hero number is actionable.
@@ -53,7 +55,10 @@ export function Home() {
           <div className="page-kicker">{greeting}</div>
           <h1 className="page-title">{periodLabel('month', h.month.from, h.month.to)}</h1>
         </div>
-        <Link to="/settings" className="icon-btn" aria-label="Settings"><Icon name="settings" /></Link>
+        <div className="head-actions">
+          <Link to="/copilot" className="icon-btn ai" aria-label="AI Copilot" title="AI Copilot"><Icon name="sparkle" /></Link>
+          <Link to="/settings" className="icon-btn" aria-label="Settings"><Icon name="settings" /></Link>
+        </div>
       </div>
 
       {noAccountsYet && (
@@ -85,25 +90,16 @@ export function Home() {
         )}
       </div>
 
-      <div className="grid2" style={{ marginTop: 14 }}>
-        <Link to="/stats" className="card kpi">
-          <div className="kpi-head"><span className="dot out"><Icon name="out" /></span><span className="hero-label">Spent</span></div>
-          <div className="stat-num num">{money(h.monthSummary.spent, { whole: true })}</div>
-          <div className="tiny faint">{money(h.monthSummary.avgDailySpend, { whole: true })}/day</div>
-        </Link>
-        <Link to="/stats" className="card kpi" style={{ marginTop: 0 }}>
-          <div className="kpi-head"><span className="dot in"><Icon name="in" /></span><span className="hero-label">Earned</span></div>
-          <div className="stat-num num">{h.monthSummary.noIncomeLogged ? '—' : money(h.monthSummary.earned, { whole: true })}</div>
-          <div className="tiny faint">{h.monthSummary.noIncomeLogged ? 'No income logged yet' : `Saving ${pct(h.monthSummary.savingsRate)}`}</div>
-        </Link>
-      </div>
+      {planner.data && <KpiCards p={planner.data} />}
 
-      <nav className="quick-tools" aria-label="Tools">
+      <nav className="quick-tools" aria-label="Shortcuts">
+        <button onClick={() => openAdd({ voice: true })}><Icon name="mic" />Say it</button>
+        <Link to="/budgets"><Icon name="pie" />Budgets</Link>
         <Link to="/recurring"><Icon name="repeat" />Bills</Link>
-        <Link to="/insights"><Icon name="spark" />Insights</Link>
         <Link to="/import"><Icon name="upload" />Import</Link>
-        <Link to="/splitwise"><Icon name="users" />Splitwise</Link>
       </nav>
+
+      <div className="section"><AiCard insights={ins.data} /></div>
 
       {(h.dueSoon?.length ?? 0) > 0 && (
         <div className="section">
@@ -133,57 +129,31 @@ export function Home() {
         </div>
       )}
 
-      {(ins.data?.length ?? 0) > 0 && (
-        <div className="section">
-          <div className="section-title">For you <Link to="/insights">See all {ins.data!.length}</Link></div>
-          <div className="insights">{ins.data!.slice(0, 2).map((i) => <InsightCard key={i.id} i={i} onRecurring={setRule} />)}</div>
-        </div>
-      )}
-      {rule && <RuleSheet initial={rule} onClose={() => setRule(null)} />}
-
-      <button className="card voice-cta" onClick={() => openAdd({ voice: true })}>
-        <span className="mic-dot"><Icon name="mic" /></span>
-        <span className="grow"><b>Say it</b><span className="tiny faint">"450 Swiggy from HDFC card yesterday"</span></span>
-        <span className="faint" aria-hidden>›</span>
-      </button>
-
-      {budgets.length > 0 && (
-        <div className="section">
-          <div className="section-title">Budgets <Link to="/stats">Details</Link></div>
-          <div className="list">
-            {budgets.map((b: any) => {
-              const used = b.amount / b.budget;
-              const state = used > 1 ? 'over' : used > 0.85 ? 'near' : '';
-              const left = b.budget - b.amount;
-              return (
-                <div key={b.id} className="item budget-item">
-                  <div className="spread">
-                    <span className="label"><span className="avatar" style={tint(b.icon ?? b.name)} aria-hidden>{b.icon}</span>{b.name}</span>
-                    <span className="small num">{compact(b.amount)} <span className="faint">/ {compact(b.budget)}</span></span>
-                  </div>
-                  <div className="bar-row" style={{ padding: 0, cursor: 'default' }}>
-                    <span className="meter" style={{ gridColumn: '1 / 4', margin: 0 }}><span className={`fill ${state}`} style={{ width: `${Math.min(used, 1) * 100}%` }} /></span>
-                  </div>
-                  <div className="left num">{left >= 0 ? `${compact(left)} left` : `${compact(-left)} over budget`}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {h.topCategories.length > 0 && (
-        <div className="section">
-          <div className="section-title">Where it went</div>
-          <div className="list">
-            {h.topCategories.map((c: any) => (
-              <Link key={c.id} to={`/stats?category=${c.id}`} className="item">
-                <div className="avatar" style={tint(c.icon ?? c.name)} aria-hidden>{c.icon ?? '•'}</div>
-                <div className="grow"><div className="title">{c.name}</div></div>
-                <div className="amt num">{money(c.amount, { whole: true })}</div>
+      {(goals.data?.length ?? 0) > 0 && (() => {
+        const g = [...goals.data!].sort((a, b) => Number(a.done) - Number(b.done) || b.progress - a.progress)[0];
+        return (
+          <div className="section">
+            <div className="section-title">Goals <Link to="/goals">View all {goals.data!.length}</Link></div>
+            <div className="goal-card">
+              <Link to="/goals" className="g-head">
+                <span className="g-ico">{g.icon ?? '🎯'}</span>
+                <div className="grow"><div className="g-name">{g.name}</div><div className="g-sub">{compact(g.remaining)} to go</div></div>
               </Link>
-            ))}
+              <GoalBar g={g} />
+              <ReachPill g={g} />
+              {!g.done && <button className="btn cyan" onClick={() => setBoost(g)}>Boost My Goal</button>}
+            </div>
           </div>
+        );
+      })()}
+      {boost && <BoostSheet goal={boost} onClose={() => setBoost(null)} />}
+
+      {health.data && <div className="section"><HealthCard h={health.data} /></div>}
+
+      {planner.data && planner.data.categories.some((c: any) => c.budget !== null) && (
+        <div className="section">
+          <div className="section-title">Budget categories <Link to="/budgets">Budget planner</Link></div>
+          <CategoryTable rows={planner.data.categories} limit={5} />
         </div>
       )}
 

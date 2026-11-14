@@ -12,6 +12,9 @@ import { Recurring } from './pages/Recurring';
 import { Insights } from './pages/Insights';
 import { Import } from './pages/Import';
 import { Splitwise } from './pages/Splitwise';
+import { Goals } from './pages/Goals';
+import { Copilot } from './pages/Copilot';
+import { Budgets } from './pages/Budgets';
 import { QuickAdd, type QuickAddPreset } from './components/QuickAdd';
 import { TxnDetail } from './components/TxnDetail';
 import { Icon } from './components/Icons';
@@ -60,6 +63,7 @@ function Shell() {
     ['/', 'Home', 'home'],
     ['/activity', 'Activity', 'activity'],
     ['/stats', 'Stats', 'stats'],
+    ['/goals', 'Goals', 'target'],
     ['/accounts', 'Accounts', 'accounts'],
   ];
 
@@ -71,9 +75,12 @@ function Shell() {
           {links.map(([to, label, icon]) => (
             <NavLink key={to} to={to} end={to === '/'}><Icon name={icon} />{label}</NavLink>
           ))}
-          <div className="nav-group">Tools</div>
+          <div className="nav-group">Plan</div>
+          <NavLink to="/copilot"><Icon name="sparkle" />AI Copilot</NavLink>
+          <NavLink to="/budgets"><Icon name="pie" />Budget Planner</NavLink>
           <NavLink to="/recurring"><Icon name="repeat" />Bills &amp; recurring</NavLink>
           <NavLink to="/insights"><Icon name="spark" />Insights</NavLink>
+          <div className="nav-group">Tools</div>
           <NavLink to="/import"><Icon name="upload" />Import</NavLink>
           <NavLink to="/splitwise"><Icon name="users" />Splitwise</NavLink>
           <NavLink to="/settings"><Icon name="settings" />Settings</NavLink>
@@ -97,17 +104,19 @@ function Shell() {
             <Route path="/insights" element={<Insights />} />
             <Route path="/import" element={<Import />} />
             <Route path="/splitwise" element={<Splitwise />} />
+            <Route path="/goals" element={<Goals />} />
+            <Route path="/copilot" element={<Copilot />} />
+            <Route path="/budgets" element={<Budgets />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
         <nav className="bottom-nav" aria-label="Main">
-          {links.slice(0, 2).map(([to, label, icon]) => (
-            <NavLink key={to} to={to} end={to === '/'}><Icon name={icon} />{label}</NavLink>
-          ))}
-          <button className="fab" aria-label="Add transaction" onClick={() => setAdd({})}><Icon name="plus" /></button>
-          {links.slice(2).map(([to, label, icon]) => (
-            <NavLink key={to} to={to}><Icon name={icon} />{label}</NavLink>
-          ))}
+          <div className="pill">
+            {links.map(([to, label, icon]) => (
+              <NavLink key={to} to={to} end={to === '/'} aria-label={label} title={label}><Icon name={icon} /></NavLink>
+            ))}
+          </div>
+          <button className="fab" aria-label="Add transaction" title="Add transaction" onClick={() => setAdd({})}><Icon name="plus" /></button>
         </nav>
       </div>
       {add && <QuickAdd preset={add} onClose={() => setAdd(null)} />}

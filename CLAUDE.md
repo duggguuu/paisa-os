@@ -21,9 +21,10 @@ This app is **live with real financial data**. Production = Render web service (
 
 ## Layout
 
-- `apps/api/src/`: Fastify API. Core files: `ledger.ts` (posting rules), `stats.ts`, `dashboard.ts` (net worth, safe-to-spend), `kite.ts` (read-only Zerodha), `db.ts` (pool + migrations). Feature modules: `recurring.ts`, `importer.ts` (statements), `cas.ts`, `splitwise.ts` (read-only), `insights.ts`, with routes in `routes-extra.ts`.
+- `apps/api/src/`: Fastify API. Core files: `ledger.ts` (posting rules), `stats.ts`, `dashboard.ts` (net worth, safe-to-spend), `kite.ts` (read-only Zerodha), `db.ts` (pool + migrations). Feature modules: `recurring.ts`, `importer.ts` (statements), `cas.ts`, `splitwise.ts` (read-only), `insights.ts`, `goals.ts`, `planner.ts` (Budget Planner numbers, Financial Health score), `copilot.ts` (local engine; Claude only if `ANTHROPIC_API_KEY` is set), with routes in `routes-extra.ts`.
+- Goal contributions are earmarks, not ledger postings: they never change balances or spending. A boost on an account-linked goal creates a real transfer.
 - Idempotency by `txn.external_ref` (unique per book): `rec:<rule>:<date>` for recurring, `stmt:<ref|hash>` for statements, `sw:<id>` for Splitwise. Keep new integrations on this pattern so re-running never duplicates.
-- `apps/web/src/`: React PWA. Browser-side parsers (no external AI): `voice.ts` (sentences), `statement.ts` (bank CSV/TXT), `receipt.ts` (Tesseract OCR, lazy-loaded), `cas.ts` (pdf.js, lazy-loaded). `styles.css` holds the design tokens ("Emerald & Ivory").
+- `apps/web/src/`: React PWA. Browser-side parsers (no external AI): `voice.ts` (sentences), `statement.ts` (bank CSV/TXT), `receipt.ts` (Tesseract OCR, lazy-loaded), `cas.ts` (pdf.js, lazy-loaded). `styles.css` holds the design tokens ("Sky": blue→cyan gradients, Urbanist font; dark mode uses near-black cards with per-KPI accents). Shared dashboard pieces are in `components/Planner.tsx`.
 - Demo reset (`seed-demo-data.ts`) must delete every table that references accounts before deleting accounts. Update it whenever a new table points at `account`.
 - `db/migrations/`: append-only SQL.
 - `render.yaml`: the Render blueprint.

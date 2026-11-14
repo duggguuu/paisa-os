@@ -30,6 +30,7 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
       await tx`delete from txn where book_id = ${bookId}`;
       // Anything that points at the demo accounts goes before them.
       await tx`delete from recurring_rule where book_id = ${bookId}`;
+      await tx`delete from goal where book_id = ${bookId}`;
       await tx`delete from import_batch where book_id = ${bookId}`;
       await tx`delete from splitwise_link where book_id = ${bookId}`;
       await tx`delete from account where book_id = ${bookId} and kind not in ('category', 'equity')`;
@@ -163,5 +164,25 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
               values (${bookId}, ${name}, ${kind}, ${amount * 100}, ${acc[account]}, ${kind === 'transfer' ? null : C(target)},
                       ${kind === 'transfer' ? acc[target] : null}, ${name}, ${cadence}, ${day}, ${firstOnOrAfter(shape, addDays(today, 1))}, ${auto})`;
   }
+  // Goals: one tracks a real account, the others are earmarks with contributions.
+  const fd = await createAccount(sql, bookId, { name: 'HDFC FD', kind: 'fd', openingBalance: 90_000_00, openingDate: addDays(start, -1), institution: 'HDFC Bank', icon: '🔒' });
+  for (const [name, icon, target, months, account, contribs] of [
+    ['Emergency fund', '🛟', 3_00_000, 18, fd, []],
+    ['MacBook Air', '💻', 1_15_000, 6, null, [[150, 20_000], [120, 15_000], [90, 12_000], [60, 15_000], [30, 12_000], [5, 9_000]]],
+    ['Goa trip', '🏖️', 40_000, 4, null, [[70, 6_000], [40, 5_000], [10, 4_000]]],
+  ] as const) {
+    const [g] = await sql<{ id: string }[]>`
+      insert into goal (book_id, name, icon, target, target_date, account_id, created_at)
+      values (${bookId}, ${name}, ${icon}, ${target * 100}, ${addDays(today, months * 30)}, ${account}, ${addDays(start, 0)})
+      returning id`;
+    for (const [ago, amt] of contribs) {
+      await sql`insert into goal_contribution (goal_id, book_id, occurred_on, amount, note) values (${g.id}, ${bookId}, ${addDays(today, -ago)}, ${amt * 100}, 'Saved')`;
+    }
+  }
+  // The FD grew over the last few months (interest + top-ups), so its goal has a pace.
+  for (const ago of [80, 50, 20]) {
+    await createTxn(sql, bookId, { kind: 'transfer', date: addDays(today, -ago), amount: 15_000 * 100, fromAccountId: acc.axis, toAccountId: fd, merchant: 'FD top-up' });
+  }
+
   return { count: entries.length };
 }

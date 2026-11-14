@@ -1,6 +1,6 @@
 # Paisa OS
 
-A personal finance app built on a double-entry ledger. Built so far: login, accounts, transactions, transfers, splits, refunds, budgets, Stats (with a spending donut), net worth, Zerodha holdings sync, voice entry, receipt scanning, recurring bills, bank-statement import with reconciliation, mutual-fund CAS import, Splitwise sync, insights, an installable iPhone app and a separate demo book.
+A personal finance app built on a double-entry ledger. Built so far: login, accounts, transactions, transfers, splits, refunds, budgets, Stats (with a spending donut), net worth, Zerodha holdings sync, voice entry, receipt scanning, recurring bills, bank-statement import with reconciliation, mutual-fund CAS import, Splitwise sync, insights, savings goals, a Budget Planner, a Financial Health score, an AI Copilot, an installable iPhone app and a separate demo book.
 
 **Changing the app later:** read `CLAUDE.md` first. In short: your data lives in Neon and deploys only replace code, so schema changes go in new migration files.
 
@@ -30,7 +30,7 @@ createdb paisa_test
 npm test
 ```
 
-There are 40 API tests (ledger, API, recurring, imports, CAS, Splitwise, insights), plus 18 parser tests run by `npm run test:web` (voice, bank statements, receipts, CAS, Splitwise exports). They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
+There are 43 API tests (ledger, API, recurring, imports, CAS, Splitwise, insights), plus 18 parser tests run by `npm run test:web` (voice, bank statements, receipts, CAS, Splitwise exports). They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
 
 ## Deploy for free (Render + Neon)
 
@@ -155,6 +155,42 @@ The export only gives each person's net per expense, so Paisa works out the rest
 - Each friend becomes a person in Accounts with the same balance as Splitwise. Older history becomes their opening balance.
 - Settle-ups are transfers.
 - Paisa never writes to Splitwise.
+
+## Goals
+
+**Goals** tracks what you're saving for: a progress bar, a projected finish date ("You will reach your goal on…") and **Boost My Goal**.
+- A goal can follow a real account, such as a dedicated FD or savings account. Its progress is that account's balance, and boosting it records a transfer into that account.
+- Or a goal can be money you set aside in your head. Boosts add to it without touching your balances.
+- The projection uses what you've added over the last 3 months.
+
+## Budget Planner and Financial Health
+
+**Budget Planner** shows:
+- income, planned expenses (budgets plus fixed bills), remaining, and budget used, each with a 6-month mini chart and the change from last month;
+- spent vs budgeted vs remaining;
+- a category table with On track / Behind / Over badges. Type a monthly budget straight into the table.
+
+**Financial Health** is a score from 0 to 100, made of six weighted parts, each explained in the card:
+- savings rate (25);
+- emergency fund in months of spending (25);
+- budgets on track (15);
+- card and loan dues (15);
+- spending trend (10);
+- goals on track (10).
+
+## AI Copilot
+
+Tap ✦ on Home or **AI Copilot** to ask questions in plain words, or by voice:
+- "Can I afford a ₹60,000 laptop?"
+- "Why did my spending increase?"
+- "How can I save more?"
+- "When will I reach my goal?"
+- "How much did I spend on food?"
+- "What bills are due?"
+
+**Private mode (default, free):** answers are worked out on your server from your numbers. Nothing is sent anywhere.
+
+**Claude mode (optional):** add `ANTHROPIC_API_KEY` under Render → Environment to answer any free-form question with Claude (model `claude-opus-5-5`, low effort; override with `COPILOT_MODEL`). Each question sends a summary to Anthropic: totals, categories, goals, bills and net worth by account type. It doesn't include account numbers or individual transactions. It costs roughly ₹2 per question, and if Claude is unavailable the app falls back to private mode.
 
 ## Insights
 
