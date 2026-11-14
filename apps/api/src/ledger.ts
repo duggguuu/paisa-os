@@ -21,7 +21,7 @@ const common = {
   description: z.string().trim().max(200).optional().nullable(),
   note: z.string().trim().max(2000).optional().nullable(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
-  source: z.enum(['manual', 'voice', 'sms', 'import', 'verified']).optional(),
+  source: z.enum(['manual', 'voice', 'sms', 'import', 'verified', 'recurring', 'splitwise', 'receipt']).optional(),
   externalRef: z.string().trim().max(80).optional().nullable(),
   idempotencyKey: id.optional(),
 };
@@ -51,7 +51,7 @@ export const TxnInput = z.discriminatedUnion('kind', [
 export type TxnInput = z.infer<typeof TxnInput>;
 
 interface AccountRow { id: string; class: string; kind: string; name: string; is_archived: boolean }
-interface PostingDraft { accountId: string; amount: number; memo?: string | null }
+export interface PostingDraft { accountId: string; amount: number; memo?: string | null }
 
 async function loadAccounts(tx: Tx, bookId: string, ids: string[]): Promise<Map<string, AccountRow>> {
   const rows = await tx<AccountRow[]>`
@@ -155,7 +155,9 @@ function describe(input: TxnInput): string | null {
 
 export interface TxnResult { id: string; duplicate: boolean }
 
-export async function createTxn(sql: Sql, bookId: string, input: TxnInput, actor = 'user'): Promise<TxnResult> {
+export interface TxnLinks { recurringId?: string | null; importBatchId?: string | null }
+
+export async function createTxn(sql: Sql, bookId: string, input: TxnInput, actor = 'user', links: TxnLinks = {}): Promise<TxnResult> {
   return sql.begin(async (tx) => {
     if (input.idempotencyKey) {
       const [existing] = await tx<{ id: string }[]>`
@@ -166,10 +168,10 @@ export async function createTxn(sql: Sql, bookId: string, input: TxnInput, actor
     let row: { id: string };
     try {
       [row] = await tx<{ id: string }[]>`
-        insert into txn (book_id, kind, occurred_on, description, merchant, note, tags, source, external_ref, idempotency_key, refund_of)
+        insert into txn (book_id, kind, occurred_on, description, merchant, note, tags, source, external_ref, idempotency_key, refund_of, recurring_id, import_batch_id)
         values (${bookId}, ${input.kind}, ${input.date}, ${describe(input)}, ${input.merchant ?? null}, ${input.note ?? null},
                 ${input.tags ?? []}, ${input.source ?? 'manual'}, ${input.externalRef ?? null}, ${input.idempotencyKey ?? null},
-                ${input.kind === 'refund' ? input.refundOf : null})
+                ${input.kind === 'refund' ? input.refundOf : null}, ${links.recurringId ?? null}, ${links.importBatchId ?? null})
         returning id`;
     } catch (e: any) {
       if (e?.code === '23505' && String(e?.constraint_name ?? e?.message).includes('external_ref')) {
@@ -182,6 +184,52 @@ export async function createTxn(sql: Sql, bookId: string, input: TxnInput, actor
     }
     await audit(tx, bookId, 'txn', row.id, 'create', null, { input, postings }, actor);
     return { id: row.id, duplicate: false };
+  });
+}
+
+/**
+ * Write a transaction from explicit postings. Used by integrations (Splitwise) whose entries
+ * don't fit one of the user-level shapes, e.g. "Rohan paid; your share is food, and you owe him".
+ * The same rules still hold: accounts must be in this book and the database trigger rejects
+ * anything that doesn't sum to zero.
+ */
+export async function createRawTxn(tx: Tx, bookId: string, t: {
+  kind: 'expense' | 'income' | 'transfer' | 'split' | 'adjustment';
+  date: string; merchant?: string | null; description?: string | null; note?: string | null;
+  source: 'splitwise' | 'import' | 'recurring' | 'system'; externalRef?: string | null; importBatchId?: string | null;
+  postings: PostingDraft[];
+}, actor: string): Promise<string> {
+  const lines = t.postings.filter((p) => p.amount !== 0);
+  need(lines.length >= 2, 'bad_postings', 'a transaction needs at least two postings');
+  need(lines.reduce((s, p) => s + p.amount, 0) === 0, 'unbalanced', 'postings must sum to zero');
+  await loadAccounts(tx, bookId, [...new Set(lines.map((p) => p.accountId))]);
+  const [row] = await tx<{ id: string }[]>`
+    insert into txn (book_id, kind, occurred_on, description, merchant, note, source, external_ref, import_batch_id)
+    values (${bookId}, ${t.kind}, ${t.date}, ${t.description ?? t.merchant ?? null}, ${t.merchant ?? null}, ${t.note ?? null},
+            ${t.source}, ${t.externalRef ?? null}, ${t.importBatchId ?? null})
+    returning id`;
+  for (const p of lines) await tx`insert into posting (txn_id, account_id, amount, memo) values (${row.id}, ${p.accountId}, ${p.amount}, ${p.memo ?? null})`;
+  await audit(tx, bookId, 'txn', row.id, 'create', null, { ...t, postings: lines }, actor);
+  return row.id;
+}
+
+/**
+ * Reconcile: make an account's balance on `date` equal `target` (natural sign) by posting the
+ * difference against the equity account. Returns the adjustment in paise (0 = already matched).
+ */
+export async function adjustBalance(sql: Sql, bookId: string, accountId: string, date: string, target: number, actor = 'user') {
+  return sql.begin(async (tx) => {
+    const bal = (await accountBalances(tx, bookId, date)).find((a) => a.id === accountId);
+    if (!bal || !['asset', 'liability'].includes(bal.class)) throw new LedgerError('bad_account', 'pick a bank, card, wallet or person account', 422);
+    const diff = target - bal.balance;
+    if (diff === 0) return 0;
+    const [equity] = await tx<{ id: string }[]>`select id from account where book_id = ${bookId} and kind = 'equity' limit 1`;
+    const signed = bal.class === 'asset' ? diff : -diff;
+    await createRawTxn(tx, bookId, {
+      kind: 'adjustment', date, description: 'Balance adjustment (reconciliation)', source: 'system',
+      postings: [{ accountId, amount: signed }, { accountId: equity.id, amount: -signed }],
+    }, actor);
+    return diff;
   });
 }
 

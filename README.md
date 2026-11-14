@@ -1,6 +1,6 @@
 # Paisa OS
 
-A personal finance app built on a double-entry ledger. Built so far: login, accounts, transactions, transfers, splits, refunds, budgets, Stats (with a spending donut), net worth, Zerodha holdings sync, voice entry, an installable iPhone app and a separate demo book.
+A personal finance app built on a double-entry ledger. Built so far: login, accounts, transactions, transfers, splits, refunds, budgets, Stats (with a spending donut), net worth, Zerodha holdings sync, voice entry, receipt scanning, recurring bills, bank-statement import with reconciliation, mutual-fund CAS import, Splitwise sync, insights, an installable iPhone app and a separate demo book.
 
 **Changing the app later:** read `CLAUDE.md` first. In short: your data lives in Neon and deploys only replace code, so schema changes go in new migration files.
 
@@ -30,7 +30,7 @@ createdb paisa_test
 npm test
 ```
 
-There are 32 API tests, plus 12 voice-parser tests run by `npm run test:web`. They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
+There are 39 API tests (ledger, API, recurring, imports, CAS, Splitwise, insights), plus 17 parser tests run by `npm run test:web` (voice, bank statements, receipts, CAS). They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
 
 ## Deploy for free (Render + Neon)
 
@@ -97,12 +97,60 @@ The sentence fills in the form: amount, place, category, account, date and split
 2. Tap **Share**, then **Add to Home Screen**, then **Add**.
 3. Open **Paisa** from the home screen. It runs full-screen like an app. Log in once more inside it, because home-screen apps keep their own login, separate from Safari's.
 
-## Not built yet
+## Bills & recurring
 
-These are still planned:
+Under **Settings → Tools → Bills & recurring** (or the Bills shortcut on Home), add rent, SIPs, EMIs, subscriptions and salary.
+- **Safe-to-spend** subtracts every bill or SIP still due this month, including overdue ones.
+- **Home** shows what's due, with one-tap **Log** or **Skip**.
+- Turn on **Log automatically** for fixed payments, and they post themselves on the due date.
+- Each occurrence can only be logged once, even from two devices.
 
-- Recurring rules (safe-to-spend doesn't subtract upcoming bills until these exist)
-- Axis and HDFC statement import with reconciliation
-- CAS import
-- AI insights
-- Receipt scanning
+## Receipt scanning
+
+In the Add sheet, tap 📷 and photograph a bill. It reads the total, shop and date on your phone; the photo is never uploaded. The reader (about 5 MB) downloads the first time and is cached after that.
+
+## Import a bank statement
+
+**Import → Bank / card statement.**
+1. Pick the account and choose the file:
+   - **Axis:** Download as **CSV**.
+   - **HDFC:** Download → **Delimited** (or TXT).
+   - **Excel files:** open them and use "Save as CSV".
+2. Check the preview. Paisa:
+   - pulls out the merchant and suggests the booking: categories, ATM withdrawal → Cash, card bill → transfer, SIP → investments, salary and interest;
+   - skips rows already imported;
+   - leaves unticked any rows that look like something you entered by hand.
+3. Import. Paisa then compares its balance with the statement's closing balance, and can add one adjustment to match. Each import can be undone from **Recent imports**.
+
+## Mutual funds (CAS)
+
+**Import → Mutual funds (CAS).**
+1. Request a **Detailed** CAS from camsonline.com (CAMS + KFintech) or MF Central.
+2. Choose the PDF and enter its password (usually your PAN in capitals). It's unlocked and read in your browser.
+3. Check the funds, then tap **Add to net worth**.
+
+Funds Zerodha already reports are skipped, so nothing counts twice. Import a newer CAS any time to update values.
+
+## Splitwise
+
+1. Open secure.splitwise.com/apps, click **Register your application** (any name and URL), and under **API keys** create a key.
+2. In Paisa, open **Splitwise**, paste the key and pick the account your Splitwise payments usually go through.
+3. Choose a period, review, then **Import**.
+
+How it's booked:
+- Your share of each bill is spending, in a matching category.
+- Each friend becomes a person in Accounts with the **same balance as Splitwise**. Older history becomes their opening balance.
+- Settle-ups are transfers.
+- Re-running only adds new expenses. Paisa never writes to Splitwise.
+- If you've also been logging splits with the same people by hand, Paisa warns you about possible double counting.
+
+## Insights
+
+**Insights** works out patterns from your own data:
+- spending pace vs your usual month;
+- categories running hot;
+- budgets about to run out;
+- subscriptions you aren't tracking yet (one tap to track them);
+- savings rate, unusually large purchases, people who owe you, idle cash in savings, and weekend spending.
+
+It's rule-based and runs on your server; nothing goes to an AI service. A version written by Claude would need a paid Anthropic API key (usually a few rupees a month at this volume). Add one later if you want it.

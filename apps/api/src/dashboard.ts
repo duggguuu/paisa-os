@@ -2,6 +2,7 @@ import type { Tx } from './db.js';
 import { accountBalances } from './ledger.js';
 import { periodContaining, todayIST } from './money.js';
 import { summary } from './stats.js';
+import { upcoming, dueSoon } from './recurring.js';
 
 export async function netWorth(tx: Tx, bookId: string) {
   const balances = await accountBalances(tx, bookId);
@@ -28,9 +29,9 @@ export async function netWorth(tx: Tx, bookId: string) {
 }
 
 /**
- * Money you can spend this month without touching what's already committed.
- * spendable (bank + cash + wallets) − credit card dues − unspent monthly budgets.
- * Recurring bills will be subtracted once recurring rules exist; `caveats` says so.
+ * Money you can spend this month without touching what's already committed:
+ * spendable (bank + cash + wallets) − credit card dues − bills/SIPs still due this month
+ * − unspent monthly budgets.
  */
 export async function safeToSpend(tx: Tx, bookId: string, monthStartDay: number, today = todayIST()) {
   const { accounts } = await netWorth(tx, bookId);
@@ -45,17 +46,20 @@ export async function safeToSpend(tx: Tx, bookId: string, monthStartDay: number,
     from budget b join account c on c.id = b.category_id
     where b.book_id = ${bookId} and b.period = 'monthly'`;
   const reserved = budgets.reduce((s, b) => s + Math.max(b.amount - b.spent, 0), 0);
+  const bills = await upcoming(tx, bookId, month, today);
   return {
-    amount: spendable - cardDues - reserved,
-    spendable, cardDues, reservedForBudgets: reserved,
+    amount: spendable - cardDues - bills.total - reserved,
+    spendable, cardDues, upcomingBills: bills.total, upcomingItems: bills.items.slice(0, 20), reservedForBudgets: reserved,
     month,
-    caveats: ['Upcoming bills, EMIs and SIPs are not subtracted yet: recurring rules arrive in the next build.'],
+    caveats: bills.items.length
+      ? ['Bills set aside are your recurring rules still due before the month ends (overdue ones included). Card-bill payments are covered by card dues.']
+      : ['Add recurring bills (rent, SIPs, subscriptions) under Settings → Recurring so they are set aside here.'],
   };
 }
 
 export async function home(tx: Tx, bookId: string, monthStartDay: number, today = todayIST()) {
   const month = periodContaining('month', today, monthStartDay);
-  const [nw, sts, monthSummary, recent, top] = await Promise.all([
+  const [nw, sts, monthSummary, recent, top, due] = await Promise.all([
     netWorth(tx, bookId),
     safeToSpend(tx, bookId, monthStartDay, today),
     summary(tx, bookId, month),
@@ -72,6 +76,7 @@ export async function home(tx: Tx, bookId: string, monthStartDay: number, today 
       from txn t join posting p on p.txn_id = t.id join account c on c.id = p.account_id left join account pc on pc.id = c.parent_id
       where t.book_id = ${bookId} and t.status = 'posted' and c.class = 'expense' and t.occurred_on >= ${month.from} and t.occurred_on < ${month.to}
       group by 1 order by amount desc limit 3`,
+    dueSoon(tx, bookId, today),
   ]);
-  return { month, netWorth: nw, safeToSpend: sts, monthSummary, recent, topCategories: top };
+  return { month, netWorth: nw, safeToSpend: sts, monthSummary, recent, topCategories: top, dueSoon: due };
 }

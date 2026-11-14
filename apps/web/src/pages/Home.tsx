@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { api, money, compact, pct, periodLabel, todayIST } from '../lib';
 import { Icon, tint } from '../components/Icons';
+import { useQueryClient } from '@tanstack/react-query';
+import { InsightCard, type Insight } from './Insights';
+import { RuleSheet } from './Recurring';
+import { dayLabel, shortDate } from '../lib';
 import { useUi } from '../App';
 import { TxnRow } from '../components/TxnRow';
 
@@ -12,6 +16,17 @@ export function Home() {
   const recent = useQuery({ queryKey: ['txns', 'recent'], queryFn: () => api<any[]>('/api/txns?limit=6') });
   const stats = useQuery({ queryKey: ['stats', 'month', 'now'], queryFn: () => api<any>('/api/stats?period=month') });
   const [showWhy, setShowWhy] = useState(false);
+  const qc = useQueryClient();
+  const { toast } = useUi();
+  const ins = useQuery({ queryKey: ['insights'], queryFn: () => api<Insight[]>('/api/insights'), staleTime: 5 * 60_000 });
+  const [rule, setRule] = useState<Record<string, unknown> | null>(null);
+  async function act(r: any, what: 'log' | 'skip') {
+    try {
+      await api(`/api/recurring/${r.id}/${what}`, { method: 'POST', body: {} });
+      await qc.invalidateQueries();
+      toast(what === 'log' ? `Logged ${r.name} · ${money(Number(r.amount))}` : `Skipped ${r.name}`);
+    } catch (e: any) { toast(e.message); }
+  }
   const h = home.data;
 
   if (home.isError) return <p className="error">Couldn't load your dashboard: {(home.error as any).message}</p>;
@@ -63,6 +78,7 @@ export function Home() {
           <div className="why">
             <div className="spread"><span className="muted">In bank, cash and wallets</span><span className="num">{money(sts.spendable, { whole: true })}</span></div>
             <div className="spread"><span className="muted">− Credit card dues</span><span className="num">{money(sts.cardDues, { whole: true })}</span></div>
+            <div className="spread"><span className="muted">− Bills &amp; SIPs still due</span><span className="num">{money(sts.upcomingBills ?? 0, { whole: true })}</span></div>
             <div className="spread"><span className="muted">− Unspent budgets this month</span><span className="num">{money(sts.reservedForBudgets, { whole: true })}</span></div>
             <p className="tiny faint" style={{ margin: '8px 0 0' }}>{sts.caveats.join(' ')}</p>
           </div>
@@ -81,6 +97,49 @@ export function Home() {
           <div className="tiny faint">{h.monthSummary.noIncomeLogged ? 'No income logged yet' : `Saving ${pct(h.monthSummary.savingsRate)}`}</div>
         </Link>
       </div>
+
+      <nav className="quick-tools" aria-label="Tools">
+        <Link to="/recurring"><Icon name="repeat" />Bills</Link>
+        <Link to="/insights"><Icon name="spark" />Insights</Link>
+        <Link to="/import"><Icon name="upload" />Import</Link>
+        <Link to="/splitwise"><Icon name="users" />Splitwise</Link>
+      </nav>
+
+      {(h.dueSoon?.length ?? 0) > 0 && (
+        <div className="section">
+          <div className="section-title">Bills due <Link to="/recurring">All bills</Link></div>
+          <div className="list">
+            {h.dueSoon.slice(0, 4).map((r: any) => (
+              <div key={r.id} className="item" style={{ cursor: 'default' }}>
+                <div className="avatar" style={tint(r.category_icon ?? r.name)} aria-hidden>{r.category_icon ?? (r.kind === 'transfer' ? '⇄' : '•')}</div>
+                <div className="grow">
+                  <div className="title">{r.name}</div>
+                  <div className="sub" style={{ color: r.overdue ? 'var(--up)' : r.today ? 'var(--warn)' : undefined }}>
+                    {r.overdue ? `Overdue · ${shortDate(r.next_due)}` : r.today ? 'Due today' : dayLabel(r.next_due)}{r.auto_post ? ' · logs automatically' : ''}
+                  </div>
+                </div>
+                <div className="amt">
+                  <div className="num">{money(r.amount, { whole: true })}</div>
+                  {(r.overdue || r.today) && !r.auto_post && (
+                    <div className="row" style={{ gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+                      <button className="btn small" onClick={() => act(r, 'skip')}>Skip</button>
+                      <button className="btn small accent" onClick={() => act(r, 'log')}>Log</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(ins.data?.length ?? 0) > 0 && (
+        <div className="section">
+          <div className="section-title">For you <Link to="/insights">See all {ins.data!.length}</Link></div>
+          <div className="insights">{ins.data!.slice(0, 2).map((i) => <InsightCard key={i.id} i={i} onRecurring={setRule} />)}</div>
+        </div>
+      )}
+      {rule && <RuleSheet initial={rule} onClose={() => setRule(null)} />}
 
       <button className="card voice-cta" onClick={() => openAdd({ voice: true })}>
         <span className="mic-dot"><Icon name="mic" /></span>

@@ -251,3 +251,8 @@ export function listen(onText: (t: string) => void): { done: Promise<string>; st
   rec.start();
   return { done, stop: () => { try { rec.stop(); } catch { /* already stopped */ } } };
 }
+
+/** Best-guess category for free text (a bank narration, a receipt), or undefined. */
+export function guessCategory(text: string, categories: Cat[], kind: 'expense' | 'income'): string | undefined {
+  return findCategory(' ' + norm(text) + ' ', categories, kind);
+}

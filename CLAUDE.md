@@ -21,7 +21,9 @@ This app is **live with real financial data**. Production = Render web service (
 
 ## Layout
 
-- `apps/api/src/`: Fastify API. Core files: `ledger.ts` (posting rules), `stats.ts`, `dashboard.ts`, `kite.ts` (read-only Zerodha), `db.ts` (pool + migrations).
-- `apps/web/src/`: React PWA. `voice.ts` is the local sentence parser for voice entry (no external AI). `styles.css` holds the design tokens ("Emerald & Ivory").
+- `apps/api/src/`: Fastify API. Core files: `ledger.ts` (posting rules), `stats.ts`, `dashboard.ts` (net worth, safe-to-spend), `kite.ts` (read-only Zerodha), `db.ts` (pool + migrations). Feature modules: `recurring.ts`, `importer.ts` (statements), `cas.ts`, `splitwise.ts` (read-only), `insights.ts`, with routes in `routes-extra.ts`.
+- Idempotency by `txn.external_ref` (unique per book): `rec:<rule>:<date>` for recurring, `stmt:<ref|hash>` for statements, `sw:<id>` for Splitwise. Keep new integrations on this pattern so re-running never duplicates.
+- `apps/web/src/`: React PWA. Browser-side parsers (no external AI): `voice.ts` (sentences), `statement.ts` (bank CSV/TXT), `receipt.ts` (Tesseract OCR, lazy-loaded), `cas.ts` (pdf.js, lazy-loaded). `styles.css` holds the design tokens ("Emerald & Ivory").
+- Demo reset (`seed-demo-data.ts`) must delete every table that references accounts before deleting accounts. Update it whenever a new table points at `account`.
 - `db/migrations/`: append-only SQL.
 - `render.yaml`: the Render blueprint.

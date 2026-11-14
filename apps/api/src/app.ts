@@ -12,6 +12,8 @@ import { home, netWorth, safeToSpend } from './dashboard.js';
 import * as kite from './kite.js';
 import { seedDemo } from './seed-demo-data.js';
 import { todayIST, periodContaining } from './money.js';
+import { registerExtras } from './routes-extra.js';
+import { postAutoDue } from './recurring.js';
 
 export interface AppConfig {
   sql: Sql;
@@ -239,7 +241,10 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     });
 
     // Home and statistics
-    api.get('/api/home', async (req) => home(sql, B(req), req.book!.month_start_day));
+    api.get('/api/home', async (req) => {
+      await postAutoDue(sql, B(req)); // auto-post rules that came due (idempotent)
+      return home(sql, B(req), req.book!.month_start_day);
+    });
     api.get('/api/networth', async (req) => netWorth(sql, B(req)));
     api.get('/api/safe-to-spend', async (req) => safeToSpend(sql, B(req), req.book!.month_start_day));
 
@@ -275,15 +280,18 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     // Export: everything in the book as JSON (CSV export is built from this in the web app)
     api.get('/api/export', async (req, reply) => {
       const b = B(req);
-      const [accounts, txns, postings, budgets, holdings] = await Promise.all([
+      const [accounts, txns, postings, budgets, holdings, recurring, imports] = await Promise.all([
         sql`select * from account where book_id = ${b}`,
         sql`select * from txn where book_id = ${b}`,
         sql`select p.* from posting p join txn t on t.id = p.txn_id where t.book_id = ${b}`,
         sql`select * from budget where book_id = ${b}`,
         sql`select * from holding_snapshot where book_id = ${b}`,
+        sql`select * from recurring_rule where book_id = ${b}`,
+        sql`select * from import_batch where book_id = ${b}`,
       ]);
       reply.header('Content-Disposition', `attachment; filename="paisa-export-${todayIST()}.json"`);
-      return { exportedAt: new Date().toISOString(), accounts, txns, postings, budgets, holdings };
+      // Secrets (Kite, Splitwise keys) are deliberately left out.
+      return { exportedAt: new Date().toISOString(), accounts, txns, postings, budgets, holdings, recurring, imports };
     });
 
     // Demo book: reset to fresh sample data
@@ -326,6 +334,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
       }
     });
     api.post('/api/kite/sync', async (req) => kite.syncHoldings(sql, cipher, B(req), cfg.fetch));
+    await registerExtras(api, { sql, cipher, fetch: cfg.fetch });
   });
 
   app.get('/api/health', async () => {

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib';
 import { useUi } from '../App';
 
@@ -76,8 +77,18 @@ export function Settings() {
       </div>
 
       <div className="section">
-        <div className="section-title">Voice</div>
-        <div className="card small muted">Voice entry arrives in the next build. It'll use your browser's speech recognition by default, with Sarvam as a switch here for better Hinglish.</div>
+        <div className="section-title">Tools</div>
+        <div className="list">
+          {([
+            ['/recurring', '🔁', 'Bills & recurring', 'Rent, SIPs, subscriptions, salary: reminders and auto-logging'],
+            ['/import', '📄', 'Import bank statement', 'Axis / HDFC CSV, with duplicate checks and reconciliation'],
+            ['/import?tab=cas', '🧺', 'Import mutual funds (CAS)', 'Every fund under your PAN, from a CAMS / KFintech PDF'],
+            ['/splitwise', '👥', 'Splitwise', 'Shared expenses and who owes whom'],
+            ['/insights', '✨', 'Insights', 'Spending pace, budgets, subscriptions, reminders'],
+          ] as const).map(([to, icon, title, sub]) => (
+            <Link key={to} to={to} className="item"><div className="avatar" aria-hidden>{icon}</div><div className="grow"><div className="title">{title}</div><div className="sub">{sub}</div></div><span className="faint">›</span></Link>
+          ))}
+        </div>
       </div>
 
       <div className="section">

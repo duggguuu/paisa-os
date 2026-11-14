@@ -59,6 +59,32 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const [voiceErr, setVoiceErr] = useState<string | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const canSpeak = useMemo(() => speechSupported(), []);
+  const [source, setSource] = useState<'manual' | 'voice' | 'receipt'>('manual');
+  const [scan, setScan] = useState<{ p: number; label: string } | null>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
+
+  async function onPhoto(file: File) {
+    setVoiceErr(null); setHeard(null);
+    setScan({ p: 0, label: 'Starting…' });
+    try {
+      const { scanReceipt } = await import('../receipt');
+      const g = await scanReceipt(file, (p, label) => setScan({ p, label }));
+      if (!g.amount && !g.merchant) { setVoiceErr("Couldn't read that receipt. Try a flatter, well-lit photo, or type it."); return; }
+      setKind('expense');
+      if (g.amount) setAmount(g.amount);
+      if (g.merchant) { setMerchant(g.merchant); setTouched((t) => ({ ...t, category: false })); }
+      if (g.date) setDate(g.date);
+      if (g.merchant && categories.data) {
+        const { guessCategory } = await import('../voice');
+        const c = guessCategory(`${g.merchant} ${g.text.slice(0, 400)}`, categories.data, 'expense');
+        if (c) { setCategoryId(c); }
+      }
+      setSource('receipt');
+      setHeard(`receipt: ${[g.merchant, g.amount && `₹${g.amount}`, g.date].filter(Boolean).join(' · ')}`);
+    } catch (e: any) {
+      setVoiceErr(`Couldn't scan: ${e.message}`);
+    } finally { setScan(null); }
+  }
 
   useEffect(() => { if (!preset.voice) amountRef.current?.focus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => stopRef.current?.(), []);
@@ -77,6 +103,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
     setSplitWith(d.splitWith ?? []);
     setTouched({ category: !!d.categoryId, account: !!d.accountId });
     setHeard(text.trim());
+    setSource('voice');
     setError(null);
   }
 
@@ -148,7 +175,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
     if (!accountId) return setError('Pick an account');
     if (kind === 'transfer' && (!toAccountId || toAccountId === accountId)) return setError('Pick a different account to move money into');
     let body: any;
-    const common = { date, merchant: merchant.trim() || null, note: note.trim() || null, idempotencyKey: edit ? undefined : idemKey, source: 'manual' };
+    const common = { date, merchant: merchant.trim() || null, note: note.trim() || null, idempotencyKey: edit ? undefined : idemKey, source: edit ? undefined : source };
     if (kind === 'transfer') body = { kind, amount: paise, fromAccountId: accountId, toAccountId, ...common };
     else if (splitWith.length) {
       const n = splitWith.length + 1;
@@ -189,15 +216,25 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
                 onChange={(e) => setPhrase(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyPhrase(phrase); (e.target as HTMLInputElement).blur(); } }}
                 onBlur={() => { if (phrase.trim() && phrase.trim() !== heard) applyPhrase(phrase); }} />
-              {canSpeak && (
-                <button type="button" className={`mic ${listening ? 'on' : ''}`} onClick={toggleMic} aria-label={listening ? 'Stop listening' : 'Speak'}>
-                  <Icon name={listening ? 'stop' : 'mic'} />
+              <div className="voice-btns">
+                <button type="button" className="cam" onClick={() => photoRef.current?.click()} aria-label="Scan a receipt" disabled={!!scan}>
+                  <Icon name="camera" />
                 </button>
-              )}
+                {canSpeak && (
+                  <button type="button" className={`mic ${listening ? 'on' : ''}`} onClick={toggleMic} aria-label={listening ? 'Stop listening' : 'Speak'}>
+                    <Icon name={listening ? 'stop' : 'mic'} />
+                  </button>
+                )}
+              </div>
+              <input ref={photoRef} type="file" accept="image/*" capture="environment" hidden
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onPhoto(f); e.target.value = ''; }} />
             </div>
+            {scan && (
+              <div className="scan-progress"><span style={{ width: `${Math.round(scan.p * 100)}%` }} /><em>{scan.label}</em></div>
+            )}
             {voiceErr ? <div className="tiny error" style={{ margin: '6px 2px 0' }}>{voiceErr}</div>
-              : heard ? <div className="tiny muted" style={{ margin: '6px 2px 0' }}>Filled from "{heard}". Check it, then Save.</div>
-              : <div className="tiny faint" style={{ margin: '6px 2px 0' }}>Amount, place, account and day: "spent 1,200 at DMart from Axis yesterday".</div>}
+              : heard ? <div className="tiny muted" style={{ margin: '6px 2px 0' }}>Filled from {heard.startsWith('receipt:') ? heard : `"${heard}"`}. Check it, then Save.</div>
+              : <div className="tiny faint" style={{ margin: '6px 2px 0' }}>Say it ("1,200 at DMart from Axis yesterday") or 📷 scan a receipt.</div>}
           </div>
         )}
         {!edit || edit.kind !== 'split' ? (

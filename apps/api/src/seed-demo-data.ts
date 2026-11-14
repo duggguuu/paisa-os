@@ -2,6 +2,7 @@
  * Sample data for the DEMO book only. It goes through the same ledger functions as real
  * entries, so it also exercises the rules. The real book is never touched.
  */
+import { firstOnOrAfter } from './recurring.js';
 import crypto from 'node:crypto';
 import type { Sql } from './db.js';
 import { createTxn, type TxnInput } from './ledger.js';
@@ -27,6 +28,10 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
       await tx`delete from holding_snapshot where book_id = ${bookId}`;
       await tx`delete from budget where book_id = ${bookId}`;
       await tx`delete from txn where book_id = ${bookId}`;
+      // Anything that points at the demo accounts goes before them.
+      await tx`delete from recurring_rule where book_id = ${bookId}`;
+      await tx`delete from import_batch where book_id = ${bookId}`;
+      await tx`delete from splitwise_link where book_id = ${bookId}`;
       await tx`delete from account where book_id = ${bookId} and kind not in ('category', 'equity')`;
     });
   }
@@ -144,6 +149,19 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
   for (const [cat, amt] of [['Food', 14_000], ['Entertainment', 3_000], ['Shopping', 8_000], ['Transport', 6_000]] as const) {
     await sql`insert into budget (book_id, category_id, period, amount) values (${bookId}, ${C(cat)}, 'monthly', ${amt * 100})
               on conflict do nothing`;
+  }
+  // A few recurring rules so Bills, safe-to-spend and Insights have something to show.
+  for (const [name, kind, amount, account, target, cadence, day, auto] of [
+    ['Rent', 'expense', 22_000, 'axis', 'Housing/Rent', 'monthly', 3, false],
+    ['Netflix', 'expense', 649, 'card', 'Bills & subscriptions/Subscriptions', 'monthly', 7, true],
+    ['Nifty 50 SIP', 'transfer', 10_000, 'axis', 'zerodha', 'monthly', 10, true],
+    ['Salary', 'income', 1_20_000, 'axis', 'Salary', 'monthly', 1, false],
+    ['Phone recharge', 'expense', 299, 'paytm', 'Bills & subscriptions/Mobile', 'monthly', 22, false],
+  ] as const) {
+    const shape = { cadence: cadence as 'monthly', day, month: null };
+    await sql`insert into recurring_rule (book_id, name, kind, amount, account_id, category_id, to_account_id, merchant, cadence, day, next_due, auto_post)
+              values (${bookId}, ${name}, ${kind}, ${amount * 100}, ${acc[account]}, ${kind === 'transfer' ? null : C(target)},
+                      ${kind === 'transfer' ? acc[target] : null}, ${name}, ${cadence}, ${day}, ${firstOnOrAfter(shape, addDays(today, 1))}, ${auto})`;
   }
   return { count: entries.length };
 }

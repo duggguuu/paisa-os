@@ -428,3 +428,62 @@ a.card:active, button.card:active { transform: scale(0.985); }
 @media (display-mode: standalone) {
   body { overscroll-behavior-y: none; }
 }
+
+/* ---------- receipt scan ---------- */
+.voice-bar .input { padding-right: 98px; }
+.voice-btns { position: absolute; right: 5px; display: flex; gap: 5px; }
+.voice-btns .mic { position: static; }
+.voice-btns .cam {
+  width: 38px; height: 38px; border-radius: 11px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2);
+  display: grid; place-items: center; cursor: pointer;
+}
+.voice-btns .cam svg { width: 20px; height: 20px; }
+.scan-progress { position: relative; height: 22px; margin-top: 8px; border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+.scan-progress span { position: absolute; inset: 0 auto 0 0; background: var(--accent-soft); transition: width 300ms; }
+.scan-progress em { position: relative; font-style: normal; font-size: 12px; color: var(--ink-2); padding: 0 10px; line-height: 22px; }
+
+/* ---------- tools, insights, imports ---------- */
+.nav-group { font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding: 18px 12px 6px; }
+.quick-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.quick-tools a { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.quick-tools a svg { width: 22px; height: 22px; color: var(--accent); }
+.quick-tools a:active { transform: scale(0.97); }
+
+.insights { display: flex; flex-direction: column; gap: 10px; }
+.insight { display: flex; gap: 12px; padding: 14px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); position: relative; overflow: hidden; }
+.insight::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--accent); }
+.insight.warn::before { background: var(--warn); }
+.insight.good::before { background: var(--down); }
+.insight .ins-icon { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; background: var(--surface-2); flex: none; }
+.insight .grow { flex: 1; min-width: 0; }
+.insight .ins-title { font-weight: 640; letter-spacing: -0.01em; margin-bottom: 2px; }
+.insight .ins-action { margin-top: 8px; background: none; border: 0; padding: 0; color: var(--accent); font-weight: 650; font-size: 13.5px; cursor: pointer; }
+
+.empty-state { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 20px; margin-top: 14px; }
+.empty-state p { margin: 4px 0 10px; max-width: 420px; }
+
+.toggle { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; cursor: pointer; border-top: 1px solid var(--border); }
+.toggle input { width: 20px; height: 20px; accent-color: var(--accent); margin-top: 2px; flex: none; }
+.toggle span { display: flex; flex-direction: column; gap: 2px; }
+.toggle + .error, .toggle + .btn { margin-top: 10px; }
+
+.dropzone { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 22px 16px; border: 2px dashed var(--border-strong); border-radius: 16px; cursor: pointer; text-align: center; background: var(--surface-2); transition: border-color 150ms; }
+.dropzone:hover { border-color: var(--accent); }
+.dropzone.disabled { opacity: 0.55; cursor: not-allowed; }
+.dropzone input { display: none; }
+
+.imp-row { display: flex; gap: 10px; padding: 12px 14px; align-items: flex-start; }
+.imp-row + .imp-row { border-top: 1px solid var(--border); }
+.imp-row.off { opacity: 0.55; }
+.imp-row .grow { flex: 1; min-width: 0; }
+.imp-row .title { font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.imp-row .sub { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.imp-row .amt { font-weight: 620; white-space: nowrap; }
+.imp-check input { width: 20px; height: 20px; accent-color: var(--accent); margin-top: 2px; }
+.imp-controls { display: grid; grid-template-columns: 1fr 1.6fr; gap: 6px; margin-top: 8px; }
+.imp-controls .input { min-height: 38px; padding: 6px 10px; font-size: 13.5px; border-radius: 10px; }
+.pill-s { display: inline-block; margin-top: 6px; font-size: 11.5px; padding: 3px 8px; border-radius: 8px; background: var(--surface-2); color: var(--ink-2); white-space: normal; }
+.pill-s.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--ink); }
+.import-list { max-height: none; }
+.rule { cursor: pointer; }
+details summary { cursor: pointer; font-weight: 600; color: var(--ink-2); }

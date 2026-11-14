@@ -1,0 +1,105 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { parseStatement, guessBooking, extractMerchant } from '../src/statement.ts';
+import { parseReceipt } from '../src/receipt.ts';
+import { parseCasText } from '../src/cas.ts';
+
+const fx = JSON.parse(fs.readFileSync(new URL('./fixtures.json', import.meta.url), 'utf8'));
+
+// Axis-style CSV: preamble lines, then Tran Date / CHQNO / PARTICULARS / DR / CR / BAL / SOL.
+const AXIS = `Name :- YASH GOHEL
+Account No :- 9180XXXXXXXX1234
+Statement of Account No - 9180XXXXXXXX1234 for the period (From : 01-10-2026 To : 31-10-2026)
+
+Tran Date,CHQNO,PARTICULARS,DR,CR,BAL,SOL
+01-10-2026,,OPENING BALANCE,,,"1,00,000.00",
+02-10-2026,,UPI/P2M/427512345678/SWIGGY LIMITED/Payment/AXIS BANK,450.00,,"99,550.00",4567
+03-10-2026,,NEFT/AXISN12345678901/ACME TECHNOLOGIES PVT LTD/SALARY OCT,,"1,20,000.00","2,19,550.00",4567
+05-10-2026,,ATM-WDL/MUMBAI ANDHERI/1234,"5,000.00",,"2,14,550.00",4567
+07-10-2026,,BILLDESK/HDFC CREDIT CARD PAYMENT/AB12,"26,257.00",,"1,88,293.00",4567
+10-10-2026,,ACH-DR/ICCL ZERODHA/SIP,"10,000.00",,"1,78,293.00",4567
+31-10-2026,,Int.Pd:9180XXXXXXXX1234:01-07-2026 to 30-09-2026,,812.00,"1,79,105.00",4567
+`;
+
+// HDFC "delimited" export: Date / Narration / Chq./Ref.No. / Value Dt / Withdrawal Amt. / Deposit Amt. / Closing Balance
+const HDFC = `  Date     ,Narration                                         ,Chq./Ref.No.    ,Value Dt ,Withdrawal Amt.  ,Deposit Amt.     ,Closing Balance
+ ********,********,********,********,********,********,********
+ 01/11/26 ,UPI-ZOMATO LTD-ZOMATO.PAYU@AXISBANK-UTIB0000100-431212345678-ZOMATO ORDER ,0000431212345678,01/11/26 ,          620.00 ,             0.00 ,        48140.00
+ 02/11/26 ,UPI-RAHUL SHARMA-RAHUL@OKICICI-ICIC0001234-431298765432-DINNER SPLIT ,0000431298765432,02/11/26 ,            0.00 ,           800.00 ,        48940.00
+ 03/11/26 ,POS 416021XXXXXX1234 DMART AVENUE SUPERM ,000000000000000,03/11/26 ,        2345.50 ,             0.00 ,        46594.50
+`;
+
+test('statement: Axis CSV with a preamble', () => {
+  const s = parseStatement(AXIS);
+  assert.equal(s.rows.length, 6, 'opening balance line has no amount');
+  assert.deepEqual(s.rows[0], { date: '2026-10-02', description: 'UPI/P2M/427512345678/SWIGGY LIMITED/Payment/AXIS BANK', amount: -450_00, balance: 99_550_00, ref: '427512345678', merchant: 'Swiggy' });
+  assert.equal(s.rows[1].amount, 1_20_000_00);
+  assert.equal(s.rows[1].merchant, 'Acme');
+  assert.deepEqual(s.closing, { balance: 1_79_105_00, date: '2026-10-31' });
+});
+
+test('statement: HDFC delimited export', () => {
+  const s = parseStatement(HDFC);
+  assert.equal(s.rows.length, 3);
+  assert.equal(s.rows[0].date, '2026-11-01');
+  assert.equal(s.rows[0].amount, -620_00);
+  assert.equal(s.rows[0].merchant, 'Zomato');
+  assert.equal(s.rows[0].ref, '431212345678');
+  assert.equal(s.rows[1].amount, 800_00);
+  assert.equal(s.rows[2].merchant, 'Dmart Avenue Superm');
+  assert.deepEqual(s.closing, { balance: 46_594_50, date: '2026-11-03' });
+});
+
+test('statement: booking guesses (ATM → cash, card bill, SIP, salary, interest, food)', () => {
+  const accounts = [
+    { id: 'axis', name: 'Axis Bank', kind: 'bank' }, { id: 'cash', name: 'Cash', kind: 'cash' },
+    { id: 'card', name: 'HDFC Millennia Card', kind: 'credit_card' }, { id: 'inv', name: 'Zerodha', kind: 'investment' },
+  ];
+  const ctx = { accounts, categories: fx.categories, accountId: 'axis' };
+  const rows = parseStatement(AXIS).rows;
+  const g = rows.map((r) => guessBooking(r, ctx));
+  assert.deepEqual(g[0], { kind: 'expense', categoryId: 'Delivery', otherAccountId: null });
+  assert.deepEqual(g[1], { kind: 'income', categoryId: 'Salary', otherAccountId: null });
+  assert.deepEqual(g[2], { kind: 'transfer', categoryId: null, otherAccountId: 'cash' });
+  assert.deepEqual(g[3], { kind: 'transfer', categoryId: null, otherAccountId: 'card' });
+  assert.deepEqual(g[4], { kind: 'transfer', categoryId: null, otherAccountId: 'inv' });
+  assert.deepEqual(g[5], { kind: 'income', categoryId: 'Interest', otherAccountId: null });
+  assert.equal(extractMerchant('NEFT CR-HDFC0000001-ACME CORP-YASH-HDFCN52026'), 'Acme Corp');
+});
+
+test('receipt: total, date and shop from OCR text', () => {
+  const ocr = `THIRD WAVE COFFEE ROASTERS
+Indiranagar, Bengaluru
+GSTIN: 29ABCDE1234F1Z5
+Tax Invoice
+Date: 12/11/2026 Time: 18:42
+Cappuccino 1 x 280.00 280.00
+Croissant 1 x 220.00 220.00
+Sub Total 500.00
+CGST 2.5% 12.50
+SGST 2.5% 12.50
+Grand Total ₹ 525.00
+Cash 600.00 Change 75.00`;
+  assert.deepEqual(parseReceipt(ocr, '2026-11-14'), { amount: '525', date: '2026-11-12', merchant: 'Third Wave Coffee Roasters' });
+});
+
+test('CAS: detailed CAMS/KFintech statement', () => {
+  const text = `Consolidated Account Statement
+01-Apr-2026 To 31-Oct-2026
+Folio No: 12345678 / 90 PAN: ABCDE1234F KYC: OK
+B205RG-Axis Bluechip Fund - Direct Growth - ISIN: INF846K01DP8(Advisor: DIRECT) Registrar : KFINTECH
+Opening Unit Balance: 1,000.000
+10-Apr-2026 Purchase - SIP 5,000.00 95.238 52.50 1,095.238
+Closing Unit Balance: 1,095.238 NAV on 31-Oct-2026: INR 58.40 Total Cost Value: 57,500.00 Market Value on 31-Oct-2026: INR 63,961.90
+Folio No: 9988776 PAN: ABCDE1234F
+P8R2-Parag Parikh Flexi Cap Fund - Direct Plan Growth - ISIN: INF879O01027(Advisor: DIRECT) Registrar : CAMS
+Closing Unit Balance: 512.345 NAV on 31-Oct-2026: INR 89.2332 Total Cost Value: 40,000.00 Market Value on 31-Oct-2026: INR 45,718.39
+`;
+  const r = parseCasText(text);
+  assert.equal(r.statementDate, '2026-10-31');
+  assert.equal(r.holdings.length, 2);
+  assert.deepEqual(r.holdings[0], { isin: 'INF846K01DP8', name: 'Axis Bluechip Fund - Direct Growth', folio: '12345678 / 90', units: 1095.238, nav: 58.4, value: 63961.9, cost: 57500 });
+  assert.equal(r.holdings[1].name, 'Parag Parikh Flexi Cap Fund - Direct Plan Growth');
+  assert.equal(r.holdings[1].value, 45718.39);
+});

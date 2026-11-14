@@ -8,6 +8,10 @@ import { Activity } from './pages/Activity';
 import { Accounts } from './pages/Accounts';
 import { Stats } from './pages/Stats';
 import { Settings } from './pages/Settings';
+import { Recurring } from './pages/Recurring';
+import { Insights } from './pages/Insights';
+import { Import } from './pages/Import';
+import { Splitwise } from './pages/Splitwise';
 import { QuickAdd, type QuickAddPreset } from './components/QuickAdd';
 import { TxnDetail } from './components/TxnDetail';
 import { Icon } from './components/Icons';
@@ -67,6 +71,11 @@ function Shell() {
           {links.map(([to, label, icon]) => (
             <NavLink key={to} to={to} end={to === '/'}><Icon name={icon} />{label}</NavLink>
           ))}
+          <div className="nav-group">Tools</div>
+          <NavLink to="/recurring"><Icon name="repeat" />Bills &amp; recurring</NavLink>
+          <NavLink to="/insights"><Icon name="spark" />Insights</NavLink>
+          <NavLink to="/import"><Icon name="upload" />Import</NavLink>
+          <NavLink to="/splitwise"><Icon name="users" />Splitwise</NavLink>
           <NavLink to="/settings"><Icon name="settings" />Settings</NavLink>
           <button className="btn accent add" onClick={() => setAdd({})}><Icon name="plus" />Add transaction</button>
           <div className="foot">{book === 'demo' ? 'Viewing sample data' : 'Your private ledger'}</div>
@@ -84,6 +93,10 @@ function Shell() {
             <Route path="/stats" element={<Stats />} />
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/recurring" element={<Recurring />} />
+            <Route path="/insights" element={<Insights />} />
+            <Route path="/import" element={<Import />} />
+            <Route path="/splitwise" element={<Splitwise />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
