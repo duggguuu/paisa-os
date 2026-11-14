@@ -560,3 +560,41 @@ test('interest-only loan: payment is all interest, principal stays; a loan can b
   assert.equal(rule.day, 7);
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
+
+test('unlock PIN for laptops: set with password, unlock a new tab, 5 wrong tries fall back to password', async () => {
+  await req('PUT', '/api/security', { lockEnabled: true, lockOnOpen: true, lockMinutes: 5 });
+  let r = await req('PUT', '/api/security/pin', { pin: '1234', password: 'correct horse battery' });
+  assert.equal(r.status, 400, 'straight runs are refused');
+  r = await req('PUT', '/api/security/pin', { pin: '4071', password: 'wrong' });
+  assert.equal(r.status, 401, 'setting a PIN needs the password');
+  r = await req('PUT', '/api/security/pin', { pin: '4071', password: 'correct horse battery' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  // A new tab (no key) is locked; the PIN unlocks it.
+  unlockKey = '';
+  assert.equal((await req('GET', '/api/accounts')).status, 423);
+  const st = (await req('GET', '/api/auth/status')).body;
+  assert.deepEqual(st.user.pin, { length: 4, blocked: false });
+  r = await req('POST', '/api/auth/unlock/pin', { pin: '9999' });
+  assert.equal(r.status, 401);
+  assert.match(r.body.message, /4 tries left/);
+  r = await req('POST', '/api/auth/unlock/pin', { pin: '4071' });
+  assert.equal(r.status, 200);
+  assert.equal((await req('GET', '/api/accounts')).status, 200, 'unlocked with the PIN');
+  // Five wrong in a row: PIN blocked, even the right one, until the password unlocks.
+  unlockKey = '';
+  for (let i = 0; i < 5; i++) await req('POST', '/api/auth/unlock/pin', { pin: '0000' });
+  r = await req('POST', '/api/auth/unlock/pin', { pin: '4071' });
+  assert.equal(r.status, 429);
+  assert.equal((await req('GET', '/api/auth/status')).body.user.pin.blocked, true);
+  r = await req('POST', '/api/auth/unlock/password', { password: 'correct horse battery' });
+  assert.equal(r.status, 200);
+  unlockKey = '';
+  assert.equal((await req('POST', '/api/auth/unlock/pin', { pin: '4071' })).status, 200, 'password unlock resets the PIN counter');
+  // A PIN never logs in by itself.
+  const saved = cookie; cookie = '';
+  assert.equal((await req('POST', '/api/auth/unlock/pin', { pin: '4071' })).status, 401);
+  cookie = saved;
+  await req('DELETE', '/api/security/pin');
+  assert.equal((await req('GET', '/api/auth/status')).body.user.pin, null);
+  await req('PUT', '/api/security', { lockEnabled: false });
+});

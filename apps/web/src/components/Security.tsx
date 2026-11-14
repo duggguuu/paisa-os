@@ -54,53 +54,136 @@ export function useFaceIdLogin(enabled: boolean) {
   };
 }
 
+/** Phones and tablets use Face ID; laptops and desktops use the PIN. */
+export function isPhone() {
+  const ua = navigator.userAgent;
+  return /iPhone|iPad|iPod|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+
+type Method = 'faceid' | 'pin' | 'password';
+
 /** Full-screen lock. Shown whenever the server says this session (or this tab) is locked. */
 export function LockScreen({ email }: { email?: string }) {
   const qc = useQueryClient();
   const avail = useQuery({ queryKey: ['platform-auth'], queryFn: async () => browserSupportsWebAuthn() && (await platformAuthenticatorIsAvailable()), staleTime: Infinity });
-  const keys = useQuery({ queryKey: ['auth'], queryFn: () => api<any>('/api/auth/status') });
-  const faceId = avail.data !== false && keys.data?.passkeyLogin !== false;
-  const o = usePrefetchedOptions('/api/auth/unlock/options', faceId);
+  const status = useQuery({ queryKey: ['auth'], queryFn: () => api<any>('/api/auth/status') });
+  const pin = status.data?.user?.pin as { length: number; blocked: boolean } | null | undefined;
+  const faceIdOk = avail.data !== false && !!status.data?.passkeyLogin;
+  const pinOk = !!pin && !pin.blocked;
+  const preferred: Method = isPhone() ? (faceIdOk ? 'faceid' : pinOk ? 'pin' : 'password') : (pinOk ? 'pin' : 'password');
+  const [chosen, setChosen] = useState<Method | null>(null);
+  const method: Method = chosen === 'pin' && !pinOk ? 'password' : chosen ?? preferred;
+  const o = usePrefetchedOptions('/api/auth/unlock/options', method === 'faceid');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [usePassword, setUsePassword] = useState(false);
-  const [password, setPassword] = useState('');
-  async function unlock() {
+  const [secret, setSecret] = useState('');
+
+  async function done() { setSecret(''); await qc.invalidateQueries(); }
+  async function faceId() {
     setErr(null); setBusy(true);
     try {
       const optionsJSON = await o.take();          // instant when prefetched: keeps Safari's tap window
       const response = await startAuthentication({ optionsJSON });
       await api('/api/auth/unlock/verify', { method: 'POST', body: { response } });
-      await qc.invalidateQueries();
+      await done();
     } catch (e: any) { setErr(faceIdError(e)); o.reload(); }
     finally { setBusy(false); }
   }
-  async function unlockWithPassword(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(value = secret) {
+    if (!value || busy) return;
     setErr(null); setBusy(true);
     try {
-      await api('/api/auth/unlock/password', { method: 'POST', body: { password } });
-      setPassword('');
-      await qc.invalidateQueries();
-    } catch (e: any) { setErr(e.message); }
-    finally { setBusy(false); }
+      await api(method === 'pin' ? '/api/auth/unlock/pin' : '/api/auth/unlock/password', { method: 'POST', body: method === 'pin' ? { pin: value } : { password: value } });
+      await done();
+    } catch (e: any) {
+      setSecret('');
+      setErr(e.message);
+      if (e.code === 'pin_locked') await qc.invalidateQueries({ queryKey: ['auth'] });
+    } finally { setBusy(false); }
   }
-  const showPassword = usePassword || !faceId;
+  const switchTo = (m: Method) => { setErr(null); setSecret(''); setChosen(m); };
+  const others = (['faceid', 'pin', 'password'] as Method[]).filter((m) => m !== method && (m !== 'faceid' || faceIdOk) && (m !== 'pin' || pinOk));
+  const label = { faceid: 'Use Face ID', pin: 'Use PIN', password: 'Use password' };
+
   return (
     <div className="lock-screen">
       <img src="/logo-mark.png" alt="" className="lock-logo" />
       <h1>Paisa is locked</h1>
       {email && <p className="muted small">{email}</p>}
-      {!showPassword && <button className="btn accent" onClick={unlock} disabled={busy}><Icon name="faceid" /> {busy ? 'Checking…' : o.ready ? 'Unlock with Face ID' : 'Getting ready…'}</button>}
-      {showPassword && (
-        <form onSubmit={unlockWithPassword} style={{ display: 'grid', gap: 8, width: 'min(320px, 100%)' }}>
-          <input className="input" type="password" autoComplete="current-password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
-          <button className="btn accent" disabled={busy || !password}>{busy ? 'Checking…' : 'Unlock'}</button>
+      {method === 'faceid' && <button className="btn accent" onClick={faceId} disabled={busy}><Icon name="faceid" /> {busy ? 'Checking…' : o.ready ? 'Unlock with Face ID' : 'Getting ready…'}</button>}
+      {method === 'pin' && pin && (
+        <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="pin-form">
+          <label className="pin-boxes" aria-label={`Enter your ${pin.length}-digit PIN`}>
+            <input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="off" maxLength={pin.length} value={secret} autoFocus disabled={busy}
+              onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, pin.length); setSecret(v); if (v.length === pin.length) submit(v); }} />
+            {Array.from({ length: pin.length }, (_, i) => <span key={i} className={i < secret.length ? 'on' : ''} />)}
+          </label>
+          <span className="tiny faint">{busy ? 'Checking…' : `Enter your ${pin.length}-digit PIN`}</span>
+        </form>
+      )}
+      {method === 'password' && (
+        <form onSubmit={(e) => { e.preventDefault(); submit(); }} style={{ display: 'grid', gap: 8, width: 'min(320px, 100%)' }}>
+          <input className="input" type="password" autoComplete="current-password" placeholder="Password" value={secret} onChange={(e) => setSecret(e.target.value)} autoFocus />
+          <button className="btn accent" disabled={busy || !secret}>{busy ? 'Checking…' : 'Unlock'}</button>
+          {!isPhone() && !pin && <span className="tiny faint">Tip: set a short PIN in Settings → Security for quicker unlocking on this laptop.</span>}
+          {pin?.blocked && <span className="tiny faint">The PIN is paused after too many wrong tries. The password turns it back on.</span>}
         </form>
       )}
       {err && <p className="error">{err}</p>}
-      {faceId && <button className="btn small" style={{ marginTop: 12 }} onClick={() => { setErr(null); setUsePassword(!usePassword); }}>{usePassword ? 'Use Face ID instead' : 'Use password instead'}</button>}
-      <button className="btn small" style={{ marginTop: 8 }} onClick={async () => { await api('/api/auth/logout', { method: 'POST' }); forgetUnlockKey(); window.location.href = '/'; }}>Log out instead</button>
+      <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {others.map((m) => <button key={m} className="btn small" onClick={() => switchTo(m)}>{label[m]}</button>)}
+      </div>
+      <button className="btn small" style={{ marginTop: 4 }} onClick={async () => { await api('/api/auth/logout', { method: 'POST' }); forgetUnlockKey(); window.location.href = '/'; }}>Log out instead</button>
+    </div>
+  );
+}
+
+/** Settings → Security: the laptop PIN. */
+function PinSettings({ pin }: { pin: { length: number; blocked: boolean } | null | undefined }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [p1, setP1] = useState('');
+  const [p2, setP2] = useState('');
+  const [password, setPassword] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null); setMsg(null);
+    if (!/^\d{4,6}$/.test(p1)) return setErr('PIN must be 4 to 6 digits');
+    if (p1 !== p2) return setErr("The two PINs don't match");
+    try {
+      await api('/api/security/pin', { method: 'PUT', body: { pin: p1, password } });
+      setP1(''); setP2(''); setPassword(''); setOpen(false); setMsg('PIN saved');
+      await qc.invalidateQueries({ queryKey: ['auth'] });
+    } catch (e: any) { setErr(e.message); }
+  }
+  const digits = (set: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => set(e.target.value.replace(/\D/g, '').slice(0, 6));
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+      <div className="spread"><b>Laptop PIN</b>{pin && <span className="tiny faint">{pin.length} digits{pin.blocked ? ' · paused' : ''}</span>}</div>
+      <p className="tiny faint" style={{ margin: '4px 0 8px' }}>On a laptop or desktop browser the lock asks for this PIN. Your phone keeps using Face ID. The PIN only unlocks; logging in still needs your password or Face ID.</p>
+      {!open && (
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn small" onClick={() => { setOpen(true); setMsg(null); }}>{pin ? 'Change PIN' : 'Set a PIN'}</button>
+          {pin && <button className="btn small danger" onClick={async () => { if (confirm('Remove the PIN? The laptop will ask for your password instead.')) { await api('/api/security/pin', { method: 'DELETE' }); await qc.invalidateQueries({ queryKey: ['auth'] }); } }}>Remove</button>}
+        </div>
+      )}
+      {open && (
+        <form onSubmit={save} style={{ display: 'grid', gap: 8 }}>
+          <div className="grid2">
+            <input className="input num" type="password" inputMode="numeric" placeholder="New PIN (4–6 digits)" value={p1} onChange={digits(setP1)} autoFocus />
+            <input className="input num" type="password" inputMode="numeric" placeholder="Repeat PIN" value={p2} onChange={digits(setP2)} />
+          </div>
+          <input className="input" type="password" autoComplete="current-password" placeholder="Your account password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn small accent" disabled={!p1 || !p2 || !password}>Save PIN</button>
+            <button type="button" className="btn small" onClick={() => { setOpen(false); setErr(null); }}>Cancel</button>
+          </div>
+        </form>
+      )}
+      {err && <p className="error">{err}</p>}
+      {msg && <p className="small" style={{ color: 'var(--inc)' }}>{msg}</p>}
     </div>
   );
 }
@@ -138,7 +221,7 @@ export function SecuritySettings() {
   const has = (keys.data?.length ?? 0) > 0;
   return (
     <div className="card">
-      <div className="row" style={{ marginBottom: 8 }}><Icon name="faceid" /><b>Face ID</b></div>
+      <div className="row" style={{ marginBottom: 8 }}><Icon name="faceid" /><b>Face ID (phone)</b></div>
       {avail.data === false && <p className="small muted" style={{ marginTop: 0 }}>This browser can't use Face ID or Touch ID. On iPhone, open Paisa from the home screen (or Safari) to set it up.</p>}
       {keys.data?.map((k) => (
         <div key={k.id} className="spread small" style={{ padding: '6px 0' }}>
@@ -151,7 +234,7 @@ export function SecuritySettings() {
       </button>
       <label className="toggle" style={{ marginTop: 10 }}>
         <input type="checkbox" checked={!!u?.lockEnabled} onChange={(e) => setLock(e.target.checked)} />
-        <span><b>Lock Paisa</b><span className="tiny faint">Unlock with Face ID{has ? '' : ' (once set up)'} or your password.</span></span>
+        <span><b>Lock Paisa</b><span className="tiny faint">Phone: Face ID{has ? '' : ' (once set up)'}. Laptop: your PIN. Password always works.</span></span>
       </label>
       {u?.lockEnabled && (
         <>
@@ -165,8 +248,9 @@ export function SecuritySettings() {
           </div>
         </>
       )}
+      <PinSettings pin={u?.pin} />
       {err && <p className="error">{err}</p>}
-      <p className="tiny faint" style={{ marginBottom: 0 }}>Uses a passkey: Face ID unlocks a key that never leaves your phone. You can always log in with your password too.</p>
+      <p className="tiny faint" style={{ marginBottom: 0 }}>Face ID uses a passkey: Face ID unlocks a key that never leaves your phone. You can always log in with your password too.</p>
     </div>
   );
 }

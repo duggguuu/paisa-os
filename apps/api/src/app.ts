@@ -131,8 +131,9 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     let user = null;
     try {
       await requireAuth(req, { allowLocked: true });
-      const [u] = await sql<any[]>`select email, lock_enabled, lock_minutes, lock_on_open from app_user where id = ${req.userId!}`;
-      user = { email: u.email, lockEnabled: u.lock_enabled, lockMinutes: u.lock_minutes, lockOnOpen: u.lock_on_open, locked: !!(req as any).locked };
+      const [u] = await sql<any[]>`select email, lock_enabled, lock_minutes, lock_on_open, pin_hash is not null as has_pin, pin_length, pin_failures from app_user where id = ${req.userId!}`;
+      user = { email: u.email, lockEnabled: u.lock_enabled, lockMinutes: u.lock_minutes, lockOnOpen: u.lock_on_open, locked: !!(req as any).locked,
+        pin: u.has_pin ? { length: u.pin_length, blocked: u.pin_failures >= 5 } : null };
     } catch { /* not logged in */ }
     return { setupNeeded: n === 0, passkeyLogin: k > 0, user };
   });
@@ -160,6 +161,22 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     await passkeys.verifyAuthentication(sql, pk, takeChallenge(req, reply, 'unlock'), (req.body as any)?.response, req.userId);
     return { ok: true, unlockKey: await unlockSession(req) };
   });
+  // Unlock with the PIN (laptop browsers). 5 wrong tries in a row turn the PIN off until the password unlocks.
+  const PIN_TRIES = 5;
+  app.post('/api/auth/unlock/pin', async (req) => {
+    await requireAuth(req, { allowLocked: true });
+    const pin = z.object({ pin: z.string().regex(/^\d{4,6}$/) }).parse(req.body).pin;
+    const [u] = await sql<{ pin_hash: string | null; pin_failures: number }[]>`select pin_hash, pin_failures from app_user where id = ${req.userId!}`;
+    if (!u.pin_hash) throw new LedgerError('no_pin', 'No PIN is set. Unlock with your password.', 400);
+    if (u.pin_failures >= PIN_TRIES) throw new LedgerError('pin_locked', 'Too many wrong PINs. Unlock with your password.', 429);
+    if (!(await verifyPassword(pin, u.pin_hash))) {
+      const [{ pin_failures: n }] = await sql<{ pin_failures: number }[]>`update app_user set pin_failures = pin_failures + 1 where id = ${req.userId!} returning pin_failures`;
+      throw new LedgerError(n >= PIN_TRIES ? 'pin_locked' : 'bad_pin', n >= PIN_TRIES ? 'Too many wrong PINs. Unlock with your password.' : `Wrong PIN. ${PIN_TRIES - n} ${PIN_TRIES - n === 1 ? 'try' : 'tries'} left.`, 401);
+    }
+    await sql`update app_user set pin_failures = 0 where id = ${req.userId!}`;
+    return { ok: true, unlockKey: await unlockSession(req) };
+  });
+
   // Unlock with the account password (for browsers without Face ID). Rate-limited like login.
   app.post('/api/auth/unlock/password', async (req) => {
     await requireAuth(req, { allowLocked: true });
@@ -173,6 +190,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
       throw new LedgerError('bad_credentials', 'Wrong password', 401);
     }
     loginAttempts.delete(k);
+    await sql`update app_user set pin_failures = 0 where id = ${req.userId!}`;
     return { ok: true, unlockKey: await unlockSession(req) };
   });
   app.post('/api/auth/lock', async (req) => {
@@ -246,6 +264,20 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
                   lock_on_open = coalesce(${b.lockOnOpen ?? null}, lock_on_open) where id = ${req.userId!}`;
       await sql`update session set unlocked_until = now() + make_interval(mins => (select lock_minutes from app_user where id = ${req.userId!}))
                 where token_hash = ${sha256(req.cookies[SESSION_COOKIE]!)}`;
+      return { ok: true };
+    });
+
+    // Unlock PIN: set/change needs the account password; remove needs an unlocked session.
+    api.put('/api/security/pin', async (req) => {
+      const b = z.object({ pin: z.string().regex(/^\d{4,6}$/, 'PIN must be 4 to 6 digits'), password: z.string().min(1).max(200) }).parse(req.body);
+      const [u] = await sql<{ password_hash: string }[]>`select password_hash from app_user where id = ${req.userId!}`;
+      if (!(await verifyPassword(b.password, u.password_hash))) throw new LedgerError('bad_credentials', 'Wrong password', 401);
+      if (/^(\d)\1+$/.test(b.pin) || '0123456789'.includes(b.pin) || '9876543210'.includes(b.pin)) throw new LedgerError('weak_pin', 'Pick a PIN that isn\'t all one digit or a straight run like 1234.', 400);
+      await sql`update app_user set pin_hash = ${await hashPassword(b.pin)}, pin_length = ${b.pin.length}, pin_failures = 0 where id = ${req.userId!}`;
+      return { ok: true };
+    });
+    api.delete('/api/security/pin', async (req) => {
+      await sql`update app_user set pin_hash = null, pin_length = null, pin_failures = 0 where id = ${req.userId!}`;
       return { ok: true };
     });
 

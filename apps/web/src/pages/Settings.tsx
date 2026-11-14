@@ -79,7 +79,7 @@ export function Settings() {
       </div>
 
       <div className="section">
-        <div className="section-title">Face ID</div>
+        <div className="section-title">Security</div>
         <SecuritySettings />
       </div>
 

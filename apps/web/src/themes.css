@@ -419,3 +419,11 @@ body { font-size: 14px; line-height: 1.4; }
 .loan-opt span { color: var(--ink-2); font-size: 12.5px; }
 .loan-opt.on { border-color: var(--accent); background: var(--accent-soft); }
 .loan-opt:disabled { opacity: 0.75; cursor: not-allowed; }
+
+/* ---------- Lock screen PIN ---------- */
+.pin-form { display: grid; justify-items: center; gap: 8px; margin-top: 10px; }
+.pin-boxes { position: relative; display: flex; gap: 12px; padding: 12px 18px; border-radius: 14px; background: var(--surface); border: 1.5px solid var(--border-strong); cursor: text; }
+.pin-boxes:focus-within { border-color: var(--accent); }
+.pin-boxes input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; border: 0; background: transparent; }
+.pin-boxes span { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink-3); }
+.pin-boxes span.on { background: var(--ink); border-color: var(--ink); }
