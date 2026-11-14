@@ -25,7 +25,7 @@ export function Accounts() {
   useEffect(() => {
     const k = params.get('kite');
     if (!k) return;
-    toast(k === 'synced' ? 'Zerodha holdings synced' : k === 'cancelled' ? 'Zerodha login cancelled' : 'Logged in to Zerodha, but the sync failed. Try Sync again.');
+    toast(k === 'synced' ? 'Zerodha holdings synced' : k === 'cancelled' ? 'Zerodha login cancelled' : k === 'login_failed' ? "Zerodha login didn't go through. Try again." : 'Logged in to Zerodha, but the sync failed. Try Sync again.');
     params.delete('kite');
     setParams(params, { replace: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

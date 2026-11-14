@@ -598,3 +598,18 @@ test('unlock PIN for laptops: set with password, unlock a new tab, 5 wrong tries
   assert.equal((await req('GET', '/api/auth/status')).body.user.pin, null);
   await req('PUT', '/api/security', { lockEnabled: false });
 });
+
+test('Kite callback works as a plain page load while the app lock is on (no tab key)', async () => {
+  await req('PUT', '/api/security', { lockEnabled: true, lockOnOpen: true });
+  let res = await app.inject({ method: 'GET', url: '/api/kite/callback?status=cancelled', headers: { cookie } });
+  assert.equal(res.statusCode, 302, 'redirects instead of a 423 JSON page');
+  assert.equal(res.headers.location, '/accounts?kite=cancelled');
+  res = await app.inject({ method: 'GET', url: '/api/kite/callback?status=success&request_token=reqtok', headers: { cookie } });
+  assert.equal(res.statusCode, 302);
+  assert.match(String(res.headers.location), /^\/accounts\?kite=/);
+  res = await app.inject({ method: 'GET', url: '/api/kite/callback?status=success&request_token=reqtok' });
+  assert.equal(res.headers.location, '/?kite=login_needed', 'no session: back to the app, not an error');
+  // Data routes are still locked for that tab.
+  assert.equal((await app.inject({ method: 'GET', url: '/api/accounts', headers: { cookie } })).statusCode, 423);
+  await req('PUT', '/api/security', { lockEnabled: false });
+});

@@ -239,6 +239,23 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     return { ok: true };
   });
 
+  // Zerodha sends the browser back here with a full page load, which can't carry the tab's unlock
+  // key (x-unlock). So this route needs only a logged-in session, not an unlocked tab: it stores the
+  // Kite token, returns no data, and redirects into the app (which shows the lock screen if needed).
+  app.get('/api/kite/callback', async (req, reply) => {
+    try { await requireAuth(req, { allowLocked: true }); } catch { return reply.redirect('/?kite=login_needed'); }
+    const q = z.object({ request_token: z.string().min(4).max(128).optional(), status: z.string().optional() }).safeParse(req.query);
+    if (!q.success || q.data.status !== 'success' || !q.data.request_token) return reply.redirect('/accounts?kite=cancelled');
+    const book = req.book!.id;
+    try { await kite.completeLogin(sql, cipher, book, q.data.request_token, cfg.fetch); } catch { return reply.redirect('/accounts?kite=login_failed'); }
+    try {
+      await kite.syncHoldings(sql, cipher, book, cfg.fetch);
+      return reply.redirect('/accounts?kite=synced');
+    } catch {
+      return reply.redirect('/accounts?kite=login_ok_sync_failed');
+    }
+  });
+
   // ---------- everything below needs a session ----------
   await app.register(async (api) => {
     api.addHook('preHandler', async (req) => requireAuth(req));
@@ -467,17 +484,6 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
       const link = await kite.getLink(sql, B(req));
       if (!link) throw new LedgerError('kite_not_linked', 'Add your Kite API key and secret first', 400);
       return { url: kite.loginUrl(link.api_key) };
-    });
-    api.get('/api/kite/callback', async (req, reply) => {
-      const q = z.object({ request_token: z.string().min(4).max(128).optional(), status: z.string().optional() }).parse(req.query);
-      if (q.status !== 'success' || !q.request_token) return reply.redirect('/accounts?kite=cancelled');
-      await kite.completeLogin(sql, cipher, B(req), q.request_token, cfg.fetch);
-      try {
-        await kite.syncHoldings(sql, cipher, B(req), cfg.fetch);
-        return reply.redirect('/accounts?kite=synced');
-      } catch {
-        return reply.redirect('/accounts?kite=login_ok_sync_failed');
-      }
     });
     api.post('/api/kite/sync', async (req) => kite.syncHoldings(sql, cipher, B(req), cfg.fetch));
     await registerExtras(api, { sql, cipher, fetch: cfg.fetch });
