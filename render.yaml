@@ -9,7 +9,7 @@ services:
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
-    autoDeploy: true
+    autoDeployTrigger: commit   # redeploy on every push to main (replaces the deprecated autoDeploy)
     envVars:
       - key: NODE_VERSION
         value: "22"
