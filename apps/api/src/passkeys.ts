@@ -86,8 +86,5 @@ export async function listPasskeys(sql: Sql, userId: string) {
 export async function removePasskey(sql: Sql, userId: string, id: string) {
   await sql.begin(async (tx) => {
     await tx`delete from webauthn_credential where id = ${id} and user_id = ${userId}`;
-    // No passkeys left: the lock can't be opened with Face ID any more, so turn it off.
-    const [{ n }] = await tx<{ n: number }[]>`select count(*)::int as n from webauthn_credential where user_id = ${userId}`;
-    if (n === 0) await tx`update app_user set lock_enabled = false where id = ${userId}`;
   });
 }

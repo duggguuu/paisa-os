@@ -60,32 +60,47 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
 
   async function startSession(reply: any, userId: string) {
     const token = newToken();
-    // Logging in (password or Face ID) counts as unlocking.
-    await sql`insert into session (token_hash, user_id, expires_at, unlocked_until)
-              select ${sha256(token)}, ${userId}, now() + ${`${SESSION_DAYS} days`}::interval, now() + make_interval(mins => lock_minutes)
+    const unlockKey = newToken();
+    // Logging in (password or Face ID) counts as unlocking this tab.
+    await sql`insert into session (token_hash, user_id, expires_at, unlocked_until, unlock_keys)
+              select ${sha256(token)}, ${userId}, now() + ${`${SESSION_DAYS} days`}::interval, now() + make_interval(mins => lock_minutes), ${[sha256(unlockKey)]}
               from app_user where id = ${userId}`;
     reply.setCookie(SESSION_COOKIE, token, {
       httpOnly: true, sameSite: 'lax', secure: cfg.secureCookies ?? false, path: '/', maxAge: SESSION_DAYS * 86400,
     });
+    return unlockKey;
+  }
+
+  /** Unlock this session for the calling tab: new idle window + a fresh per-tab key (last 8 kept). */
+  async function unlockSession(req: FastifyRequest) {
+    const unlockKey = newToken();
+    await sql`update session set unlocked_until = now() + make_interval(mins => (select lock_minutes from app_user where id = ${req.userId!})),
+                unlock_keys = (array_prepend(${sha256(unlockKey)}::text, unlock_keys))[1:8]
+              where token_hash = ${sha256(req.cookies[SESSION_COOKIE]!)}`;
+    return unlockKey;
   }
 
   /**
-   * Session check. With the app lock on, a session idle for longer than lock_minutes is locked:
-   * every API call answers 423 until it's unlocked with Face ID. Activity slides the window.
+   * Session check. With the app lock on, a session is locked when it has been idle longer than
+   * lock_minutes, or (lock on open) when the calling tab has no unlock key from this session:
+   * a new tab or a fresh app start must unlock. Locked calls answer 423. Activity slides the window.
    */
   async function requireAuth(req: FastifyRequest, opts: { allowLocked?: boolean } = {}) {
     const token = req.cookies[SESSION_COOKIE];
     if (!token) throw new LedgerError('unauthenticated', 'Please log in', 401);
+    const key = req.headers['x-unlock'];
+    const keyHash = typeof key === 'string' && key.length >= 20 && key.length <= 100 ? sha256(key) : '';
     const [s] = await sql<{ user_id: string; lock_enabled: boolean; lock_minutes: number; locked: boolean; refresh: boolean }[]>`
       select s.user_id, u.lock_enabled, u.lock_minutes,
-             u.lock_enabled and (s.unlocked_until is null or s.unlocked_until < now()) as locked,
+             u.lock_enabled and (s.unlocked_until is null or s.unlocked_until < now()
+                                 or (u.lock_on_open and not (${keyHash}::text = any(s.unlock_keys)))) as locked,
              coalesce(s.unlocked_until, now()) < now() + make_interval(mins => u.lock_minutes) - interval '30 seconds' as refresh
       from session s join app_user u on u.id = s.user_id
       where s.token_hash = ${sha256(token)} and s.expires_at > now()`;
     if (!s) throw new LedgerError('unauthenticated', 'Session expired. Please log in again.', 401);
     req.userId = s.user_id;
     (req as any).locked = s.locked;
-    if (s.locked && !opts.allowLocked) throw new LedgerError('locked', 'Paisa is locked. Unlock with Face ID.', 423);
+    if (s.locked && !opts.allowLocked) throw new LedgerError('locked', 'Paisa is locked. Unlock with Face ID or your password.', 423);
     if (!s.locked && s.lock_enabled && s.refresh) {
       await sql`update session set unlocked_until = now() + make_interval(mins => ${s.lock_minutes}) where token_hash = ${sha256(token)}`;
     }
@@ -116,8 +131,8 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     let user = null;
     try {
       await requireAuth(req, { allowLocked: true });
-      const [u] = await sql<any[]>`select email, lock_enabled, lock_minutes from app_user where id = ${req.userId!}`;
-      user = { email: u.email, lockEnabled: u.lock_enabled, lockMinutes: u.lock_minutes, locked: !!(req as any).locked };
+      const [u] = await sql<any[]>`select email, lock_enabled, lock_minutes, lock_on_open from app_user where id = ${req.userId!}`;
+      user = { email: u.email, lockEnabled: u.lock_enabled, lockMinutes: u.lock_minutes, lockOnOpen: u.lock_on_open, locked: !!(req as any).locked };
     } catch { /* not logged in */ }
     return { setupNeeded: n === 0, passkeyLogin: k > 0, user };
   });
@@ -130,8 +145,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
   });
   app.post('/api/auth/passkey/verify', async (req, reply) => {
     const userId = await passkeys.verifyAuthentication(sql, pk, takeChallenge(req, reply, 'login'), (req.body as any)?.response);
-    await startSession(reply, userId);
-    return { ok: true };
+    return { ok: true, unlockKey: await startSession(reply, userId) };
   });
 
   // Unlock a locked session with Face ID.
@@ -144,13 +158,26 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
   app.post('/api/auth/unlock/verify', async (req, reply) => {
     await requireAuth(req, { allowLocked: true });
     await passkeys.verifyAuthentication(sql, pk, takeChallenge(req, reply, 'unlock'), (req.body as any)?.response, req.userId);
-    await sql`update session set unlocked_until = now() + make_interval(mins => (select lock_minutes from app_user where id = ${req.userId!}))
-              where token_hash = ${sha256(req.cookies[SESSION_COOKIE]!)}`;
-    return { ok: true };
+    return { ok: true, unlockKey: await unlockSession(req) };
+  });
+  // Unlock with the account password (for browsers without Face ID). Rate-limited like login.
+  app.post('/api/auth/unlock/password', async (req) => {
+    await requireAuth(req, { allowLocked: true });
+    const password = z.object({ password: z.string().min(1).max(200) }).parse(req.body).password;
+    const k = `unlock:${req.userId}`;
+    const att = loginAttempts.get(k);
+    if (att && att.n >= 5 && att.until > Date.now()) throw new LedgerError('rate_limited', 'Too many attempts. Try again in 15 minutes, or use Face ID.', 429);
+    const [u] = await sql<{ password_hash: string }[]>`select password_hash from app_user where id = ${req.userId!}`;
+    if (!(await verifyPassword(password, u.password_hash))) {
+      loginAttempts.set(k, { n: (att && att.until > Date.now() ? att.n : 0) + 1, until: Date.now() + 15 * 60_000 });
+      throw new LedgerError('bad_credentials', 'Wrong password', 401);
+    }
+    loginAttempts.delete(k);
+    return { ok: true, unlockKey: await unlockSession(req) };
   });
   app.post('/api/auth/lock', async (req) => {
     await requireAuth(req, { allowLocked: true });
-    await sql`update session set unlocked_until = now() - interval '1 second' where token_hash = ${sha256(req.cookies[SESSION_COOKIE]!)}`;
+    await sql`update session set unlocked_until = now() - interval '1 second', unlock_keys = '{}' where token_hash = ${sha256(req.cookies[SESSION_COOKIE]!)}`;
     return { ok: true };
   });
 
@@ -169,8 +196,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     });
     const [demo] = await sql<{ id: string }[]>`select id from book where user_id = ${userId} and is_demo`;
     await seedDemo(sql, demo.id);
-    await startSession(reply, userId);
-    return { ok: true };
+    return { ok: true, unlockKey: await startSession(reply, userId) };
   });
 
   app.post('/api/auth/login', async (req, reply) => {
@@ -185,8 +211,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
       throw new LedgerError('bad_credentials', 'Wrong email or password', 401);
     }
     loginAttempts.delete(key);
-    await startSession(reply, u.id);
-    return { ok: true };
+    return { ok: true, unlockKey: await startSession(reply, u.id) };
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
@@ -216,12 +241,9 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     api.get('/api/passkeys', async (req) => passkeys.listPasskeys(sql, req.userId!));
     api.delete('/api/passkeys/:id', async (req) => { await passkeys.removePasskey(sql, req.userId!, (req.params as any).id); return { ok: true }; });
     api.put('/api/security', async (req) => {
-      const b = z.object({ lockEnabled: z.boolean(), lockMinutes: z.number().int().min(1).max(1440).optional() }).parse(req.body);
-      if (b.lockEnabled) {
-        const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from webauthn_credential where user_id = ${req.userId!}`;
-        if (n === 0) throw new LedgerError('no_passkey', 'Set up Face ID on this device first.', 400);
-      }
-      await sql`update app_user set lock_enabled = ${b.lockEnabled}, lock_minutes = coalesce(${b.lockMinutes ?? null}, lock_minutes) where id = ${req.userId!}`;
+      const b = z.object({ lockEnabled: z.boolean(), lockMinutes: z.number().int().min(1).max(1440).optional(), lockOnOpen: z.boolean().optional() }).parse(req.body);
+      await sql`update app_user set lock_enabled = ${b.lockEnabled}, lock_minutes = coalesce(${b.lockMinutes ?? null}, lock_minutes),
+                  lock_on_open = coalesce(${b.lockOnOpen ?? null}, lock_on_open) where id = ${req.userId!}`;
       await sql`update session set unlocked_until = now() + make_interval(mins => (select lock_minutes from app_user where id = ${req.userId!}))
                 where token_hash = ${sha256(req.cookies[SESSION_COOKIE]!)}`;
       return { ok: true };

@@ -171,6 +171,7 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
   api.get('/api/debts', async (req) => debts.listDebts(sql, B(req)));
   api.post('/api/debts', async (req) => debts.setDebt(sql, B(req), debts.DebtInput.parse(req.body)));
   api.post('/api/loans', async (req) => debts.createLoan(sql, B(req), debts.LoanInput.parse(req.body)));
+  api.put('/api/loans/:id', async (req) => debts.updateLoan(sql, B(req), (req.params as any).id, debts.LoanInput.parse(req.body)));
   // Fixed deposits, grouped by bank
   api.get('/api/fds', async (req) => fds.listFds(sql, B(req)));
   api.post('/api/fds', async (req) => fds.createFd(sql, B(req), fds.FdInput.parse(req.body)));

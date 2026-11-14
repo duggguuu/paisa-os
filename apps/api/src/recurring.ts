@@ -160,8 +160,8 @@ export async function logDue(sql: Sql, bookId: string, ruleId: string, opts: { a
     const split = rule.kind === 'transfer' ? await emiSplit(sql, bookId, rule.to_account_id, amount, common.date) : null;
     if (split) {
       txnId = await sql.begin((tx) => createRawTxn(tx, bookId, {
-        kind: 'transfer', date: common.date, merchant: common.merchant, source: 'recurring', externalRef: common.externalRef, recurringId: rule.id,
-        note: `EMI: ₹${Math.round(split.principal / 100).toLocaleString('en-IN')} principal + ₹${Math.round(split.interest / 100).toLocaleString('en-IN')} interest`,
+        kind: split.principal ? 'transfer' : 'expense', date: common.date, merchant: common.merchant, source: 'recurring', externalRef: common.externalRef, recurringId: rule.id,
+        note: split.principal === 0 ? 'Loan interest' : `EMI: ₹${Math.round(split.principal / 100).toLocaleString('en-IN')} principal + ₹${Math.round(split.interest / 100).toLocaleString('en-IN')} interest`,
         postings: [
           { accountId: rule.account_id, amount: -amount },
           { accountId: rule.to_account_id, amount: split.principal, memo: 'Principal' },

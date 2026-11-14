@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SecuritySettings } from '../components/Security';
 import { ModeSeg, ThemeList } from '../components/Appearance';
-import { api } from '../lib';
+import { api, authHeaders, forgetUnlockKey } from '../lib';
 import { useUi } from '../App';
 
 export function Settings() {
@@ -24,7 +24,7 @@ export function Settings() {
   }
 
   async function exportJson() {
-    const res = await fetch('/api/export', { headers: { 'x-book': book }, credentials: 'same-origin' });
+    const res = await fetch('/api/export', { headers: { ...authHeaders(), 'x-book': book }, credentials: 'same-origin' });
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -35,6 +35,7 @@ export function Settings() {
 
   async function logout() {
     await api('/api/auth/logout', { method: 'POST' });
+    forgetUnlockKey();
     qc.clear();
     window.location.href = '/';
   }

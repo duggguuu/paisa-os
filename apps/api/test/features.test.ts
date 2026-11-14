@@ -57,8 +57,9 @@ const fakeFetch: typeof fetch = async (input: any) => {
   return json({}, 404);
 };
 
-const req = async (method: string, path: string, body?: unknown) => {
-  const res = await app.inject({ method: method as any, url: path, payload: body as any, headers: { cookie } });
+let unlockKey = '';   // the per-tab app-lock key, like sessionStorage in the browser
+const req = async (method: string, path: string, body?: unknown, tab = unlockKey) => {
+  const res = await app.inject({ method: method as any, url: path, payload: body as any, headers: { cookie, 'x-unlock': tab } });
   // Keep cookies by name, like a browser (the Face ID challenge cookie sits beside the session cookie).
   const set = res.headers['set-cookie'];
   for (const c of set ? (Array.isArray(set) ? set : [set]) : []) {
@@ -68,7 +69,9 @@ const req = async (method: string, path: string, body?: unknown) => {
     if (/=;|=$|Max-Age=0|Expires=Thu, 01 Jan 1970/i.test(String(c))) jar.delete(name); else jar.set(name, pair);
     cookie = [...jar.values()].join('; ');
   }
-  return { status: res.statusCode, body: res.body ? JSON.parse(res.body) : null };
+  const parsed = res.body ? JSON.parse(res.body) : null;
+  if (res.statusCode < 300 && typeof parsed?.unlockKey === 'string') unlockKey = parsed.unlockKey;
+  return { status: res.statusCode, body: parsed };
 };
 
 let A: Record<string, any> = {};
@@ -349,34 +352,43 @@ test('Trans. month and year totals match the ledger', async () => {
   assert.ok(Array.isArray(s.incomeCategories));
 });
 
-test('app lock: server refuses a locked session until Face ID unlocks it', async () => {
-  // Without a passkey the lock can't be turned on.
-  let r = await req('PUT', '/api/security', { lockEnabled: true });
-  assert.equal(r.status, 400);
-  // Register a (fake) passkey row directly; real ones come from the phone.
+test('app lock: locks after idle and on every new open; Face ID or password unlocks', async () => {
+  // The lock works without a passkey now (the password unlocks it).
+  let r = await req('PUT', '/api/security', { lockEnabled: true, lockMinutes: 5 });
+  assert.equal(r.status, 200);
   const [u] = await sql<{ id: string }[]>`select id from app_user limit 1`;
   await sql`insert into webauthn_credential (id, user_id, public_key) values ('test-cred', ${u.id}, '\\x00')`;
   assert.equal((await req('GET', '/api/auth/status')).body.passkeyLogin, true);
-  r = await req('PUT', '/api/security', { lockEnabled: true, lockMinutes: 5 });
-  assert.equal(r.status, 200);
-  assert.equal((await req('GET', '/api/accounts')).status, 200, 'unlocked right after turning it on');
+  // This tab logged in, so it holds a key: unlocked.
+  assert.ok(unlockKey, 'login handed this tab an unlock key');
+  assert.equal((await req('GET', '/api/accounts')).status, 200);
+  // A new tab / fresh app start has no key: locked, though the session cookie is valid.
+  assert.equal((await req('GET', '/api/accounts', undefined, '')).status, 423, 'new open is locked');
+  assert.equal((await req('GET', '/api/accounts', undefined, 'x'.repeat(43))).status, 423, 'a made-up key is locked');
+  assert.equal((await req('GET', '/api/auth/status', undefined, '')).body.user.locked, true);
+  // Idle lock.
   await req('POST', '/api/auth/lock');
-  r = await req('GET', '/api/accounts');
-  assert.equal(r.status, 423, 'locked sessions get 423');
-  const st = (await req('GET', '/api/auth/status')).body;
-  assert.equal(st.user.locked, true);
+  assert.equal((await req('GET', '/api/accounts')).status, 423, 'locked sessions get 423');
   r = await req('POST', '/api/auth/unlock/options', {});
   assert.equal(r.status, 200);
   assert.ok(r.body.challenge && r.body.allowCredentials.some((c: any) => c.id === 'test-cred'));
   r = await req('POST', '/api/auth/unlock/verify', { response: { id: 'test-cred', rawId: 'test-cred', type: 'public-key', response: {} } });
   assert.ok(r.status >= 400, 'a bogus assertion is rejected');
   assert.equal((await req('GET', '/api/accounts')).status, 423);
-  // Removing the last passkey turns the lock off (so you can't be locked out).
-  await sql`update session set unlocked_until = now() + interval '5 minutes'`;
+  // Password unlock.
+  r = await req('POST', '/api/auth/unlock/password', { password: 'not the password' });
+  assert.equal(r.status, 401);
+  r = await req('POST', '/api/auth/unlock/password', { password: 'correct horse battery' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal((await req('GET', '/api/accounts')).status, 200, 'unlocked with the password');
+  // Removing passkeys no longer turns the lock off; "every open" can be switched off.
   await req('DELETE', '/api/passkeys/test-cred');
-  assert.equal((await req('GET', '/api/auth/status')).body.user.lockEnabled, false);
+  assert.equal((await req('GET', '/api/auth/status')).body.user.lockEnabled, true);
+  await req('PUT', '/api/security', { lockEnabled: true, lockOnOpen: false });
+  assert.equal((await req('GET', '/api/accounts', undefined, '')).status, 200, 'without lock-on-open a new tab only checks idle');
+  await req('PUT', '/api/security', { lockEnabled: false });
   await sql`update session set unlocked_until = now() - interval '1 minute'`;
-  assert.equal((await req('GET', '/api/accounts')).status, 200, 'no lock when it is off');
+  assert.equal((await req('GET', '/api/accounts', undefined, '')).status, 200, 'no lock when it is off');
 });
 
 test('stuff: sheet import, purchase moves Want→Own by product code, sell moves Own→Sold', async () => {
@@ -515,5 +527,36 @@ test('FDs: grouped by bank, maturity value, maturing pays principal + interest i
   assert.ok(r.body.interest > 0);
   f = (await req('GET', '/api/fds')).body;
   assert.equal(f.banks.find((b: any) => b.bank === 'SBI').items.length, 1, 'matured FD is closed');
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
+
+test('interest-only loan: payment is all interest, principal stays; a loan can be corrected', async () => {
+  let r = await req('POST', '/api/loans', { lender: 'Bajaj Flexi', type: 'interest_only', amount: 2432149_00, rate: 12.99, emi: 25487_00, emiDay: 5, fromAccountId: A['Axis Bank'].id });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.principal, 2432149_00, 'no "EMI too small" for interest-only');
+  let loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Bajaj Flexi loan');
+  assert.equal(loan.type, 'interest_only');
+  assert.equal(loan.interestNow, 25487_00);
+  assert.equal(loan.monthsLeft, null);
+  // Log one payment: whole amount is spending, principal unchanged.
+  const axis = await bal('Axis Bank');
+  await sql`update recurring_rule set next_due = ${today} where id = ${loan.ruleId}`;
+  r = await req('POST', `/api/recurring/${loan.ruleId}/log`, {});
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(await bal('Bajaj Flexi loan'), 2432149_00, 'principal unchanged');
+  assert.equal(await bal('Axis Bank'), axis - 25487_00);
+  const [t] = await sql<{ kind: string }[]>`select kind from txn where recurring_id = ${loan.ruleId}`;
+  assert.equal(t.kind, 'expense');
+  // Correct it: say it is really an EMI loan with a different principal; the rule follows.
+  r = await req('PUT', `/api/loans/${loan.id}`, { lender: 'Bajaj Flexi', type: 'emi', mode: 'principal', amount: 10_00_000_00, rate: 12, emi: 25_000_00, emiDay: 7, fromAccountId: A['Axis Bank'].id });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(await bal('Bajaj Flexi loan'), 10_00_000_00);
+  loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Bajaj Flexi loan');
+  assert.equal(loan.type, 'emi');
+  assert.equal(loan.emi, 25_000_00);
+  assert.ok(loan.monthsLeft > 0);
+  const [rule] = await sql<{ amount: string; day: number; name: string }[]>`select amount, day, name from recurring_rule where id = ${loan.ruleId}`;
+  assert.equal(Number(rule.amount), 25_000_00);
+  assert.equal(rule.day, 7);
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });

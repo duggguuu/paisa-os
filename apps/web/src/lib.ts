@@ -16,15 +16,29 @@ export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
 
+/**
+ * The app lock's per-tab key. It lives in sessionStorage, so it's gone when the tab closes or the
+ * iPhone app is quit: the next open has to unlock again. The server hands out a new one on unlock.
+ */
+const UNLOCK = 'paisa.unlock';
+export function unlockKey(): string {
+  try { return sessionStorage.getItem(UNLOCK) ?? ''; } catch { return ''; }
+}
+export function forgetUnlockKey() {
+  try { sessionStorage.removeItem(UNLOCK); } catch { /* private mode */ }
+}
+export const authHeaders = (): Record<string, string> => ({ 'x-book': bookMode, 'x-unlock': unlockKey() });
+
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const res = await fetch(path, {
     method: opts.method ?? 'GET',
     credentials: 'same-origin',
-    headers: { 'x-book': bookMode, ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}) },
+    headers: { ...authHeaders(), ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}) },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
+  if (res.ok && typeof data?.unlockKey === 'string') { try { sessionStorage.setItem(UNLOCK, data.unlockKey); } catch { /* private mode */ } }
   if (res.status === 423 && typeof window !== 'undefined') window.dispatchEvent(new Event('paisa:locked'));
   if (!res.ok) throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText);
   return data as T;
