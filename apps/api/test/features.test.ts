@@ -223,3 +223,46 @@ test('insights: spots a steady monthly charge and offers to track it', async () 
   const again = await req('GET', '/api/insights');
   assert.ok(!again.body.some((i: any) => i.id === 'sub-spotify'), 'tracked subscriptions are no longer suggested');
 });
+
+test('Splitwise spreadsheet import (free accounts): balances, overlap between exports, sign detection', async () => {
+  const K = 'Kabir M', M = 'Meera P', ME_ = 'Yash G';
+  const group = { name: 'Flat.csv', rows: [
+    { date: '2026-01-05', description: 'Dinner at Toit', category: 'Dining out', cost: 1000_00, currency: 'INR', nets: { [ME_]: -500_00, [K]: 500_00, [M]: 0 } },
+    { date: '2026-02-10', description: 'BigBasket order', category: 'Groceries', cost: 1200_00, currency: 'INR', nets: { [ME_]: 800_00, [K]: -400_00, [M]: -400_00 } },
+    { date: '2026-03-01', description: 'Kabir M. paid Yash G.', category: 'Payment', cost: 300_00, currency: 'INR', nets: { [ME_]: -300_00, [K]: 300_00, [M]: 0 } },
+  ] };
+  const friend = { name: 'Kabir.csv', rows: [
+    { date: '2026-01-05', description: 'Dinner at Toit', category: 'Dining out', cost: 1000_00, currency: 'INR', nets: { [ME_]: -500_00, [K]: 500_00 } }, // repeat of the group row
+    { date: '2026-02-20', description: 'Movie', category: 'Movies', cost: 600_00, currency: 'INR', nets: { [ME_]: 300_00, [K]: -300_00 } },
+  ] };
+  const base = { me: ME_, since: '2026-02-01', defaultAccountId: A['HDFC Bank'].id, files: [friend, group] };
+  // Same data in the opposite sign convention must give the same answer.
+  const negate = (f: any) => ({ ...f, rows: f.rows.map((r: any) => ({ ...r, nets: Object.fromEntries(Object.entries(r.nets).map(([k, v]) => [k, -(v as number)])) })) });
+  const pvNeg = await req('POST', '/api/splitwise/csv/preview', { ...base, files: [negate(friend), negate(group)] });
+  assert.equal(pvNeg.status, 200, JSON.stringify(pvNeg.body));
+  assert.equal(pvNeg.body.sign, -1);
+
+  const pv = await req('POST', '/api/splitwise/csv/preview', base);
+  assert.equal(pv.status, 200, JSON.stringify(pv.body));
+  assert.equal(pv.body.sign, 1);
+  assert.equal(pv.body.duplicatesAcrossFiles, 1, 'the dinner appears in both exports once');
+  assert.equal(pv.body.expenses.length, 3, 'groceries, payment, movie (dinner is before the start date)');
+  const kabir = pv.body.friends.find((f: any) => f.name === K);
+  assert.equal(kabir.allTime, -500_00 + 400_00 - 300_00 + 300_00);
+  assert.deepEqual(pvNeg.body.friends.map((f: any) => [f.name, f.allTime]), pv.body.friends.map((f: any) => [f.name, f.allTime]));
+  const groceries = pv.body.expenses.find((e: any) => e.description === 'BigBasket order');
+  assert.equal(groceries.yourShare, 400_00);
+  assert.equal(groceries.bank, -1200_00);
+
+  const hdfcBefore = await bal('HDFC Bank');
+  let r = await req('POST', '/api/splitwise/csv/import', base);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.imported, 3);
+  assert.equal(await bal(K), -100_00, 'you owe Kabir ₹100, as in Splitwise');
+  assert.equal(await bal(M), 400_00, 'Meera owes you ₹400');
+  assert.equal(await bal('HDFC Bank'), hdfcBefore - 1200_00 + 300_00 - 600_00);
+  r = await req('POST', '/api/splitwise/csv/import', base);
+  assert.equal(r.body.imported, 0, 're-uploading the same exports adds nothing');
+  assert.equal(r.body.alreadyImported, 3);
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});

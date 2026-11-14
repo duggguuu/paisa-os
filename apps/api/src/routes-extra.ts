@@ -71,6 +71,9 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
     return splitwise.importPlan(sql, cipher, B(req), { since: b.since ?? null, skip: b.skip }, ctx.fetch);
   });
 
+  api.post('/api/splitwise/csv/preview', async (req) => splitwise.planCsv(sql, B(req), splitwise.CsvInput.parse(req.body)));
+  api.post('/api/splitwise/csv/import', async (req) => splitwise.importCsv(sql, B(req), splitwise.CsvInput.parse(req.body)));
+
   // Insights
   api.get('/api/insights', async (req) => insights(sql, B(req), req.book!.month_start_day));
 }

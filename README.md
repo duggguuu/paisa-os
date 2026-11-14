@@ -30,7 +30,7 @@ createdb paisa_test
 npm test
 ```
 
-There are 39 API tests (ledger, API, recurring, imports, CAS, Splitwise, insights), plus 17 parser tests run by `npm run test:web` (voice, bank statements, receipts, CAS). They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
+There are 40 API tests (ledger, API, recurring, imports, CAS, Splitwise, insights), plus 18 parser tests run by `npm run test:web` (voice, bank statements, receipts, CAS, Splitwise exports). They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
 
 ## Deploy for free (Render + Neon)
 
@@ -133,16 +133,28 @@ Funds Zerodha already reports are skipped, so nothing counts twice. Import a new
 
 ## Splitwise
 
-1. Open secure.splitwise.com/apps, click **Register your application** (any name and URL), and under **API keys** create a key.
-2. In Paisa, open **Splitwise**, paste the key and pick the account your Splitwise payments usually go through.
-3. Choose a period, review, then **Import**.
+**Free account (spreadsheet exports):**
+1. On splitwise.com (on a computer), open each group, click the ⚙ gear in the right-hand column, then **Export as spreadsheet**.
+2. Do the same for each friend you have non-group expenses with.
+3. In Paisa, open **Splitwise** and upload all the files together.
+4. Tick which name is you, pick the account your Splitwise payments usually go through, and choose a period.
+5. Check one balance against Splitwise. If it's the wrong way round, tap **Flip**. Then **Import**.
 
-How it's booked:
-- Your share of each bill is spending, in a matching category.
-- Each friend becomes a person in Accounts with the **same balance as Splitwise**. Older history becomes their opening balance.
+To update later, export again and re-upload; only new expenses are added. An expense that appears in both a group export and a friend export is counted once.
+
+The export only gives each person's net per expense, so Paisa works out the rest:
+- If you're owed money on an expense, you paid it, and your share is the cost minus what you're owed.
+- If you owe money, your share is what you owe.
+- With several people, your amount is split across the people on the other side, in proportion.
+- The direction (paid vs owes) is checked against "X paid Y" settle-up rows.
+
+**Splitwise Pro (automatic sync):** under "Have Splitwise Pro?", connect with an API key from secure.splitwise.com/apps. It uses Splitwise's exact who-owes-whom data.
+
+**Either way:**
+- Your share counts as spending.
+- Each friend becomes a person in Accounts with the same balance as Splitwise. Older history becomes their opening balance.
 - Settle-ups are transfers.
-- Re-running only adds new expenses. Paisa never writes to Splitwise.
-- If you've also been logging splits with the same people by hand, Paisa warns you about possible double counting.
+- Paisa never writes to Splitwise.
 
 ## Insights
 

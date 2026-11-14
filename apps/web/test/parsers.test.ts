@@ -103,3 +103,21 @@ Closing Unit Balance: 512.345 NAV on 31-Oct-2026: INR 89.2332 Total Cost Value: 
   assert.equal(r.holdings[1].name, 'Parag Parikh Flexi Cap Fund - Direct Plan Growth');
   assert.equal(r.holdings[1].value, 45718.39);
 });
+
+test('Splitwise export: rows, person columns, total row ignored, "you" guessed across files', async () => {
+  const { parseSplitwiseCsv, guessMe } = await import('../src/splitwise-csv.ts');
+  const group = parseSplitwiseCsv(`Date,Description,Category,Cost,Currency,Yash G,Kabir M,Meera P
+2026-02-10,BigBasket order,Groceries,1200.00,INR,800.00,-400.00,-400.00
+2026-03-01,Kabir M. paid Yash G.,Payment,300.00,INR,-300.00,300.00,0.00
+
+2026-11-14,Total balance, , ,INR,500.00,-100.00,-400.00
+`, 'Flat.csv');
+  assert.deepEqual(group.people, ['Yash G', 'Kabir M', 'Meera P']);
+  assert.equal(group.rows.length, 2, 'the Total balance row has no cost, so it is skipped');
+  const real = group.rows.filter((r) => r.description !== 'Total balance');
+  assert.deepEqual(real[0], { date: '2026-02-10', description: 'BigBasket order', category: 'Groceries', cost: 1200_00, currency: 'INR', nets: { 'Yash G': 800_00, 'Kabir M': -400_00, 'Meera P': -400_00 } });
+  const friend = parseSplitwiseCsv('Date,Description,Category,Cost,Currency,Yash G,Kabir M\n2026-02-20,Movie,Movies,600,INR,300,-300\n', 'Kabir.csv');
+  assert.equal(guessMe([group, friend]), null, 'ambiguous with one friend export: the app asks');
+  const friend2 = parseSplitwiseCsv('Date,Description,Category,Cost,Currency,Riya T,Yash G\n2026-04-02,Cab,Taxi,400,INR,-200,200\n', 'Riya.csv');
+  assert.equal(guessMe([group, friend, friend2]), 'Yash G');
+});
