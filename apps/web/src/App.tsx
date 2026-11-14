@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { NavLink, Route, Routes, Navigate, useNavigate } from 'react-router-dom';
+import { NavLink, Route, Routes, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, getBook, setBook } from './lib';
 import { Login } from './pages/Login';
@@ -60,6 +60,7 @@ export function App() {
 }
 
 function Shell() {
+  const loc = useLocation();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [add, setAdd] = useState<QuickAddPreset | null>(null);
@@ -120,6 +121,7 @@ function Shell() {
               <button onClick={() => switchBook('real')}>Back to my money</button>
             </div>
           )}
+          <div className="page-anim" key={loc.pathname}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/activity" element={<Activity />} />
@@ -139,6 +141,7 @@ function Shell() {
             <Route path="/fds" element={<Fds />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </div>
         </main>
         <button className="fab-float" aria-label="Add transaction" title="Add transaction" onClick={() => setAdd({})}><Icon name="plus" /></button>
         <nav className="tabbar" aria-label="Main">

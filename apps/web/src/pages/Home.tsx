@@ -7,6 +7,7 @@ import { useUi } from '../App';
 import { TransRow } from './Activity';
 import { GoalBar, BoostSheet, longDate, type Goal } from './Goals';
 import { ThemeSheet } from '../components/Appearance';
+import { RollingMoney } from '../components/Rolling';
 import type { Insight } from './Insights';
 
 export function Home() {
@@ -68,7 +69,7 @@ export function Home() {
           <span className="hero-label">Safe to spend</span>
           <button className="glass" onClick={() => setShowWhy((s) => !s)} aria-expanded={showWhy}>{showWhy ? 'Hide' : 'How?'}</button>
         </div>
-        <div className={`hero-num num ${sts.amount < 0 ? 'neg' : ''}`}>{money(sts.amount, { whole: true })}</div>
+        <div className={`hero-num num ${sts.amount < 0 ? 'neg' : ''}`}><RollingMoney value={sts.amount} /></div>
         <div className="meta">
           <span>{sts.amount > 0 ? <>About <b className="num">{money(perDay, { whole: true })}</b>/day</> : 'Over plan this month'}</span>
           <span>{daysLeft} days left</span>

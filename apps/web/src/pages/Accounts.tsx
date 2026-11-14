@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { api, money, compact, parseRupees, KIND_LABEL, KIND_ICON, todayIST, dayLabel } from '../lib';
 import { Sheet, useUi } from '../App';
+import { RollingMoney } from '../components/Rolling';
 
 const GROUPS: [string, string, (a: any) => boolean][] = [
   ['Money you can spend', 'Bank accounts, cash and wallets', (a) => ['bank', 'cash', 'wallet'].includes(a.kind)],
@@ -41,7 +42,7 @@ export function Accounts() {
         <>
           <div className="hero">
             <div className="hero-label">Net worth</div>
-            <div className={`hero-num num ${n.netWorth < 0 ? 'neg' : ''}`}>{money(n.netWorth, { whole: true })}</div>
+            <div className={`hero-num num ${n.netWorth < 0 ? 'neg' : ''}`}><RollingMoney value={n.netWorth} /></div>
             <div className="meta"><span>You own <b className="num">{money(n.assets, { whole: true })}</b></span><span>You owe <b className="num">{money(n.liabilities, { whole: true })}</b></span></div>
             <div className="track" aria-hidden><span style={{ width: `${n.assets > 0 ? Math.max(0, Math.min(100, Math.round((1 - n.liabilities / n.assets) * 100))) : 0}%` }} /></div>
           </div>

@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, money, periodLabel, addDays, todayIST } from '../lib';
-import { TrendChart, PieLabeled, pieSlices } from '../components/Charts';
+import { TrendChart, DonutPie, pieSlices } from '../components/Charts';
+import { useAppear, useCountUp } from '../motion';
 import { CategoryTable, usePlanner } from '../components/Planner';
 import { TxnRow } from '../components/TxnRow';
 import { Icon } from '../components/Icons';
@@ -10,15 +12,28 @@ type Period = 'week' | 'month' | 'year';
 type Tab = 'stats' | 'budget' | 'note';
 const P_SHORT: Record<Period, string> = { week: 'W', month: 'M', year: 'Y' };
 
-/** A list row with a coloured % badge, like a classic money-manager breakdown. */
-function ShareRow({ color, share, icon, name, amount, onClick }: { color: string; share: number; icon?: string | null; name: string; amount: number; onClick?: () => void }) {
+/** A ranked row: colour dot, name, amount, and a bar that fills to its share. */
+function ShareRow({ color, share, icon, name, amount, onClick, active, dim, onHover, i = 0 }: {
+  color: string; share: number; icon?: string | null; name: string; amount: number; onClick?: () => void;
+  active?: boolean; dim?: boolean; onHover?: (on: boolean) => void; i?: number;
+}) {
+  const appear = useAppear(share);
   return (
-    <button className="share-row" onClick={onClick} disabled={!onClick}>
-      <span className="badge num" style={{ background: color }}>{Math.round(share * 100)}%</span>
+    <button className={`share-row ${active ? 'on' : ''} ${dim ? 'dim' : ''}`} onClick={onClick} disabled={!onClick}
+      onMouseEnter={() => onHover?.(true)} onMouseLeave={() => onHover?.(false)} onFocus={() => onHover?.(true)} onBlur={() => onHover?.(false)}
+      style={{ ['--i' as any]: i }}>
+      <span className="dot" style={{ background: color }} />
       <span className="sname">{icon ? `${icon} ` : ''}{name}</span>
-      <span className="num samt">{money(amount)}</span>
+      <span className="spct num">{(share * 100).toFixed(share < 0.1 ? 1 : 0)}%</span>
+      <span className="num samt">{money(amount, { whole: true })}</span>
+      <span className="sbar"><i style={{ width: appear ? `${Math.max(share * 100, 1)}%` : 0, background: color, transitionDelay: `${120 + i * 50}ms` }} /></span>
     </button>
   );
+}
+
+/** Income / Exp. tab total that rolls up when it changes. */
+function Rolling({ value }: { value: number }) {
+  return <span className="num">{money(Math.round(useCountUp(value)), { whole: true })}</span>;
 }
 
 export function Stats() {
@@ -40,6 +55,7 @@ export function Stats() {
     placeholderData: (prev) => prev,
   });
   const planner = usePlanner();
+  const [active, setActive] = useState<string | null>(null);
   const s = q.data;
   const today = todayIST();
 
@@ -69,8 +85,8 @@ export function Stats() {
 
       {tab !== 'budget' && s && (
         <div className="side-tabs">
-          <button className={side === 'income' ? 'on' : ''} onClick={() => set({ side: 'income', category: null })}>Income <span className="num">{money(s.summary.earned)}</span></button>
-          <button className={side === 'expense' ? 'on' : ''} onClick={() => set({ side: null })}>Exp. <span className="num">{money(s.summary.spent)}</span></button>
+          <button className={side === 'income' ? 'on' : ''} onClick={() => set({ side: 'income', category: null })}>Income <Rolling value={s.summary.earned} /></button>
+          <button className={side === 'expense' ? 'on' : ''} onClick={() => set({ side: null })}>Exp. <Rolling value={s.summary.spent} /></button>
         </div>
       )}
 
@@ -84,12 +100,17 @@ export function Stats() {
           )}
           {slices.length === 0 ? <div className="empty">No {side === 'income' ? 'income' : 'spending'} in this period.</div> : (
             <>
-              <div className="card pie-card"><PieLabeled slices={slices} onPick={side === 'expense' && !categoryId ? (id) => set({ category: id }) : undefined} /></div>
-              <div className="list" style={{ marginTop: 10 }}>
-                {slices.map((sl) => (
-                  <ShareRow key={sl.key} color={sl.color} share={sl.share} icon={sl.icon} name={sl.name} amount={sl.amount}
-                    onClick={sl.rest ? undefined : side === 'expense' && !categoryId ? () => set({ category: sl.key }) : () => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&categoryId=${sl.key}`)} />
-                ))}
+              <div className="card breakdown">
+                <DonutPie slices={slices} total={slices.reduce((t, x) => t + x.amount, 0)} label={side === 'income' ? 'Earned' : 'Spent'}
+                  active={active} onActive={setActive}
+                  onPick={side === 'expense' && !categoryId ? (id) => set({ category: id }) : undefined} />
+                <div className="share-list">
+                  {slices.map((sl, i) => (
+                    <ShareRow key={sl.key} i={i} color={sl.color} share={sl.share} icon={sl.icon} name={sl.name} amount={sl.amount}
+                      active={active === sl.key} dim={!!active && active !== sl.key} onHover={(on) => setActive(on ? sl.key : null)}
+                      onClick={sl.rest ? undefined : side === 'expense' && !categoryId ? () => set({ category: sl.key }) : () => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&categoryId=${sl.key}`)} />
+                  ))}
+                </div>
               </div>
             </>
           )}
@@ -101,16 +122,16 @@ export function Stats() {
           )}
           {!categoryId && side === 'expense' && s.trend.length > 0 && (
             <div className="section">
-              <div className="section-title">Trend</div>
-              <div className="card"><TrendChart points={s.trend} period={period} onPick={(from) => set({ anchor: from })} /></div>
+              <div className="section-title"><span>Trend</span><span className="tiny faint" style={{ textTransform: 'none', letterSpacing: 0 }}>tap a bar to open that {period}</span></div>
+              <div className="card trend-card"><TrendChart points={s.trend} period={period} onPick={(from) => set({ anchor: from })} /></div>
             </div>
           )}
         </>
       ) : tab === 'note' ? (
         merchantSlices.length === 0 ? <div className="empty">No notes or merchants in this period.</div> : (
-          <div className="list" style={{ marginTop: 6 }}>
-            {merchantSlices.map((sl) => (
-              <ShareRow key={sl.key} color={sl.color} share={sl.share} name={sl.name} amount={sl.amount}
+          <div className="list share-list" style={{ marginTop: 6 }}>
+            {merchantSlices.map((sl, i) => (
+              <ShareRow key={sl.key} i={i} color={sl.color} share={sl.share} name={sl.name} amount={sl.amount}
                 onClick={sl.rest ? undefined : () => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&q=${encodeURIComponent(sl.key)}`)} />
             ))}
           </div>

@@ -82,7 +82,7 @@
   --hero-1: #5a3f17; --hero-2: #8c6424; --hero-3: #c9a04f;
   --k-blue: #8c6424; --k-violet: #6b4a1c; --k-orange: #c9852e; --k-red: #b5523b;
   --inc: #7a5a1f; --exp: #b5523b;
-  --s1: #a87b2e; --s2: #d9b25f; --s3: #6b4a1c; --s4: #c9852e; --s5: #8a9a5b; --s6: #b5523b; --s7: #e3c98b; --s8: #7c6a4f; --s9: #c4a484; --s10: #9e7b4f;
+  --s1: #a87b2e; --s2: #b5523b; --s3: #6f8a4a; --s4: #e0b65a; --s5: #4a3418; --s6: #d08b6a; --s7: #4f7a78; --s8: #c9a97a; --s9: #8a5a6e; --s10: #7c6a4f; --s-other: #cfc3ad;
 }
 [data-theme="brass"][data-mode="dark"] {
   --bg: #120e08; --bg-glow: radial-gradient(800px 500px at 90% -160px, rgba(201,160,79,0.14), transparent 70%);
@@ -381,14 +381,51 @@ body { font-size: 14px; line-height: 1.4; }
 .side-tabs button { padding: 10px 4px; border: 0; background: none; font-weight: 650; font-size: 14px; color: var(--ink-3); border-bottom: 2.5px solid transparent; cursor: pointer; }
 .side-tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
 .side-tabs button .num { margin-left: 4px; }
-.pie-card { padding: 6px 4px; }
-.pie { display: block; max-width: 460px; margin: 0 auto; }
-.share-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 10px 14px; background: none; border: 0; text-align: left; color: inherit; cursor: pointer; }
+/* ---------- Stats breakdown: donut + ranked rows ---------- */
+.breakdown { display: grid; grid-template-columns: 1fr; gap: 6px; padding: 18px 10px 8px; }
+@media (min-width: 720px) { .breakdown { grid-template-columns: 260px 1fr; gap: 26px; align-items: center; padding: 22px 20px; } }
+.donut-pie { position: relative; width: min(240px, 72vw); aspect-ratio: 1; margin: 0 auto; }
+.donut-pie svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.dp-slice { transition: stroke-dasharray 900ms cubic-bezier(.2,.8,.2,1), stroke-width 220ms var(--ease), opacity 220ms; }
+.dp-slice.on { stroke-width: 38px; }
+.dp-slice.dim { opacity: 0.35; }
+.dp-center { position: absolute; inset: 22%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; animation: fade-up 260ms var(--ease); }
+.dp-center .dp-label { font-size: 12.5px; color: var(--ink-2); font-weight: 600; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dp-center b { font-size: clamp(18px, 4.6vw, 24px); font-weight: 700; letter-spacing: -0.03em; margin: 2px 0; }
+.dp-center .dp-pct { font-size: 11.5px; color: var(--ink-3); }
+.share-list { display: flex; flex-direction: column; min-width: 0; }
+.share-row { display: grid; grid-template-columns: 12px 1fr auto auto; grid-template-rows: auto 6px; column-gap: 10px; row-gap: 6px; align-items: center;
+  width: 100%; padding: 10px 10px; background: none; border: 0; border-radius: 12px; text-align: left; color: inherit; cursor: pointer;
+  transition: background 160ms, opacity 200ms, transform 160ms var(--ease); animation: fade-up 420ms var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
 .share-row:disabled { cursor: default; }
-.share-row + .share-row { border-top: 1px solid var(--border); }
-.share-row .badge { color: #fff; font-weight: 700; font-size: 12px; text-align: center; border-radius: 6px; padding: 4px 0; text-shadow: 0 1px 1px rgba(0,0,0,0.18); }
+.share-row:hover:not(:disabled), .share-row.on { background: var(--surface-2); }
+.share-row.dim { opacity: 0.55; }
+.share-row .dot { width: 10px; height: 10px; border-radius: 50%; }
 .share-row .sname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.share-row .samt { font-weight: 650; }
+.share-row .spct { font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
+.share-row .samt { font-weight: 680; min-width: 84px; text-align: right; }
+.share-row .sbar { grid-column: 2 / 5; height: 6px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 7%, transparent); overflow: hidden; }
+.share-row .sbar i { display: block; height: 100%; border-radius: 6px; transition: width 800ms cubic-bezier(.2,.8,.2,1); }
+.list.share-list { padding: 4px; }
+
+/* ---------- Trend bars ---------- */
+.trend-card { padding: 14px 12px 8px; }
+.trend { position: relative; width: 100%; min-height: 190px; }
+.trend svg { display: block; overflow: visible; }
+.trend .tb { transform-box: fill-box; transform-origin: 50% 100%; transition: transform 700ms cubic-bezier(.2,.8,.2,1), opacity 160ms; }
+.trend .tb { opacity: 0.3; }
+.trend .tb.hov { opacity: 0.7; }
+.trend .tb.cur { opacity: 1; }
+.trend-val { position: absolute; transform: translateX(-50%); font-size: 12.5px; font-weight: 700; color: var(--ink); opacity: 0; transition: opacity 400ms 600ms; pointer-events: none; white-space: nowrap; }
+.trend-val.on { opacity: 1; }
+.trend .avg { opacity: 0; transition: opacity 400ms 500ms; }
+.trend .avg.on { opacity: 1; }
+.trend-tip { position: absolute; transform: translateX(-50%); pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: var(--ink); color: var(--surface); padding: 6px 10px; border-radius: 10px; font-size: 11.5px; white-space: nowrap; box-shadow: var(--shadow);
+  animation: tip-in 200ms var(--ease); }
+.trend-tip b { font-size: 13.5px; font-weight: 700; }
+.trend-tip::after { content: ''; position: absolute; bottom: -5px; left: 50%; width: 10px; height: 10px; background: var(--ink); transform: translateX(-50%) rotate(45deg); border-radius: 2px; z-index: -1; }
+@keyframes tip-in { from { opacity: 0; transform: translate(-50%, 4px); } }
 
 /* ---------- Minimal Home ---------- */
 .card-totals { display: grid; margin: 10px 0 0; background: var(--surface); border: var(--border-w) solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); color: inherit; padding: 10px 0; }
@@ -427,3 +464,62 @@ body { font-size: 14px; line-height: 1.4; }
 .pin-boxes input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; border: 0; background: transparent; }
 .pin-boxes span { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink-3); }
 .pin-boxes span.on { background: var(--ink); border-color: var(--ink); }
+
+
+/* ---------- Motion, app-wide ---------- */
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } }
+@keyframes grow-x { from { transform: scaleX(0); } }
+@keyframes grow-y { from { transform: scaleY(0); } }
+@keyframes pop-in { 0% { opacity: 0; transform: scale(0.94); } 100% { opacity: 1; transform: none; } }
+@keyframes tab-bounce { 0% { transform: translateY(0); } 40% { transform: translateY(-3px) scale(1.08); } 100% { transform: none; } }
+
+/* Each page eases in when you switch to it, its blocks one after another. */
+.page-anim > * { animation: fade-up 460ms var(--ease) both; }
+.page-anim > *:nth-child(2) { animation-delay: 50ms; }
+.page-anim > *:nth-child(3) { animation-delay: 100ms; }
+.page-anim > *:nth-child(4) { animation-delay: 150ms; }
+.page-anim > *:nth-child(5) { animation-delay: 200ms; }
+.page-anim > *:nth-child(6) { animation-delay: 250ms; }
+.page-anim > *:nth-child(n+7) { animation-delay: 300ms; }
+
+/* List rows cascade in. */
+.list > .item { animation: fade-up 380ms var(--ease) both; }
+.list > .item:nth-child(2) { animation-delay: 30ms; } .list > .item:nth-child(3) { animation-delay: 60ms; }
+.list > .item:nth-child(4) { animation-delay: 90ms; } .list > .item:nth-child(5) { animation-delay: 120ms; }
+.list > .item:nth-child(6) { animation-delay: 150ms; } .list > .item:nth-child(7) { animation-delay: 180ms; }
+.list > .item:nth-child(n+8) { animation-delay: 210ms; }
+
+/* Bars and meters fill from zero. */
+.minibars span { transform-origin: 50% 100%; animation: grow-y 700ms cubic-bezier(.2,.8,.2,1) both; }
+.minibars span:nth-child(2) { animation-delay: 40ms; } .minibars span:nth-child(3) { animation-delay: 80ms; }
+.minibars span:nth-child(4) { animation-delay: 120ms; } .minibars span:nth-child(5) { animation-delay: 160ms; }
+.minibars span:nth-child(n+6) { animation-delay: 200ms; }
+.obar { transform-origin: 50% 100%; animation: grow-y 800ms cubic-bezier(.2,.8,.2,1) both; }
+.ob:nth-child(2) .obar { animation-delay: 90ms; } .ob:nth-child(3) .obar { animation-delay: 180ms; }
+.meter > i, .meter .fill, .goal-bar > *, .hero .track span, .track span { transform-origin: 0 50%; animation: grow-x 900ms cubic-bezier(.2,.8,.2,1) both; animation-delay: 150ms; }
+.donut-chart circle { transition: stroke-width 180ms var(--ease), opacity 200ms; }
+.donut-chart svg { animation: pop-in 600ms var(--ease) both; }
+.gauge svg path { animation: fade-up 500ms var(--ease) both; }
+.gauge svg path:nth-child(2) { animation-delay: 60ms; } .gauge svg path:nth-child(3) { animation-delay: 120ms; }
+.gauge svg path:nth-child(4) { animation-delay: 180ms; } .gauge svg path:nth-child(5) { animation-delay: 240ms; }
+.gauge svg circle { animation: pop-in 500ms 350ms var(--ease) both; }
+.cal .d { animation: pop-in 320ms var(--ease) both; }
+
+/* Touch feedback and hover lift. */
+.btn, .chip, .seg button, .icon-btn, .item, .fab-float, .tabbar a { transition: transform 140ms var(--ease), background 160ms, color 160ms, box-shadow 160ms, opacity 160ms; }
+.btn:active:not(:disabled), .chip:active, .icon-btn:active, .fab-float:active { transform: scale(0.96); }
+.item:active { transform: scale(0.992); }
+.seg button.on { animation: pop-in 220ms var(--ease); }
+.tabbar a.active svg { animation: tab-bounce 380ms var(--ease); }
+.side-tabs button { transition: color 200ms, border-color 260ms var(--ease); }
+@media (hover: hover) {
+  .card, .kpi-card, .goal-card { transition: transform 200ms var(--ease), box-shadow 200ms; }
+  .kpi-card:hover, .goal-card:hover, a.card:hover, button.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg, 0 12px 28px -14px rgba(0,0,0,0.25)); }
+  .fab-float:hover { transform: translateY(-2px) rotate(90deg); }
+}
+.hero { animation: pop-in 520ms var(--ease) both; }
+.toast { animation: toast-in 260ms var(--ease); }
+.empty { animation: fade-up 420ms var(--ease) both; }
+
+/* Chart tracks and bars follow the theme (they were a fixed blue/grey). */
+html:root { --bar-track: color-mix(in srgb, var(--ink) 8%, transparent); --bar: var(--accent); --bar-2: color-mix(in srgb, var(--accent) 55%, var(--surface)); }

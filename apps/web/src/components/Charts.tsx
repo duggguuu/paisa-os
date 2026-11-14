@@ -1,50 +1,92 @@
+import { useState } from 'react';
+import { useAppear, useCountUp, useSize } from '../motion';
 import { compact, money, pct, periodLabel } from '../lib';
 
-/** Spending over the last N periods. Current period highlighted; dashed line = average of the 3 before it. */
+/** Spending over the last N periods as bars. Current period solid; dashed line = average of the 3 before it.
+ *  Drawn at the card's real width (no stretched viewBox), bars grow in, and hovering/tapping shows the amount. */
 export function TrendChart({ points, period, onPick }: { points: { from: string; to: string; total: number }[]; period: string; onPick?: (from: string) => void }) {
+  const [ref, { width }] = useSize<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
+  const appear = useAppear(points.map((p) => p.from + p.total).join());
   if (!points.length) return null;
-  const W = 360, H = 170, padL = 8, padR = 8, padT = 16, padB = 28;
-  const max = Math.max(...points.map((p) => p.total), 1);
-  const x = (i: number) => padL + (i * (W - padL - padR)) / Math.max(points.length - 1, 1);
-  const y = (v: number) => padT + (1 - v / max) * (H - padT - padB);
+  const W = Math.max(width, 260), H = W < 480 ? 190 : 230;
+  const padL = 44, padR = 10, padT = 22, padB = 28;
   const last = points.length - 1;
   const prev3 = points.slice(Math.max(0, last - 3), last);
   const avg = prev3.length ? prev3.reduce((s, p) => s + p.total, 0) / prev3.length : null;
-  const d = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.total).toFixed(1)}`).join(' ');
-  const area = `${d} L${x(last)} ${H - padB} L${x(0)} ${H - padB} Z`;
+  const top = niceMax(Math.max(...points.map((p) => p.total), avg ?? 0, 1));
+  const plotH = H - padT - padB;
+  const slot = (W - padL - padR) / points.length;
+  const bw = Math.max(6, Math.min(34, slot * 0.58));
+  const cx = (i: number) => padL + slot * i + slot / 2;
+  const y = (v: number) => padT + (1 - v / top) * plotH;
   const label = (from: string) => {
     const [yy, m] = from.split('-').map(Number);
-    if (period === 'month') return ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'][m - 1];
-    if (period === 'year') return String(yy).slice(2);
-    return `${Number(from.slice(8))}`;
+    if (period === 'month') return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1].slice(0, W < 480 ? 1 : 3);
+    if (period === 'year') return String(yy);
+    return `${Number(from.slice(8))}/${m}`;
   };
+  const ticks = [0, top / 2, top];
+  const h = hover ?? last;
+  const showTip = hover !== null;
+  const tipX = Math.min(Math.max(cx(h), 70), W - 70);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Spending over the last ${points.length} periods`}>
-      <defs>
-        <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--bar)" stopOpacity="0.28" />
-          <stop offset="100%" stopColor="var(--bar)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#trend-fill)" />
-      <path d={d} fill="none" stroke="var(--bar)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-      {avg !== null && (
-        <g>
-          <line x1={padL} x2={W - padR} y1={y(avg)} y2={y(avg)} stroke="var(--ink-3)" strokeDasharray="4 4" strokeWidth="1" />
-          <text x={W - padR} y={y(avg) - 5} textAnchor="end" fontSize="11" fill="var(--ink-3)">3-period avg {compact(avg)}</text>
-        </g>
+    <div ref={ref} className="trend" onMouseLeave={() => setHover(null)}>
+      {width > 0 && (
+        <svg width={W} height={H} role="img" aria-label={`Spending over the last ${points.length} periods`}>
+          <defs>
+            <linearGradient id="bar-cur" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" />
+              <stop offset="100%" stopColor="color-mix(in srgb, var(--accent) 70%, var(--surface))" />
+            </linearGradient>
+          </defs>
+          {ticks.map((t) => (
+            <g key={t}>
+              <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeWidth="1" />
+              <text x={padL - 8} y={y(t) + 4} textAnchor="end" fontSize="11" fill="var(--ink-3)">{t ? compact(t) : '0'}</text>
+            </g>
+          ))}
+          {points.map((p, i) => {
+            const bh = Math.max(p.total > 0 ? 3 : 0, (p.total / top) * plotH);
+            const on = i === h;
+            return (
+              <g key={p.from} className="tbar" style={{ cursor: onPick ? 'pointer' : 'default' }}
+                onMouseEnter={() => setHover(i)} onClick={() => { setHover(i); onPick?.(p.from); }}>
+                <rect x={padL + slot * i} y={padT} width={slot} height={plotH} fill="transparent" />
+                <rect className={`tb ${i === last ? 'cur' : on ? 'hov' : ''}`} x={cx(i) - bw / 2} y={y(0) - bh} width={bw} height={bh} rx={Math.min(7, bw / 2)}
+                  fill={i === last ? 'url(#bar-cur)' : 'var(--accent)'}
+                  style={{ transform: appear ? 'scaleY(1)' : 'scaleY(0)', transitionDelay: `${i * 45}ms` }} />
+                <text x={cx(i)} y={H - 9} textAnchor="middle" fontSize="11.5" fill={on || i === last ? 'var(--ink)' : 'var(--ink-3)'} fontWeight={i === last ? 650 : 450}>{label(p.from)}</text>
+              </g>
+            );
+          })}
+          {avg !== null && avg > 0 && (
+            <g className={`avg ${appear ? 'on' : ''}`} pointerEvents="none">
+              <line x1={padL} x2={W - padR} y1={y(avg)} y2={y(avg)} stroke="var(--ink-2)" strokeDasharray="5 5" strokeWidth="1.2" />
+              <rect x={padL + 4} y={y(avg) - 19} width={W < 480 ? 92 : 116} height={16} rx={8} fill="var(--surface-2)" />
+              <text x={padL + 12} y={y(avg) - 7.5} fontSize="10.5" fontWeight="600" fill="var(--ink-2)">{W < 480 ? 'Avg' : '3-month avg'} {compact(avg)}</text>
+            </g>
+          )}
+        </svg>
       )}
-      {points.map((p, i) => (
-        <g key={p.from} onClick={() => onPick?.(p.from)} style={{ cursor: onPick ? 'pointer' : 'default' }}>
-          <title>{periodLabel(period, p.from, p.to)}: {money(p.total, { whole: true })}</title>
-          <rect x={x(i) - 14} y={padT} width={28} height={H - padT - padB} fill="transparent" />
-          <circle cx={x(i)} cy={y(p.total)} r={i === last ? 5 : 3} fill={i === last ? 'var(--bar)' : 'var(--surface)'} stroke="var(--bar)" strokeWidth="2" />
-          <text x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill={i === last ? 'var(--ink)' : 'var(--ink-3)'} fontWeight={i === last ? 600 : 400}>{label(p.from)}</text>
-        </g>
-      ))}
-      <text x={x(last)} y={y(points[last].total) - 10} textAnchor="end" fontSize="12" fontWeight="600" fill="var(--ink)">{compact(points[last].total)}</text>
-    </svg>
+      {width > 0 && !showTip && points[last].total > 0 && (
+        <div className={`trend-val ${appear ? 'on' : ''}`} style={{ left: cx(last), top: y(points[last].total) - 24 }}>{compact(points[last].total)}</div>
+      )}
+      {width > 0 && showTip && (
+        <div className="trend-tip" style={{ left: tipX, top: Math.max(0, y(points[h].total) - 46) }} key={h}>
+          <span>{periodLabel(period, points[h].from, points[h].to)}</span>
+          <b className="num">{money(points[h].total, { whole: true })}</b>
+        </div>
+      )}
+    </div>
   );
+}
+
+/** A round axis top: 1, 2, 2.5, 5 × 10^n just above the max. */
+function niceMax(v: number) {
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
 }
 
 /** Calendar of the month, each day shaded by spend. A green dot marks no-spend days in the past. */
@@ -225,51 +267,42 @@ export function pieSlices<T extends { amount: number; name: string; icon?: strin
   return out;
 }
 
-/** Pie with outside labels and leader lines; labels are spaced so they never overlap. */
-export function PieLabeled({ slices, onPick }: { slices: ReturnType<typeof pieSlices>; onPick?: (key: string) => void }) {
+/** Donut for Stats: slices sweep in, hovering or tapping a slice (or its row) lifts it and shows it in the middle. */
+export function DonutPie({ slices, total, label, active, onActive, onPick }: {
+  slices: ReturnType<typeof pieSlices>; total: number; label: string;
+  active: string | null; onActive: (k: string | null) => void; onPick?: (key: string) => void;
+}) {
+  const appear = useAppear(slices.map((x) => x.key + x.amount).join());
+  const cur = slices.find((x) => x.key === active) ?? null;
+  const shown = useCountUp(cur ? cur.amount : total);
   if (!slices.length) return null;
-  const W = 400, H = 250, cx = W / 2, cy = H / 2, R = 78;
-  let a0 = -Math.PI / 2;
-  const arcs = slices.map((s) => {
-    const a1 = a0 + s.share * Math.PI * 2;
-    const mid = (a0 + a1) / 2;
-    const large = a1 - a0 > Math.PI ? 1 : 0;
-    const p = (a: number, r = R) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
-    const [x0, y0] = p(a0), [x1, y1] = p(a1);
-    const d = s.share >= 0.9999 ? `M${cx} ${cy - R}A${R} ${R} 0 1 1 ${cx - 0.01} ${cy - R}Z` : `M${cx} ${cy}L${x0.toFixed(2)} ${y0.toFixed(2)}A${R} ${R} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}Z`;
-    a0 = a1;
-    return { ...s, d, mid };
-  });
-  // Labels: slices ≥ 2%, split left/right, then pushed apart vertically.
-  const GAP = 28;
-  const labels = arcs.filter((a) => a.share >= 0.02).map((a) => {
-    const right = Math.cos(a.mid) >= 0;
-    return { ...a, right, y: cy + (R + 22) * Math.sin(a.mid), ex: cx + (R + 6) * Math.cos(a.mid), ey: cy + (R + 6) * Math.sin(a.mid) };
-  });
-  for (const side of [true, false]) {
-    const group = labels.filter((l) => l.right === side).sort((a, b) => a.y - b.y);
-    for (let i = 1; i < group.length; i++) if (group[i].y - group[i - 1].y < GAP) group[i].y = group[i - 1].y + GAP;
-    const overflow = group.length ? group[group.length - 1].y - (H - 14) : 0;
-    if (overflow > 0) for (const g of group) g.y -= overflow;
-    for (let i = group.length - 2; i >= 0; i--) if (group[i + 1].y - group[i].y < GAP) group[i].y = group[i + 1].y - GAP;
-  }
-  const short = (s: string) => (s.length > 10 ? `${s.slice(0, 9)}…` : s);
+  const S = 240, c = S / 2, R = 92, SW = 30, C = 2 * Math.PI * R, GAP = slices.length > 1 ? 3 : 0;
+  let offset = 0;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" className="pie" role="img" aria-label={slices.map((s) => `${s.name} ${Math.round(s.share * 1000) / 10}%`).join(', ')}>
-      {arcs.map((a) => (
-        <path key={a.key} d={a.d} fill={a.color} stroke="var(--surface)" strokeWidth="1.5" style={{ cursor: onPick && !a.rest ? 'pointer' : 'default' }}
-          onClick={() => !a.rest && onPick?.(a.key)}><title>{a.name}: {(a.share * 100).toFixed(1)}%</title></path>
-      ))}
-      {labels.map((l) => {
-        const lx = l.right ? cx + R + 26 : cx - R - 26;
-        return (
-          <g key={l.key}>
-            <path d={`M${l.ex.toFixed(1)} ${l.ey.toFixed(1)} Q${(l.right ? lx - 10 : lx + 10).toFixed(1)} ${l.y.toFixed(1)} ${lx.toFixed(1)} ${l.y.toFixed(1)}`} fill="none" stroke={l.color} strokeWidth="1.2" />
-            <text x={l.right ? lx + 4 : lx - 4} y={l.y - 2} textAnchor={l.right ? 'start' : 'end'} fontSize="12.5" fontWeight="650" fill="var(--ink)">{l.icon ? `${l.icon} ` : ''}{short(l.name)}</text>
-            <text x={l.right ? lx + 4 : lx - 4} y={l.y + 12} textAnchor={l.right ? 'start' : 'end'} fontSize="11.5" fill="var(--ink-2)">{(l.share * 100).toFixed(1)} %</text>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="donut-pie" onMouseLeave={() => onActive(null)}>
+      <svg viewBox={`0 0 ${S} ${S}`} role="img" aria-label={`${label}: ${slices.map((x) => `${x.name} ${pct(x.share)}`).join(', ')}`}>
+        <circle cx={c} cy={c} r={R} fill="none" stroke="var(--bar-track)" strokeWidth={SW} />
+        {slices.map((x, i) => {
+          const len = Math.max(x.share * C - GAP, 0.5);
+          const el = (
+            <circle key={x.key} className={`dp-slice ${active === x.key ? 'on' : active ? 'dim' : ''}`} cx={c} cy={c} r={R} fill="none"
+              stroke={x.color} strokeWidth={SW}
+              strokeDasharray={appear ? `${len} ${C}` : `0 ${C}`}
+              strokeDashoffset={-offset} transform={`rotate(-90 ${c} ${c})`}
+              style={{ transitionDelay: `${i * 70}ms`, cursor: onPick && !x.rest ? 'pointer' : 'default' }}
+              onMouseEnter={() => onActive(x.key)} onClick={() => (active === x.key && onPick && !x.rest ? onPick(x.key) : onActive(x.key))}>
+              <title>{x.name}: {money(x.amount, { whole: true })} ({pct(x.share)})</title>
+            </circle>
+          );
+          offset += x.share * C;
+          return el;
+        })}
+      </svg>
+      <div className="dp-center" key={cur?.key ?? 'all'}>
+        <span className="dp-label">{cur ? <>{cur.icon ? `${cur.icon} ` : ''}{cur.name}</> : label}</span>
+        <b className="num">{money(Math.round(shown), { whole: true })}</b>
+        <span className="dp-pct">{cur ? `${(cur.share * 100).toFixed(1)}% of total` : `${slices.length} ${slices.length === 1 ? 'category' : 'categories'}`}</span>
+      </div>
+    </div>
   );
 }
