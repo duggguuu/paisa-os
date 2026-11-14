@@ -264,3 +264,15 @@ test('in-progress period compares against the same number of days last period', 
   const mar = stats.resolvePeriod('month', '2026-03-31', 1, undefined, '2026-03-31');
   assert.deepEqual(mar.previous, { from: '2026-02-01', to: '2026-03-01' }, 'capped at the end of a shorter month');
 });
+
+test('migrations: re-running is a no-op, and an edited applied migration stops startup', async () => {
+  assert.deepEqual(await migrate(sql), []);
+  const [row] = await sql<{ checksum: string }[]>`select checksum from schema_migrations where name = '001_init.sql'`;
+  assert.match(row.checksum, /^[0-9a-f]{64}$/);
+  await sql`update schema_migrations set checksum = 'tampered' where name = '001_init.sql'`;
+  try {
+    await assert.rejects(() => migrate(sql), /was edited after it was applied/);
+  } finally {
+    await sql`update schema_migrations set checksum = ${row.checksum} where name = '001_init.sql'`;
+  }
+});

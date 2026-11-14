@@ -1,0 +1,429 @@
+{
+ "accounts": [
+  {
+   "id": "Aditi",
+   "name": "Aditi",
+   "kind": "receivable",
+   "class": "asset",
+   "is_archived": false
+  },
+  {
+   "id": "Axis Bank",
+   "name": "Axis Bank",
+   "kind": "bank",
+   "class": "asset",
+   "is_archived": false
+  },
+  {
+   "id": "Cash",
+   "name": "Cash",
+   "kind": "cash",
+   "class": "asset",
+   "is_archived": false
+  },
+  {
+   "id": "HDFC Bank",
+   "name": "HDFC Bank",
+   "kind": "bank",
+   "class": "asset",
+   "is_archived": false
+  },
+  {
+   "id": "Paytm Wallet",
+   "name": "Paytm Wallet",
+   "kind": "wallet",
+   "class": "asset",
+   "is_archived": false
+  },
+  {
+   "id": "Rohan",
+   "name": "Rohan",
+   "kind": "receivable",
+   "class": "asset",
+   "is_archived": false
+  },
+  {
+   "id": "Zerodha (demo)",
+   "name": "Zerodha (demo)",
+   "kind": "investment",
+   "class": "asset",
+   "is_archived": false
+  },
+  {
+   "id": "HDFC Millennia Card",
+   "name": "HDFC Millennia Card",
+   "kind": "credit_card",
+   "class": "liability",
+   "is_archived": false
+  },
+  {
+   "id": "Opening balances",
+   "name": "Opening balances",
+   "kind": "equity",
+   "class": "equity",
+   "is_archived": false
+  }
+ ],
+ "categories": [
+  {
+   "id": "Salary",
+   "name": "Salary",
+   "class": "income",
+   "parent_id": null
+  },
+  {
+   "id": "Interest",
+   "name": "Interest",
+   "class": "income",
+   "parent_id": null
+  },
+  {
+   "id": "Dividends",
+   "name": "Dividends",
+   "class": "income",
+   "parent_id": null
+  },
+  {
+   "id": "Refunds & cashback",
+   "name": "Refunds & cashback",
+   "class": "income",
+   "parent_id": null
+  },
+  {
+   "id": "Gifts received",
+   "name": "Gifts received",
+   "class": "income",
+   "parent_id": null
+  },
+  {
+   "id": "Other income",
+   "name": "Other income",
+   "class": "income",
+   "parent_id": null
+  },
+  {
+   "id": "Apparel",
+   "name": "Apparel",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Bank charges",
+   "name": "Bank charges",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Courses",
+   "name": "Courses",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Doctor",
+   "name": "Doctor",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Flights & trains",
+   "name": "Flights & trains",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Food",
+   "name": "Food",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Fuel",
+   "name": "Fuel",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Groceries",
+   "name": "Groceries",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Mobile",
+   "name": "Mobile",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Movies & events",
+   "name": "Movies & events",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Parents",
+   "name": "Parents",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Rent",
+   "name": "Rent",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Books",
+   "name": "Books",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Cab & auto",
+   "name": "Cab & auto",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Dining out",
+   "name": "Dining out",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Electronics",
+   "name": "Electronics",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Games",
+   "name": "Games",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Housing",
+   "name": "Housing",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Interest paid",
+   "name": "Interest paid",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Maintenance",
+   "name": "Maintenance",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Medicines",
+   "name": "Medicines",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Siblings",
+   "name": "Siblings",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Stays",
+   "name": "Stays",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Subscriptions",
+   "name": "Subscriptions",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Delivery",
+   "name": "Delivery",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Electricity",
+   "name": "Electricity",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Fitness",
+   "name": "Fitness",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Household",
+   "name": "Household",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Insurance",
+   "name": "Insurance",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Late fees",
+   "name": "Late fees",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Local travel",
+   "name": "Local travel",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Outings",
+   "name": "Outings",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Public transport",
+   "name": "Public transport",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Transport",
+   "name": "Transport",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Gifts given",
+   "name": "Gifts given",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Internet",
+   "name": "Internet",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Parking & tolls",
+   "name": "Parking & tolls",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Shopping",
+   "name": "Shopping",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Snacks & coffee",
+   "name": "Snacks & coffee",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Bills & subscriptions",
+   "name": "Bills & subscriptions",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Vehicle service",
+   "name": "Vehicle service",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Water & gas",
+   "name": "Water & gas",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Health",
+   "name": "Health",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Entertainment",
+   "name": "Entertainment",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Personal care",
+   "name": "Personal care",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Education",
+   "name": "Education",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Travel",
+   "name": "Travel",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Family",
+   "name": "Family",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Social life",
+   "name": "Social life",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Hobbies",
+   "name": "Hobbies",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Religious & charity",
+   "name": "Religious & charity",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Fees & charges",
+   "name": "Fees & charges",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Taxes",
+   "name": "Taxes",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Other",
+   "name": "Other",
+   "class": "expense",
+   "parent_id": null
+  }
+ ]
+}

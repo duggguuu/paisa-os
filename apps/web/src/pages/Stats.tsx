@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, money, compact, pct, periodLabel, addDays, todayIST, KIND_ICON } from '../lib';
-import { TrendChart, SpendCalendar } from '../components/Charts';
+import { TrendChart, SpendCalendar, Donut, toSlices, OTHER_COLOR, type Slice } from '../components/Charts';
+import { tint } from '../components/Icons';
 import { TxnRow } from '../components/TxnRow';
 
 type Period = 'week' | 'month' | 'year';
@@ -18,6 +19,14 @@ function Delta({ cur, base, word, invert = false }: { cur: number; base: number 
   const up = d > 0;
   const bad = invert ? !up : up;
   return <span className={`delta ${bad ? 'up' : 'down'}`}>{up ? '▲' : '▼'} {pct(Math.abs(d))} vs {word}</span>;
+}
+
+function DeltaPill({ cur, base, word }: { cur: number; base: number | null; word: string }) {
+  if (base === null || base === 0) return null;
+  const d = (cur - base) / Math.abs(base);
+  if (Math.abs(d) < 0.005) return <div className="pill">Same as {word}</div>;
+  const up = d > 0;
+  return <div className={`pill ${up ? 'bad' : 'good'}`}>{up ? '▲' : '▼'} {pct(Math.abs(d))} {up ? 'more' : 'less'} than {word}</div>;
 }
 
 export function Stats() {
@@ -63,23 +72,19 @@ export function Stats() {
 
       {!s ? <div className="card"><div className="skeleton" /></div> : (
         <>
-          <div className="card">
-            <div className="grid2">
-              <button className="tile"
-                onClick={() => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&kind=expense`)}>
-                <div className="hero-label">Spent</div>
-                <div className="stat-num num">{money(s.summary.spent, { whole: true })}</div>
-                <div className="tiny"><Delta cur={s.summary.spent} base={s.previousSummary?.spent ?? null} word={s.comparedToDate ? SAME_POINT[period] : PERIOD_WORD[period]} /></div>
+          <div className="hero stats-hero">
+            <button className="tile" onClick={() => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&kind=expense`)}>
+              <div className="hero-label">Spent{isCurrent ? ' so far' : ''}</div>
+              <div className="hero-num num">{money(s.summary.spent, { whole: true })}</div>
+            </button>
+            <DeltaPill cur={s.summary.spent} base={s.previousSummary?.spent ?? null} word={s.comparedToDate ? SAME_POINT[period] : PERIOD_WORD[period]} />
+            <div className="hero-stats">
+              <button className="tile" onClick={() => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&kind=income`)}>
+                <span>Earned</span><b className="num">{s.summary.noIncomeLogged ? '—' : compact(s.summary.earned)}</b>
               </button>
-              <button className="tile"
-                onClick={() => navigate(`/activity?from=${s.range.from}&to=${s.range.to}&kind=income`)}>
-                <div className="hero-label">Earned</div>
-                <div className="stat-num num">{s.summary.noIncomeLogged ? '—' : money(s.summary.earned, { whole: true })}</div>
-                <div className="tiny faint">{s.summary.noIncomeLogged ? 'No income logged' : `Saved ${money(s.summary.saved, { whole: true })} · ${pct(s.summary.savingsRate)}`}</div>
-              </button>
+              <div><span>Saved</span><b className="num">{s.summary.noIncomeLogged ? '—' : `${compact(s.summary.saved)} · ${pct(s.summary.savingsRate)}`}</b></div>
+              <div><span>Per day</span><b className="num">{compact(s.summary.avgDailySpend)}</b></div>
             </div>
-            <div className="divider" />
-            <div className="tiny muted">Average {money(s.summary.avgDailySpend, { whole: true })} a day over {s.summary.days} days{s.comparedToDate ? ' so far' : ''}</div>
           </div>
 
           <div className="section">
@@ -89,6 +94,21 @@ export function Stats() {
               ))}
             </div>
           </div>
+
+          {view !== 'people' && (() => {
+            const rows: Slice[] = view === 'categories' ? s.categories.map((c: any) => ({ key: c.id, name: c.name, icon: c.icon, amount: c.amount }))
+              : view === 'merchants' ? s.merchants.map((m: any) => ({ key: m.name, name: m.name, amount: m.amount }))
+              : s.accounts.map((a: any) => ({ key: a.id, name: a.name, icon: KIND_ICON[a.kind], amount: a.amount }));
+            const total = rows.reduce((t, r) => t + Math.max(r.amount, 0), 0);
+            if (!total) return null;
+            const pick = (key: string) => view === 'categories' ? set({ category: key })
+              : navigate(`/activity?from=${s.range.from}&to=${s.range.to}&${view === 'merchants' ? `q=${encodeURIComponent(key)}` : `accountId=${key}`}`);
+            return (
+              <div className="section">
+                <div className="card"><Donut rows={rows} total={total} label={categoryId ? 'In this category' : 'Spent'} onPick={pick} /></div>
+              </div>
+            );
+          })()}
 
           <div className="section">
             {view === 'categories' && <CategoryBars s={s} period={period} word={s.comparedToDate ? SAME_POINT[period] : PERIOD_WORD[period]} categoryId={categoryId} onDrill={(id) => set({ category: id })} onBack={() => set({ category: null })} />}
@@ -154,6 +174,7 @@ function CategoryBars({ s, period, word, categoryId, onDrill, onBack }: { s: any
   const drilled = categoryId ? rows : null;
   if (!rows.length) return <div className="list"><div className="empty">No spending in this period.</div></div>;
   const scale = Math.max(...rows.map((r) => Math.max(r.amount, r.budget ?? 0)), 1);
+  const { colorOf } = toSlices(rows.map((r) => ({ key: r.id, name: r.name, amount: r.amount })));
   return (
     <>
       {drilled && (
@@ -168,11 +189,11 @@ function CategoryBars({ s, period, word, categoryId, onDrill, onBack }: { s: any
           return (
             <button key={r.id} className="bar-row" onClick={() => onDrill(r.id)}
               aria-label={`${r.name}: ${money(r.amount, { whole: true })}`}>
-              <span className="icon" aria-hidden>{r.icon ?? '•'}</span>
+              <span className="icon avatar sm" style={tint(r.icon ?? r.name)} aria-hidden>{r.icon ?? '•'}</span>
               <span className="name"><span>{r.name}</span><span className="tiny faint">{pct(r.share)}</span></span>
               <span className="value num">{money(r.amount, { whole: true })}</span>
               <span className="meter">
-                <span className={`fill ${over ? 'over' : ''}`} style={{ width: `${(Math.max(r.amount, 0) / scale) * 100}%` }} />
+                <span className={`fill ${over ? 'over' : ''}`} style={{ width: `${(Math.max(r.amount, 0) / scale) * 100}%`, ...(over ? {} : { background: colorOf.get(r.id) ?? OTHER_COLOR }) }} />
                 {r.budget !== null && <span className="budget" style={{ left: `${(r.budget / scale) * 100}%` }} title={`Budget ${money(r.budget, { whole: true })}`} />}
               </span>
               <span className="meta">
@@ -184,7 +205,7 @@ function CategoryBars({ s, period, word, categoryId, onDrill, onBack }: { s: any
           );
         })}
       </div>
-      {!categoryId && <p className="tiny faint" style={{ margin: '8px 2px' }}>"Usual" is your average over the 3 previous {period}s. The black tick on a bar is its budget.</p>}
+      {!categoryId && <p className="tiny faint" style={{ margin: '8px 2px' }}>"Usual" is your average over the 3 previous {period}s. The tick on a bar marks its budget.</p>}
     </>
   );
 }
@@ -192,14 +213,15 @@ function CategoryBars({ s, period, word, categoryId, onDrill, onBack }: { s: any
 function SimpleBars({ rows, total, empty, onPick }: { rows: { key: string; icon: string; name: string; amount: number; sub: string }[]; total: number; empty: string; onPick: (r: any) => void }) {
   if (!rows.length) return <div className="list"><div className="empty">{empty}</div></div>;
   const max = Math.max(...rows.map((r) => r.amount), 1);
+  const { colorOf } = toSlices(rows);
   return (
     <div className="list bars">
       {rows.map((r) => (
         <button key={r.key} className="bar-row" onClick={() => onPick(r)}>
-          <span className="icon" aria-hidden>{r.icon}</span>
+          <span className="icon avatar sm" style={tint(r.icon + r.name)} aria-hidden>{r.icon}</span>
           <span className="name"><span>{r.name}</span><span className="tiny faint">{total > 0 ? pct(r.amount / total) : ''}</span></span>
           <span className="value num">{money(r.amount, { whole: true })}</span>
-          <span className="meter"><span className="fill" style={{ width: `${(Math.max(r.amount, 0) / max) * 100}%` }} /></span>
+          <span className="meter"><span className="fill" style={{ width: `${(Math.max(r.amount, 0) / max) * 100}%`, background: colorOf.get(r.key) ?? OTHER_COLOR }} /></span>
           <span className="meta"><span>{r.sub}</span></span>
         </button>
       ))}
@@ -213,7 +235,7 @@ function People({ rows }: { rows: any[] }) {
     <div className="list">
       {rows.map((p) => (
         <div className="item" key={p.id} style={{ cursor: 'default' }}>
-          <div className="avatar" aria-hidden>🧑</div>
+          <div className="avatar" style={tint(p.name)} aria-hidden>🧑</div>
           <div className="grow">
             <div className="title">{p.name}</div>
             <div className="sub">Lent {money(p.lent, { whole: true })} · got back {money(p.received, { whole: true })}</div>

@@ -1,15 +1,21 @@
 {
   "name": "paisa-os",
   "private": true,
-  "workspaces": ["apps/api", "apps/web"],
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
     "dev:api": "npm -w apps/api run dev",
     "dev:web": "npm -w apps/web run dev",
     "migrate": "npm -w apps/api run migrate",
     "seed:demo": "npm -w apps/api run seed:demo",
-    "test": "npm -w apps/api test",
+    "test": "npm -w apps/api test && npm run test:web",
     "build": "npm -w apps/web run build && npm -w apps/api run build",
-    "start": "npm -w apps/api run start"
+    "start": "npm -w apps/api run start",
+    "test:web": "tsx --test apps/web/test/*.test.ts"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }

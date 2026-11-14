@@ -82,6 +82,12 @@ export function Home() {
         </Link>
       </div>
 
+      <button className="card voice-cta" onClick={() => openAdd({ voice: true })}>
+        <span className="mic-dot"><Icon name="mic" /></span>
+        <span className="grow"><b>Say it</b><span className="tiny faint">"450 Swiggy from HDFC card yesterday"</span></span>
+        <span className="faint" aria-hidden>›</span>
+      </button>
+
       {budgets.length > 0 && (
         <div className="section">
           <div className="section-title">Budgets <Link to="/stats">Details</Link></div>

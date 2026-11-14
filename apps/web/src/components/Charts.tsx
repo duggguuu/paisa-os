@@ -1,4 +1,4 @@
-import { compact, money, periodLabel } from '../lib';
+import { compact, money, pct, periodLabel } from '../lib';
 
 /** Spending over the last N periods. Current period highlighted; dashed line = average of the 3 before it. */
 export function TrendChart({ points, period, onPick }: { points: { from: string; to: string; total: number }[]; period: string; onPick?: (from: string) => void }) {
@@ -72,6 +72,77 @@ export function SpendCalendar({ from, to, days, today, onPick }: { from: string;
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** Slice colours, largest first. The last one is reserved for "Other". */
+export const SLICE_COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)', 'var(--s6)'];
+export const OTHER_COLOR = 'var(--s-other)';
+
+export interface Slice { key: string; name: string; icon?: string | null; amount: number }
+
+/** Top slices get a colour each; the rest are folded into "Other". */
+export function toSlices<T extends Slice>(rows: T[]): { slices: (Slice & { color: string; share: number; rest?: boolean })[]; colorOf: Map<string, string> } {
+  const pos = rows.filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount);
+  const total = pos.reduce((s, r) => s + r.amount, 0) || 1;
+  const top = pos.length > SLICE_COLORS.length + 1 ? pos.slice(0, SLICE_COLORS.length) : pos.slice(0, SLICE_COLORS.length + 1);
+  const rest = pos.slice(top.length);
+  const colorOf = new Map<string, string>();
+  type Out = Slice & { color: string; share: number; rest?: boolean };
+  const slices: Out[] = top.map((r, i) => {
+    const color = SLICE_COLORS[i] ?? OTHER_COLOR;
+    colorOf.set(r.key, color);
+    return { key: r.key, name: r.name, icon: r.icon, amount: r.amount, color, share: r.amount / total };
+  });
+  if (rest.length) {
+    const amt = rest.reduce((s, r) => s + r.amount, 0);
+    rest.forEach((r) => colorOf.set(r.key, OTHER_COLOR));
+    slices.push({ key: '__other', name: `Other (${rest.length})`, icon: null, amount: amt, color: OTHER_COLOR, share: amt / total, rest: true });
+  }
+  return { slices, colorOf };
+}
+
+/** Donut of where the money went, with the total in the middle and a tappable legend. */
+export function Donut({ rows, total, label, onPick }: { rows: Slice[]; total: number; label: string; onPick?: (key: string) => void }) {
+  const { slices } = toSlices(rows);
+  if (!slices.length) return null;
+  const R = 70, SW = 22, C = 2 * Math.PI * R, GAP = slices.length > 1 ? 2.5 : 0;
+  let offset = 0;
+  return (
+    <div className="donut">
+      <div className="donut-chart">
+        <svg viewBox="0 0 180 180" role="img" aria-label={`${label}: ${slices.map((s) => `${s.name} ${pct(s.share)}`).join(', ')}`}>
+          <circle cx="90" cy="90" r={R} fill="none" stroke="var(--bar-track)" strokeWidth={SW} />
+          {slices.map((s) => {
+            const len = Math.max(s.share * C - GAP, 0.001);
+            const el = (
+              <circle key={s.key} cx="90" cy="90" r={R} fill="none" stroke={s.color} strokeWidth={SW}
+                strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-offset} transform="rotate(-90 90 90)"
+                style={{ cursor: onPick && !s.rest ? 'pointer' : 'default' }} onClick={() => !s.rest && onPick?.(s.key)}>
+                <title>{s.name}: {money(s.amount, { whole: true })} ({pct(s.share)})</title>
+              </circle>
+            );
+            offset += s.share * C;
+            return el;
+          })}
+        </svg>
+        <div className="donut-center">
+          <span className="tiny faint">{label}</span>
+          <b className="num">{compact(total)}</b>
+        </div>
+      </div>
+      <ul className="donut-legend">
+        {slices.map((s) => (
+          <li key={s.key}>
+            <button type="button" disabled={!onPick || s.rest} onClick={() => onPick?.(s.key)}>
+              <span className="sw" style={{ background: s.color }} />
+              <span className="nm">{s.icon ? `${s.icon} ` : ''}{s.name}</span>
+              <span className="pc num">{pct(s.share)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

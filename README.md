@@ -1,6 +1,8 @@
 # Paisa OS
 
-A personal finance app built on a double-entry ledger. Phase 3 (core) is in this build: login, accounts, transactions, transfers, splits, refunds, budgets, Stats, net worth, Zerodha holdings sync and a separate demo book.
+A personal finance app built on a double-entry ledger. Built so far: login, accounts, transactions, transfers, splits, refunds, budgets, Stats (with a spending donut), net worth, Zerodha holdings sync, voice entry, an installable iPhone app and a separate demo book.
+
+**Changing the app later:** read `CLAUDE.md` first. In short: your data lives in Neon and deploys only replace code, so schema changes go in new migration files.
 
 ## Run it locally
 
@@ -28,7 +30,7 @@ createdb paisa_test
 npm test
 ```
 
-There are 31 tests. They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
+There are 32 API tests, plus 12 voice-parser tests run by `npm run test:web`. They cover the ledger rules (every transaction sums to zero; transfers, card payments and lending aren't spending; refunds, splits, voids, idempotency, duplicate UPI references, the append-only audit log) as well as stats, net worth, safe-to-spend and the Kite sync against a fake Kite API. **Warning:** the tests drop and recreate the `public` schema of the test database.
 
 ## Deploy for free (Render + Neon)
 
@@ -77,11 +79,28 @@ apps/api/test/      ledger + API tests (node:test, real Postgres)
 apps/web/src/       React PWA: Home, Activity, Stats, Accounts, Settings, quick-add
 ```
 
+## Voice entry
+
+Tap **Say it** on Home, or the mic in the Add sheet, and say something like:
+
+- "spent 450 on Swiggy from HDFC card yesterday"
+- "groceries 1,200 at DMart using Axis"
+- "got salary 1.2 lakh in Axis"
+- "transfer 5000 from Axis to Paytm wallet"
+- "dinner 1800 on HDFC card split with Aditi and Rohan"
+
+The sentence fills in the form: amount, place, category, account, date and split. You check it and tap Save, and nothing is saved automatically. The parsing happens on your device, with no AI service involved. Speech-to-text uses the browser's own engine: Chrome, and Safari with Siri turned on. If the mic isn't available (some iPhone home-screen apps block it), tap the text box and use the 🎤 key on the iPhone keyboard. Typed or dictated sentences are understood the same way.
+
+## Install on iPhone
+
+1. Open the app's URL in **Safari**.
+2. Tap **Share**, then **Add to Home Screen**, then **Add**.
+3. Open **Paisa** from the home screen. It runs full-screen like an app. Log in once more inside it, because home-screen apps keep their own login, separate from Safari's.
+
 ## Not built yet
 
-These are planned for Phase 4:
+These are still planned:
 
-- Voice entry
 - Recurring rules (safe-to-spend doesn't subtract upcoming bills until these exist)
 - Axis and HDFC statement import with reconciliation
 - CAS import

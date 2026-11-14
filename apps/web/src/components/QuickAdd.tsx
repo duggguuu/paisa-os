@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, money, parseRupees, todayIST, addDays, uuid, shortDate } from '../lib';
 import { Sheet, useUi } from '../App';
+import { Icon } from './Icons';
+import { parseSpoken, speechSupported, listen, type Draft } from '../voice';
 
 export interface QuickAddPreset {
   kind?: 'expense' | 'income' | 'transfer';
   edit?: any; // full txn from /api/txns/:id
+  voice?: boolean; // start listening as soon as the sheet opens
 }
 
 type Kind = 'expense' | 'income' | 'transfer';
@@ -50,8 +53,55 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const amountRef = useRef<HTMLInputElement>(null);
+  const [phrase, setPhrase] = useState('');
+  const [listening, setListening] = useState(false);
+  const [heard, setHeard] = useState<string | null>(null);
+  const [voiceErr, setVoiceErr] = useState<string | null>(null);
+  const stopRef = useRef<(() => void) | null>(null);
+  const canSpeak = useMemo(() => speechSupported(), []);
 
-  useEffect(() => { amountRef.current?.focus(); }, []);
+  useEffect(() => { if (!preset.voice) amountRef.current?.focus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => stopRef.current?.(), []);
+
+  /** Fill the form from a spoken or typed sentence. Nothing is saved until you tap Save. */
+  function applyPhrase(text: string) {
+    if (!text.trim() || !accounts.data || !categories.data) return;
+    const d: Draft = parseSpoken(text, { accounts: accounts.data, categories: categories.data });
+    if (d.kind) setKind(d.kind);
+    if (d.amount) setAmount(d.amount);
+    setMerchant(d.merchant ?? '');
+    setCategoryId(d.categoryId ?? null);
+    if (d.accountId) setAccountId(d.accountId);
+    setToAccountId(d.toAccountId ?? null);
+    setDate(d.date ?? todayIST());
+    setSplitWith(d.splitWith ?? []);
+    setTouched({ category: !!d.categoryId, account: !!d.accountId });
+    setHeard(text.trim());
+    setError(null);
+  }
+
+  async function toggleMic() {
+    if (listening) { stopRef.current?.(); return; }
+    setVoiceErr(null); setHeard(null);
+    try {
+      const l = listen((t) => setPhrase(t));
+      stopRef.current = l.stop;
+      setListening(true);
+      const text = await l.done;
+      if (text.trim()) applyPhrase(text); else setVoiceErr("Didn't catch that. Try again, or type it.");
+    } catch (e: any) {
+      setVoiceErr(e.message);
+    } finally {
+      setListening(false);
+      stopRef.current = null;
+    }
+  }
+
+  // Opened from a "speak" shortcut: start listening once the account and category lists are loaded.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (preset.voice && canSpeak && !autoStarted.current && accounts.data && categories.data) { autoStarted.current = true; toggleMic(); }
+  }, [accounts.data, categories.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // You pay for things from banks, cash, wallets and cards — not from investments or FDs.
   const moneyAccounts = (accounts.data ?? []).filter((a) => ['bank', 'cash', 'wallet', 'credit_card'].includes(a.kind) && !a.is_archived);
@@ -131,6 +181,25 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   return (
     <Sheet title={edit ? 'Edit transaction' : 'Add transaction'} onClose={onClose}>
       <form onSubmit={(e) => { e.preventDefault(); save(); }}>
+        {!edit && (
+          <div className="voice">
+            <div className={`voice-bar ${listening ? 'live' : ''}`}>
+              <input className="input" value={phrase} enterKeyHint="done" aria-label="Describe the transaction"
+                placeholder={listening ? 'Listening…' : canSpeak ? 'Say or type it' : 'Type or dictate it'}
+                onChange={(e) => setPhrase(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyPhrase(phrase); (e.target as HTMLInputElement).blur(); } }}
+                onBlur={() => { if (phrase.trim() && phrase.trim() !== heard) applyPhrase(phrase); }} />
+              {canSpeak && (
+                <button type="button" className={`mic ${listening ? 'on' : ''}`} onClick={toggleMic} aria-label={listening ? 'Stop listening' : 'Speak'}>
+                  <Icon name={listening ? 'stop' : 'mic'} />
+                </button>
+              )}
+            </div>
+            {voiceErr ? <div className="tiny error" style={{ margin: '6px 2px 0' }}>{voiceErr}</div>
+              : heard ? <div className="tiny muted" style={{ margin: '6px 2px 0' }}>Filled from "{heard}". Check it, then Save.</div>
+              : <div className="tiny faint" style={{ margin: '6px 2px 0' }}>Amount, place, account and day: "spent 1,200 at DMart from Axis yesterday".</div>}
+          </div>
+        )}
         {!edit || edit.kind !== 'split' ? (
           <div className="seg full" role="tablist" style={{ marginBottom: 12 }}>
             {(['expense', 'income', 'transfer'] as Kind[]).map((k) => (
