@@ -167,8 +167,8 @@ export function PurchaseSheet({ onClose, prefill }: { onClose: () => void; prefi
   async function fromScreens(files: File[]) {
     setErr(null); setScan({ p: 0, label: 'Starting…' });
     try {
-      const { ocrImages } = await import('../receipt');
-      const texts = await ocrImages(files, (p, label) => setScan({ p, label }));
+      const { filesToTexts } = await import('../files');
+      const texts = await filesToTexts(files, (p, label) => setScan({ p, label }));
       const o = mergeOrders(texts.map(parseOrderText));
       if (!o.items.length) { setErr("Couldn't find items in those screenshots. Type them instead, e.g. \"bought black jeans for 2,499 from H&M\"."); return; }
       setItems(o.items.map((i: OrderItem) => ({ name: i.name, category: i.category, paid: i.paid != null ? String(i.paid / 100) : '', brand: i.brand, colour: i.colour, size: i.size, artNo: i.artNo, listPrice: i.listPrice })));
@@ -216,8 +216,8 @@ export function PurchaseSheet({ onClose, prefill }: { onClose: () => void; prefi
       {!items.length ? (
         <>
           <label className="dropzone">
-            <input type="file" accept="image/*" multiple onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) fromScreens(fs); }} />
-            <b>Add order screenshots</b><span className="tiny faint">One or several (they can overlap). Read on this phone.</span>
+            <input type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.txt,application/pdf,text/plain,text/csv" multiple onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) fromScreens(fs); }} />
+            <b>Add order screenshots or invoices</b><span className="tiny faint">Screenshots, PDF invoices, Excel, CSV or TXT. One or several. Read on this phone.</span>
           </label>
           {scan && <div className="scan-progress" style={{ marginTop: 10 }}><span style={{ width: `${Math.round(scan.p * 100)}%` }} /><em>{scan.label}</em></div>}
           <div className="tiny faint" style={{ textAlign: 'center', margin: '12px 0' }}>or type it</div>

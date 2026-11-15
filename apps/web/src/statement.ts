@@ -94,7 +94,7 @@ const H = {
 };
 
 function findHeader(rows: string[][]): number {
-  for (let i = 0; i < Math.min(rows.length, 60); i++) {
+  for (let i = 0; i < Math.min(rows.length, 120); i++) {
     const r = rows[i].map((c) => c.toLowerCase());
     const hasDate = r.some((c) => H.date.test(c) || c === 'date');
     const hasMoney = r.some((c) => H.debit.test(c) || H.credit.test(c) || H.amount.test(c));
@@ -147,7 +147,14 @@ export function extractMerchant(narration: string): string | null {
 
 // ---------- main ----------
 export function parseStatement(text: string): ParsedStatement {
-  const grid = parseDelimited(text);
+  return parseStatementGrid(parseDelimited(text));
+}
+
+/** True for a statement's column-header row (date + description + amount columns). */
+export const isStatementHeader = (cells: string[]) => findHeader([cells]) === 0;
+
+/** Same as parseStatement, from a grid of cells (PDF tables and Excel sheets come in this way). */
+export function parseStatementGrid(grid: string[][]): ParsedStatement {
   const h = findHeader(grid);
   if (h < 0) return { rows: [], closing: null, columns: {}, bank: null };
   const header = grid[h];
@@ -192,7 +199,7 @@ interface Acc { id: string; name: string; kind: string; is_archived?: boolean }
 interface Cat { id: string; name: string; class: string; parent_id: string | null }
 export interface Guess { kind: 'expense' | 'income' | 'transfer'; categoryId: string | null; otherAccountId: string | null }
 
-export function guessBooking(row: StatementRow, ctx: { accounts: Acc[]; categories: Cat[]; accountId: string; historyCategoryId?: string | null }): Guess {
+export function guessBooking(row: StatementRow, ctx: { accounts: Acc[]; categories: Cat[]; accountId: string; historyCategoryId?: string | null; employer?: string | null }): Guess {
   const t = `${row.description} ${row.merchant ?? ''}`.toLowerCase();
   const own = ctx.accounts.filter((a) => !a.is_archived && a.id !== ctx.accountId);
   const byKind = (k: string) => own.find((a) => a.kind === k)?.id ?? null;
@@ -207,6 +214,8 @@ export function guessBooking(row: StatementRow, ctx: { accounts: Acc[]; categori
     return { kind: 'transfer', categoryId: null, otherAccountId: byKind('bank') };
   if (out && /(zerodha|groww|kuvera|indmoney|coin\b|bse ltd|nse clearing|iccl|mutual fund|\bmf\b|\bsip\b|nach.*(bse|cams|kfin))/.test(t) && byKind('investment'))
     return { kind: 'transfer', categoryId: null, otherAccountId: byKind('investment') };
+  const emp = (ctx.employer ?? '').toLowerCase().replace(/\b(pvt|private|ltd|limited|llp|inc|the)\b\.?/g, ' ').split(/\s+/).filter((w) => w.length >= 4)[0];
+  if (!out && emp && t.includes(emp)) return { kind: 'income', categoryId: cat('income', 'Salary'), otherAccountId: null };
   if (!out && /(salary|\bsal\b|payroll)/.test(t)) return { kind: 'income', categoryId: cat('income', 'Salary'), otherAccountId: null };
   if (!out && /(int\.?\s?pd|interest|int\.? cr|sbint|int cred)/.test(t)) return { kind: 'income', categoryId: cat('income', 'Interest'), otherAccountId: null };
   if (!out && /(refund|reversal|rev\b|cashback)/.test(t)) return { kind: 'income', categoryId: cat('income', 'Refunds & cashback'), otherAccountId: null };

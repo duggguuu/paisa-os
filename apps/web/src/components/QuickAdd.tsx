@@ -228,7 +228,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
                   </button>
                 )}
               </div>
-              <input ref={photoRef} type="file" accept="image/*" capture="environment" hidden
+              <input ref={photoRef} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.txt,application/pdf,text/plain,text/csv" hidden
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onPhoto(f); e.target.value = ''; }} />
             </div>
             {scan && (

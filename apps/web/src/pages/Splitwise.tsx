@@ -4,7 +4,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, money, shortDate, todayIST, addDays } from '../lib';
 import { useUi } from '../App';
 import { tint } from '../components/Icons';
-import { parseSplitwiseCsv, guessMe, type SwCsvFile } from '../splitwise-csv';
+import { parseSplitwiseCsv, parseSplitwiseGrid, isSplitwiseHeader, guessMe, type SwCsvFile } from '../splitwise-csv';
+import { UPLOAD_ACCEPT, kindOf, pdfRows, pdfTableGrid, excelRows, rowsToGrid, promptPassword, Cancelled } from '../files';
+import { SelectBar } from '../components/SelectBar';
 import { parseSplitwiseBalances, type Balance } from '../orders';
 
 const RANGES: [string, () => string | null][] = [
@@ -55,7 +57,12 @@ function SpreadsheetImport() {
     setErr(null); setResult(null);
     const parsed: SwCsvFile[] = [];
     for (const f of list) {
-      try { parsed.push(parseSplitwiseCsv(await f.text(), f.name)); } catch (e: any) { setErr(e.message); }
+      try {
+        const k = kindOf(f);
+        parsed.push(k === 'pdf' ? parseSplitwiseGrid(pdfTableGrid(await pdfRows(f, promptPassword), isSplitwiseHeader), f.name)
+          : k === 'excel' ? parseSplitwiseGrid(rowsToGrid(await excelRows(f)), f.name)
+          : parseSplitwiseCsv(await f.text(), f.name));
+      } catch (e: any) { if (!(e instanceof Cancelled)) setErr(e.message); }
     }
     const all = [...files.filter((x) => !parsed.some((p) => p.name === x.name)), ...parsed];
     setFiles(all);
@@ -101,9 +108,9 @@ function SpreadsheetImport() {
           <li>Upload all the files here together.</li>
         </ol>
         <label className="dropzone">
-          <input type="file" accept=".csv,text/csv" multiple onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) addFiles(fs); }} />
+          <input type="file" accept={UPLOAD_ACCEPT} multiple onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) addFiles(fs); }} />
           <b>{files.length ? `${files.length} file${files.length > 1 ? 's' : ''}: ${files.map((f) => f.name).join(', ')}` : 'Choose Splitwise exports'}</b>
-          <span className="tiny faint">{files.length ? 'Tap to add more' : 'CSV files, read on this device'}</span>
+          <span className="tiny faint">{files.length ? 'Tap to add more' : 'CSV, Excel, PDF or TXT, read on this device'}</span>
         </label>
         {files.length > 0 && <button className="btn small" style={{ marginTop: 8 }} onClick={() => { setFiles([]); setPlan(null); setResult(null); }}>Clear files</button>}
 
@@ -270,6 +277,8 @@ function PlanView({ p, skip, setSkip }: { p: any; skip: Set<string>; setSkip: (f
       </div>
       <div className="section">
         <div className="section-title"><span>{newOnes.length} new · {p.expenses.length - newOnes.length} already in</span></div>
+        <SelectBar total={newOnes.length} selected={newOnes.filter((e: any) => !skip.has(String(e.id))).length}
+          onAll={() => setSkip(() => new Set())} onNone={() => setSkip(() => new Set(newOnes.map((e: any) => String(e.id))))} />
         <div className="list">
           {p.expenses.length === 0 && <div className="empty">Nothing in this period.</div>}
           {p.expenses.slice(0, 300).map((e: any) => (
@@ -332,8 +341,8 @@ function ScreenshotBalances() {
   async function read(files: File[]) {
     setErr(null); setDone(null); setScan({ p: 0, label: 'Starting…' });
     try {
-      const { ocrImages } = await import('../receipt');
-      const texts = await ocrImages(files, (p, label) => setScan({ p, label }));
+      const { filesToTexts } = await import('../files');
+      const texts = await filesToTexts(files, (p, label) => setScan({ p, label }));
       const seen = new Map<string, Balance>();
       for (const t of texts) for (const b of parseSplitwiseBalances(t)) if (!seen.has(b.name.toLowerCase())) seen.set(b.name.toLowerCase(), b);
       if (!seen.size) { setErr("Couldn't find balances. Use the Friends tab, where each row says \"owes you\" or \"you owe\"."); return; }
@@ -355,13 +364,15 @@ function ScreenshotBalances() {
       <p className="small muted" style={{ marginTop: 4 }}>In the Splitwise app, open <b>Friends</b> and screenshot the list (scroll and take more if needed). Paisa reads who owes whom and sets each person's balance in Accounts to match.</p>
       {!rows && (
         <label className="dropzone">
-          <input type="file" accept="image/*" multiple onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) read(fs); }} />
-          <b>Add Splitwise screenshots</b><span className="tiny faint">Read on this phone</span>
+          <input type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.txt,application/pdf,text/plain,text/csv" multiple onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) read(fs); }} />
+          <b>Add Splitwise screenshots</b><span className="tiny faint">Screenshots, or a PDF / Excel / CSV / TXT of the list. Read on this phone</span>
         </label>
       )}
       {scan && <div className="scan-progress" style={{ marginTop: 10 }}><span style={{ width: `${Math.round(scan.p * 100)}%` }} /><em>{scan.label}</em></div>}
       {rows && (
         <>
+          <SelectBar total={rows.length} selected={rows.filter((r) => r.keep).length} label="included"
+            onAll={() => setRows((xs) => xs!.map((x) => ({ ...x, keep: true })))} onNone={() => setRows((xs) => xs!.map((x) => ({ ...x, keep: false })))} />
           <div className="list" style={{ margin: '10px 0' }}>
             {rows.map((r, k) => (
               <div key={k} className="buy-row">

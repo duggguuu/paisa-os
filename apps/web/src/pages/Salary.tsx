@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, money, compact, parseRupees, todayIST, dayLabel } from '../lib';
 import { Sheet, useUi } from '../App';
 import { newRegimeTax, NEW_REGIME } from '../tax';
 import { useAppear, useCountUp } from '../motion';
+import { UPLOAD_ACCEPT, readRows, promptPassword, Cancelled } from '../files';
+import { parsePayslip, type ParsedSlip } from '../payslip';
+import { SelectBar } from '../components/SelectBar';
 
 type Line = { name: string; monthly: number; kind?: string };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -21,6 +24,7 @@ export function Salary() {
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => api<any[]>('/api/accounts') });
   const [editing, setEditing] = useState(false);
   const [slipMonth, setSlipMonth] = useState<string | null>(null);
+  const [uploads, setUploads] = useState<File[] | null>(null);
   const d = q.data;
   const prof = d?.profile;
   const acc = accounts.data?.find((a) => a.id === prof?.accountId);
@@ -34,18 +38,22 @@ export function Salary() {
       {!d ? <div className="card"><div className="skeleton" /></div> : !prof ? (
         <div className="card">
           <b>Add your salary</b>
-          <p className="small muted">Copy the lines from your payslip: earnings (Basic, HRA, allowances), deductions (PF, professional tax, TDS) and what your employer adds (PF, NPS). Paisa then logs the credit on the last day of every month and runs your New Regime tax.</p>
-          <button className="btn accent" onClick={() => setEditing(true)}>Set up salary</button>
+          <p className="small muted">Upload your payslips (PDF, Excel, CSV or TXT; several at once is fine) and Paisa reads the earnings and deductions, or type them in. It then logs the credit on the last day of every month and runs your New Regime tax.</p>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <SlipDrop onFiles={setUploads} label="Upload payslips" />
+            <button className="btn" onClick={() => setEditing(true)}>Type it in</button>
+          </div>
         </div>
       ) : (
         <>
           <SalaryHero prof={prof} rule={d.rule} account={acc} received={d.receivedThisFy} fy={d.fy} />
           <TaxSimulator prof={prof} slips={d.slips} fy={d.fy} />
-          <Payslips fy={d.fy} slips={d.slips} onOpen={setSlipMonth} />
+          <Payslips fy={d.fy} slips={d.slips} onOpen={setSlipMonth} onUpload={setUploads} />
         </>
       )}
       <MoneyIn />
       {editing && <SalaryEditor prof={prof} accounts={accounts.data ?? []} onClose={() => setEditing(false)} />}
+      {uploads && d && <SlipImport files={uploads} prof={prof} accounts={accounts.data ?? []} onClose={() => setUploads(null)} />}
       {slipMonth && prof && <SlipEditor month={slipMonth} prof={prof} slip={d.slips.find((s: any) => s.month.startsWith(slipMonth))} onClose={() => setSlipMonth(null)} />}
     </>
   );
@@ -175,14 +183,28 @@ function Row({ label, value, strong }: { label: string; value: number; strong?: 
 }
 
 // ---------------------------------------------------------------------------
-function Payslips({ fy, slips, onOpen }: { fy: any; slips: any[]; onOpen: (m: string) => void }) {
+/** A button that opens the file picker for payslips. */
+function SlipDrop({ onFiles, label, small }: { onFiles: (f: File[]) => void; label: string; small?: boolean }) {
+  return (
+    <label className={`btn ${small ? 'small' : 'accent'}`} style={{ cursor: 'pointer' }}>
+      <input type="file" accept={UPLOAD_ACCEPT} multiple hidden onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) onFiles(fs); }} />
+      {label}
+    </label>
+  );
+}
+
+function Payslips({ fy, slips, onOpen, onUpload }: { fy: any; slips: any[]; onOpen: (m: string) => void; onUpload: (f: File[]) => void }) {
   const start = Number(fy.from.slice(0, 4));
   const today = todayIST().slice(0, 7);
   const months = Array.from({ length: 12 }, (_, i) => { const m = ((3 + i) % 12) + 1; const y = m >= 4 ? start : start + 1; return `${y}-${String(m).padStart(2, '0')}`; })
     .filter((m) => m <= today);
   return (
     <div className="section">
-      <div className="section-title"><span>Payslips · FY {fy.label}</span></div>
+      <div className="section-title">
+        <span>Payslips · FY {fy.label}</span>
+        <SlipDrop onFiles={onUpload} label="Upload payslips" small />
+      </div>
+      <p className="tiny faint" style={{ margin: '-4px 2px 8px' }}>PDF, Excel, CSV or TXT, several at once. Or tap a month to type it in.</p>
       <div className="list">
         {months.reverse().map((m) => {
           const s = slips.find((x) => x.month.startsWith(m));
@@ -328,17 +350,22 @@ function MoneyIn() {
   const cats = useQuery({ queryKey: ['categories'], queryFn: () => api<any[]>('/api/categories') });
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [target, setTarget] = useState('');
+  const sal = useQuery({ queryKey: ['salary'], queryFn: () => api<any>('/api/salary') });
   const moneyCats = useMemo(() => (cats.data ?? []).filter((c) => c.class === 'income' && c.not_income && c.parent_id), [cats.data]);
+  const salaryCat = (cats.data ?? []).find((c) => c.class === 'income' && !c.parent_id && c.name === 'Salary');
+  // Credits from your employer are salary, not "other money".
+  const empWord = (sal.data?.profile?.employer ?? '').toLowerCase().replace(/\b(pvt|private|ltd|limited|llp|inc|the)\b\.?/g, ' ').split(/\s+/).find((w: string) => w.length >= 4);
   const counted = (rows.data ?? []).filter((x) => x.counted);
   const notCounted = (rows.data ?? []).filter((x) => !x.counted);
   if (!rows.data || rows.data.length === 0) return null;
+  const looksSalary = counted.filter((x) => empWord && (x.title ?? '').toLowerCase().includes(empWord));
   const tgt = target || moneyCats.find((c) => c.name === 'Repayments')?.id || moneyCats[0]?.id;
-  async function move() {
-    if (!tgt || picked.size === 0) return;
-    const r = await api<any>('/api/money-in/reclassify', { method: 'POST', body: { txnIds: [...picked], categoryId: tgt } });
+  async function move(categoryId = tgt, ids = [...picked]) {
+    if (!categoryId || ids.length === 0) return;
+    const r = await api<any>('/api/money-in/reclassify', { method: 'POST', body: { txnIds: ids, categoryId } });
     setPicked(new Set());
     await qc.invalidateQueries();
-    toast(`${r.moved} moved out of income`);
+    toast(categoryId === salaryCat?.id ? `${r.moved} marked as salary` : `${r.moved} moved out of income`);
   }
   return (
     <div className="section">
@@ -347,7 +374,16 @@ function MoneyIn() {
         <div className="card" style={{ padding: 0 }}>
           <div style={{ padding: '12px 14px 4px' }}>
             <b className="small">Counted as income now ({compact(counted.reduce((s, x) => s + x.amount, 0))})</b>
-            <p className="tiny faint" style={{ margin: '2px 0 0' }}>Tick the ones that were repayments, transfers from family, refunds or anything else that isn't earnings.</p>
+            <p className="tiny faint" style={{ margin: '2px 0 0' }}>Tick your salary credits and tap <b>Salary</b>; tick repayments, transfers from family, refunds and so on and move them out of income.</p>
+            {looksSalary.length > 0 && salaryCat && (
+              <div className="tax-tip" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span className="grow">{looksSalary.length} credits from <b>{sal.data.profile.employer}</b> look like your salary.</span>
+                <button className="btn small" onClick={() => setPicked(new Set(looksSalary.map((x) => x.id)))}>Select them</button>
+                <button className="btn small accent" onClick={() => move(salaryCat.id, looksSalary.map((x) => x.id))}>Mark as salary</button>
+              </div>
+            )}
+            <SelectBar total={counted.length} selected={counted.filter((x) => picked.has(x.id)).length}
+              onAll={() => setPicked(new Set(counted.map((x) => x.id)))} onNone={() => setPicked(new Set())} />
           </div>
           <div className="list" style={{ border: 0, boxShadow: 'none' }}>
             {counted.map((x) => (
@@ -359,10 +395,11 @@ function MoneyIn() {
             ))}
           </div>
           <div className="row" style={{ gap: 8, padding: 12, borderTop: '1px solid var(--border)' }}>
+            {salaryCat && <button className="btn" disabled={picked.size === 0} onClick={() => move(salaryCat.id)}>Salary ({picked.size})</button>}
             <select className="input" value={tgt ?? ''} onChange={(e) => setTarget(e.target.value)} aria-label="Move to">
               {moneyCats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <button className="btn accent" disabled={picked.size === 0} onClick={move}>Not income ({picked.size})</button>
+            <button className="btn accent" disabled={picked.size === 0} onClick={() => move()}>Not income ({picked.size})</button>
           </div>
         </div>
       )}
@@ -370,5 +407,100 @@ function MoneyIn() {
         <p className="small muted" style={{ margin: '10px 2px' }}>Already outside income: <b className="num">{money(notCounted.reduce((s, x) => s + x.amount, 0), { whole: true })}</b> across {notCounted.length} entries (repayments, refunds, gifts…). They still show in your balances, just not as earnings.</p>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+type Found = { file: string; slip: ParsedSlip | null; error?: string; keep: boolean; month: string };
+
+/** Read payslip files, show what was found, save the ticked ones (and optionally set the monthly salary from the latest). */
+function SlipImport({ files, prof, accounts, onClose }: { files: File[]; prof: any; accounts: any[]; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useUi();
+  const [found, setFound] = useState<Found[] | null>(null);
+  const [setProfile, setSetProfile] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const out: Found[] = [];
+      for (const f of files) {
+        try {
+          const slip = parsePayslip(await readRows(f, { askPassword: promptPassword }));
+          out.push({ file: f.name, slip, keep: !!slip.month && slip.earnings.length > 0, month: slip.month ?? '' });
+        } catch (e: any) {
+          if (!(e instanceof Cancelled)) out.push({ file: f.name, slip: null, error: e.message ?? 'Could not read it', keep: false, month: '' });
+        }
+      }
+      out.sort((a, b) => b.month.localeCompare(a.month));
+      setFound(out);
+    })();
+  }, [files]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const kept = (found ?? []).filter((f) => f.keep && f.slip && /^\d{4}-\d{2}$/.test(f.month));
+  const latest = kept[0];
+  const banks = accounts.filter((a) => ['bank', 'wallet'].includes(a.kind) && !a.is_archived);
+
+  async function save() {
+    setBusy(true); setErr(null);
+    try {
+      for (const f of kept) {
+        await api(`/api/salary/slips/${f.month}`, { method: 'PUT', body: { earnings: f.slip!.earnings, deductions: f.slip!.deductions, employerContrib: [] } });
+      }
+      if (setProfile && latest) {
+        // The monthly structure: the latest slip without one-off lines (arrears).
+        const regular = (xs: Line[]) => xs.filter((x) => !/arrear/i.test(x.name));
+        await api('/api/salary', { method: 'PUT', body: {
+          employer: latest.slip!.employer ?? prof?.employer ?? null,
+          accountId: prof?.accountId ?? banks.find((a) => a.meta?.salary)?.id ?? banks[0]?.id,
+          payDay: prof?.payDay ?? 31,
+          earnings: regular(latest.slip!.earnings), deductions: regular(latest.slip!.deductions),
+          employerContrib: prof?.employerContrib ?? [], annualBonus: prof?.annualBonus ?? 0, autoPost: true,
+        } });
+      }
+      await qc.invalidateQueries();
+      toast(`${kept.length} payslip${kept.length === 1 ? '' : 's'} saved${setProfile && latest ? ' · salary updated' : ''}`);
+      onClose();
+    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <Sheet title="Payslips" onClose={onClose}>
+      {!found ? <p className="small muted">Reading {files.length} file{files.length === 1 ? '' : 's'} on this device…</p> : (
+        <>
+          <SelectBar total={found.filter((f) => f.slip).length} selected={kept.length}
+            onAll={() => setFound((xs) => xs!.map((x) => ({ ...x, keep: !!x.slip })))} onNone={() => setFound((xs) => xs!.map((x) => ({ ...x, keep: false })))} />
+          <div className="list" style={{ marginBottom: 10 }}>
+            {found.map((f, i) => (
+              <div key={i} className={`imp-row ${f.keep ? '' : 'off'}`}>
+                <label className="imp-check"><input type="checkbox" checked={f.keep} disabled={!f.slip} onChange={(e) => setFound((xs) => xs!.map((x, j) => (j === i ? { ...x, keep: e.target.checked } : x)))} /></label>
+                <div className="grow">
+                  {f.slip ? (
+                    <>
+                      <div className="spread">
+                        <input className="input" type="month" value={f.month} style={{ maxWidth: 170, minHeight: 32, padding: '4px 8px' }}
+                          onChange={(e) => setFound((xs) => xs!.map((x, j) => (j === i ? { ...x, month: e.target.value } : x)))} aria-label="Month" />
+                        <b className="num inc">{money(f.slip.gross - f.slip.totalDeductions, { whole: true })}</b>
+                      </div>
+                      <div className="sub">Gross {money(f.slip.gross, { whole: true })} · {f.slip.earnings.map((e) => e.name).join(', ')}</div>
+                      <div className="sub">Deductions {money(f.slip.totalDeductions, { whole: true })} · {f.slip.deductions.map((d) => `${d.name} ${money(d.monthly, { whole: true })}`).join(', ') || 'none'}</div>
+                      {f.slip.warnings.map((w, k) => <div key={k} className="pill-s warn">{w}</div>)}
+                    </>
+                  ) : <><div className="title">{f.file}</div><div className="pill-s warn">{f.error}</div></>}
+                </div>
+              </div>
+            ))}
+          </div>
+          {latest && (
+            <label className="toggle"><input type="checkbox" checked={setProfile} onChange={(e) => setSetProfile(e.target.checked)} />
+              <span><b>Set my monthly salary from {MONTHS[Number(latest.month.slice(5)) - 1]} {latest.month.slice(0, 4)}</b>
+                <span className="tiny faint">Earnings and deductions from the latest slip (one-off arrears left out){latest.slip!.employer ? `, employer ${latest.slip!.employer}` : ''}. Updates the monthly credit and the tax simulator.</span></span></label>
+          )}
+          {err && <p className="error">{err}</p>}
+          <button className="btn accent block" disabled={busy || kept.length === 0} onClick={save}>{busy ? 'Saving…' : `Save ${kept.length} payslip${kept.length === 1 ? '' : 's'}`}</button>
+        </>
+      )}
+    </Sheet>
   );
 }

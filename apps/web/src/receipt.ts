@@ -54,7 +54,9 @@ export async function ocrImages(files: File[], onProgress?: (p: number, label: s
 }
 
 export async function scanReceipt(file: File, onProgress?: (p: number, label: string) => void): Promise<ReceiptGuess> {
-  const [text] = await ocrImages([file], onProgress);
+  // Photos are OCR'd on the device; PDF / Excel / CSV / TXT bills are read directly.
+  const { filesToTexts } = await import('./files');
+  const [text] = await filesToTexts([file], onProgress);
   return { ...parseReceipt(text), text };
 }
 

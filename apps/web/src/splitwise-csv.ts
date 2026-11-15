@@ -8,7 +8,13 @@ export interface SwCsvFile {
 }
 
 export function parseSplitwiseCsv(text: string, name: string): SwCsvFile {
-  const grid = parseDelimited(text);
+  return parseSplitwiseGrid(parseDelimited(text), name);
+}
+
+export const isSplitwiseHeader = (r: string[]) => r.some((c) => /^date$/i.test(c.trim())) && r.some((c) => /^description$/i.test(c.trim())) && r.some((c) => /^cost$/i.test(c.trim()));
+
+/** Same as parseSplitwiseCsv, from a grid (Excel or PDF exports). */
+export function parseSplitwiseGrid(grid: string[][], name: string): SwCsvFile {
   const h = grid.findIndex((r) => r.some((c) => /^date$/i.test(c)) && r.some((c) => /^description$/i.test(c)) && r.some((c) => /^cost$/i.test(c)));
   if (h < 0) throw new Error(`${name} doesn't look like a Splitwise export (needs Date, Description, Cost columns).`);
   const header = grid[h].map((c) => c.trim());

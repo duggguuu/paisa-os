@@ -3,7 +3,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { api, money, shortDate, parseRupees } from '../lib';
 import { useUi } from '../App';
-import { parseStatement, guessBooking, type ParsedStatement, type StatementRow } from '../statement';
+import { parseStatement, parseStatementGrid, isStatementHeader, guessBooking, type ParsedStatement, type StatementRow } from '../statement';
+import { UPLOAD_ACCEPT, kindOf, pdfRows, pdfTableGrid, excelRows, rowsToGrid, promptPassword, Cancelled } from '../files';
+import { SelectBar } from '../components/SelectBar';
 import { readCasPdf, type CasResult } from '../cas';
 
 export function Import() {
@@ -33,6 +35,7 @@ function StatementImport() {
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => api<any[]>('/api/accounts') });
   const categories = useQuery({ queryKey: ['categories'], queryFn: () => api<any[]>('/api/categories') });
   const batches = useQuery({ queryKey: ['import-batches'], queryFn: () => api<any[]>('/api/import/batches') });
+  const salary = useQuery({ queryKey: ['salary'], queryFn: () => api<any>('/api/salary') });
   const [accountId, setAccountId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<ParsedStatement | null>(null);
@@ -52,9 +55,14 @@ function StatementImport() {
 
   async function read(f: File, acc: string) {
     setErr(null); setResult(null); setRows(null);
-    if (/\.(xlsx?|pdf)$/i.test(f.name)) return setErr('Download the statement as CSV (Axis) or Delimited / TXT (HDFC). With an Excel file, open it and "Save as CSV".');
-    const text = await f.text();
-    const p = parseStatement(text);
+    let p: ParsedStatement;
+    try {
+      const k = kindOf(f);
+      if (k === 'image') return setErr('That is an image. Upload the statement as PDF, Excel, CSV or TXT.');
+      p = k === 'pdf' ? parseStatementGrid(pdfTableGrid(await pdfRows(f, promptPassword), isStatementHeader))
+        : k === 'excel' ? parseStatementGrid(rowsToGrid(await excelRows(f, true)))
+        : parseStatement(await f.text());
+    } catch (e: any) { if (!(e instanceof Cancelled)) setErr(e.message ?? 'Could not read that file.'); return; }
     setParsed(p);
     if (!p.rows.length) return setErr("Couldn't find transactions in this file. It needs a header row with Date, Narration/Particulars and Debit/Credit (or Withdrawal/Deposit) columns.");
     setClosing(p.closing ? String(p.closing.balance / 100) : '');
@@ -63,7 +71,7 @@ function StatementImport() {
       const pv = await api<any>('/api/import/preview', { method: 'POST', body: { accountId: acc, rows: p.rows } });
       setRows(p.rows.map((r, i) => {
         const v = pv.rows[i];
-        const g = guessBooking(r, { accounts: accounts.data ?? [], categories: cats, accountId: acc, historyCategoryId: v.suggestedCategoryId });
+        const g = guessBooking(r, { accounts: accounts.data ?? [], categories: cats, accountId: acc, historyCategoryId: v.suggestedCategoryId, employer: salary.data?.profile?.employer });
         return { ...r, i, status: v.status, match: v.match, include: v.status === 'new', ...g };
       }));
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
@@ -113,10 +121,10 @@ function StatementImport() {
           ))}</div>
         </div>
         <label className={`dropzone ${!accountId ? 'disabled' : ''}`}>
-          <input type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" disabled={!accountId}
+          <input type="file" accept={UPLOAD_ACCEPT} disabled={!accountId}
             onChange={(e) => { const f = e.target.files?.[0]; if (f && accountId) { setFile(f); read(f, accountId); } e.target.value = ''; }} />
           <b>{file ? file.name : 'Choose statement file'}</b>
-          <span className="tiny faint">{accountId ? 'CSV or TXT, from net banking. Read on this device.' : 'Pick the account first'}</span>
+          <span className="tiny faint">{accountId ? 'PDF, Excel, CSV or TXT, from net banking. Read on this device; locked PDFs ask for their password.' : 'Pick the account first'}</span>
         </label>
         <details className="tiny muted" style={{ marginTop: 10 }}>
           <summary>How to download it</summary>
@@ -136,6 +144,9 @@ function StatementImport() {
               {(['all', 'new', 'check'] as const).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? 'All' : f === 'new' ? 'New' : 'Already in'}</button>)}
             </div>
           </div>
+          <SelectBar total={visible.filter((r) => r.status !== 'duplicate').length} selected={visible.filter((r) => r.include).length}
+            onAll={() => setRows((rs) => rs!.map((r) => (visible.includes(r) && r.status !== 'duplicate' ? { ...r, include: true } : r)))}
+            onNone={() => setRows((rs) => rs!.map((r) => (visible.includes(r) ? { ...r, include: false } : r)))} />
           <div className="list import-list">
             {visible.map((r) => (
               <div key={r.i} className={`imp-row ${r.include ? '' : 'off'}`}>
