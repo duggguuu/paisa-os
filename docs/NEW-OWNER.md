@@ -204,6 +204,8 @@ Do these once, in this order:
 
 **Only salary counts as income.** Money coming in that isn't earnings (a friend paying you back, money from family, refunds) goes under **"Money in (not income)"**. It still shows in your balances; it just isn't counted as earnings. At the bottom of **Salary & tax** you can review your incoming money and move anything that isn't earnings out of income, using **Select all** to do several at once.
 
+**Hide amounts:** tap the **eye** button (on Home, in the laptop sidebar, or the small floating button on your phone) to hide every amount, for example when someone is looking at your screen. Tap again to show them. On a laptop, **Shift + H** does the same. It stays the way you left it on that device.
+
 **Themes:** tap the palette icon on Home to choose a look, light or dark.
 
 ---
