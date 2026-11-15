@@ -14,6 +14,7 @@
 set -euo pipefail
 
 TARGET="${1:?usage: scripts/export-for-new-owner.sh <target-folder> [\"commit message\"]}"
+case "$TARGET" in /*) ;; *) TARGET="$PWD/$TARGET" ;; esac   # resolve now: the script cds elsewhere later
 MESSAGE="${2:-Update $(date +%Y-%m-%d)}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [ -e "$TARGET" ] && [ ! -d "$TARGET/.git" ]; then echo "Refusing: $TARGET exists and isn't a git repo." >&2; exit 1; fi
