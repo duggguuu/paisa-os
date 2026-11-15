@@ -75,6 +75,10 @@ const req = async (method: string, path: string, body?: unknown, tab = unlockKey
   return { status: res.statusCode, body: parsed };
 };
 
+// Fake Web Push: records what would have been sent.
+const pushed: { endpoint: string; payload: any }[] = [];
+const fakePush = async (sub: any, body: string) => { pushed.push({ endpoint: sub.endpoint, payload: JSON.parse(body) }); return { statusCode: 201 }; };
+
 let A: Record<string, any> = {};
 let C: Record<string, string> = {};
 const bal = async (name: string) => (await req('GET', '/api/accounts')).body.find((a: any) => a.name === name)?.balance;
@@ -83,7 +87,7 @@ before(async () => {
   sql = makeSql(url);
   await sql.unsafe('drop schema public cascade; create schema public;');
   await migrate(sql);
-  app = await buildApp({ sql, appSecret: 'y'.repeat(40), publicUrl: 'http://localhost:8080', fetch: fakeFetch });
+  app = await buildApp({ sql, appSecret: 'y'.repeat(40), publicUrl: 'http://localhost:8080', fetch: fakeFetch, pushSend: fakePush });
   await req('POST', '/api/auth/setup', { email: 'f@example.com', password: 'correct horse battery', banks: ['SBI', 'ICICI Bank'] });
   for (const a of (await req('GET', '/api/accounts')).body) A[a.name] = a;
   for (const c of (await req('GET', '/api/categories')).body) C[c.name] = c.id;
@@ -719,4 +723,102 @@ test('categories: rich defaults; migration 009 fills gaps in older books; add, r
   assert.ok(all.some((c: any) => c.name === 'Etsy shop' && c.is_archived));
   r = await req('PATCH', `/api/categories/${find('Salary').id}`, { isArchived: true });
   assert.equal(r.status, 400, 'Salary cannot be hidden');
+});
+
+test('recurring: every N cycles (quarterly, half-yearly, fortnightly)', () => {
+  assert.equal(nextAfter({ cadence: 'monthly', day: 15, month: null, every: 3 }, '2026-11-15'), '2027-02-15');
+  assert.equal(nextAfter({ cadence: 'monthly', day: 31, month: null, every: 3 }, '2026-11-30'), '2027-02-28', 'month-end clamps');
+  assert.equal(nextAfter({ cadence: 'monthly', day: 1, month: null, every: 6 }, '2026-08-01'), '2027-02-01');
+  assert.equal(nextAfter({ cadence: 'weekly', day: 1, month: null, every: 2 }, '2026-11-16'), '2026-11-30');
+  assert.equal(nextAfter({ cadence: 'yearly', day: 10, month: 3, every: 1 }, '2026-03-10'), '2027-03-10');
+});
+
+test('mandates & subscriptions: saved on recurring rules with reminders; quarterly logging advances 3 months', async () => {
+  let r = await req('POST', '/api/recurring', {
+    name: 'Streaming plan', kind: 'expense', amount: 649_00, accountId: A['ICICI Bank'].id, categoryId: C['OTT streaming'],
+    cadence: 'monthly', day: 20, every: 3, firstDue: '2026-11-20', autoPost: false,
+    mandate: { type: 'upi_autopay', provider: 'StreamCo', umrn: 'UMRN123', maxAmount: 1_000_00 },
+    reminders: [{ daysBefore: 1, hour: 9 }, { daysBefore: 0, hour: 21 }],
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const id = r.body.id;
+  let rule = (await req('GET', '/api/recurring')).body.rules.find((x: any) => x.id === id);
+  assert.equal(rule.every, 3);
+  assert.equal(rule.mandate.type, 'upi_autopay');
+  assert.equal(rule.mandate.maxAmount, 1_000_00);
+  assert.deepEqual(rule.reminders, [{ daysBefore: 1, hour: 9 }, { daysBefore: 0, hour: 21 }]);
+  await sql`update recurring_rule set next_due = ${today} where id = ${id}`;
+  r = await req('POST', `/api/recurring/${id}/log`, {});
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  rule = (await req('GET', '/api/recurring')).body.rules.find((x: any) => x.id === id);
+  assert.equal(rule.next_due, nextAfter({ cadence: 'monthly', day: 20, month: null, every: 3 }, today));
+  // An internal update (e.g. from another feature) that doesn't mention reminders keeps them.
+  r = await req('PUT', `/api/recurring/${id}`, { name: 'Streaming plan', kind: 'expense', amount: 699_00, accountId: A['ICICI Bank'].id, categoryId: C['OTT streaming'], cadence: 'monthly', day: 20, every: 3,
+    mandate: rule.mandate, reminders: rule.reminders });
+  assert.equal(r.status, 200);
+  assert.equal((await req('GET', '/api/recurring')).body.rules.find((x: any) => x.id === id).reminders.length, 2);
+});
+
+test('notifications: daily nudges and renewal reminders, each sent once, no amounts by default; cron key required', async () => {
+  const { tick, cronKey } = await import('../src/notify.js');
+  // No device yet: nothing is sent.
+  pushed.length = 0;
+  const at = (istDate: string, istHour: number, min = 10) => new Date(Date.parse(`${istDate}T${String(istHour).padStart(2, '0')}:${String(min).padStart(2, '0')}:00+05:30`));
+  await tick(sql, 'https://paisa.example', at('2026-12-01', 9), fakePush as any);
+  assert.equal(pushed.length, 0);
+  // A device subscribes.
+  let r = await req('POST', '/api/notifications/subscribe', { subscription: { endpoint: 'https://push.example/abc', keys: { p256dh: 'BPk', auth: 'aa' } }, device: 'iPhone' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const n = (await req('GET', '/api/notifications')).body;
+  assert.ok(n.publicKey && n.cronKey && n.devices.length === 1);
+  assert.deepEqual(n.prefs.daily.hours, [9, 14, 21]);
+  // A subscription due on 2026-12-02 with a reminder the day before at 9.
+  r = await req('POST', '/api/recurring', { name: 'Music app', kind: 'expense', amount: 119_00, accountId: A['SBI'].id, categoryId: C['Music streaming'],
+    cadence: 'monthly', day: 2, firstDue: '2026-12-02', mandate: { type: 'subscription' }, reminders: [{ daysBefore: 1, hour: 9 }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+
+  // 9:10 IST on 1 Dec: the morning nudge and the renewal reminder.
+  await tick(sql, 'https://paisa.example', at('2026-12-01', 9), fakePush as any);
+  const titles = pushed.map((p) => p.payload.title);
+  assert.ok(titles.some((t) => /Good morning/.test(t)), titles.join(' | '));
+  const renewal = pushed.find((p) => /Music app renews tomorrow/.test(p.payload.title));
+  assert.ok(renewal, titles.join(' | '));
+  assert.ok(!/₹|119/.test(JSON.stringify(renewal!.payload)), 'no amounts unless turned on');
+  assert.equal(renewal!.payload.url, '/mandates');
+  // Ticking again (or late, within 3 hours) sends nothing twice.
+  const count = pushed.length;
+  await tick(sql, 'https://paisa.example', at('2026-12-01', 9, 40), fakePush as any);
+  await tick(sql, 'https://paisa.example', at('2026-12-01', 11, 5), fakePush as any);
+  assert.equal(pushed.length, count);
+  // 2 pm: the afternoon nudge only. Turn amounts on and check the 9 pm nudge is the night one.
+  await tick(sql, 'https://paisa.example', at('2026-12-01', 14), fakePush as any);
+  assert.ok(/Quick check-in/.test(pushed[pushed.length - 1].payload.title));
+  await req('PUT', '/api/notifications/prefs', { daily: { enabled: true, hours: [21] }, amounts: true });
+  await tick(sql, 'https://paisa.example', at('2026-12-01', 21), fakePush as any);
+  assert.ok(/Before you call it a day/.test(pushed[pushed.length - 1].payload.title));
+  // Daily nudges off: nothing at 9 next day.
+  await req('PUT', '/api/notifications/prefs', { daily: { enabled: false, hours: [9] }, amounts: false });
+  const before = pushed.length;
+  await tick(sql, 'https://paisa.example', at('2026-12-02', 9), fakePush as any);
+  assert.equal(pushed.length, before);
+
+  // The cron route needs the key.
+  let res = await app.inject({ method: 'POST', url: '/api/cron/tick' });
+  assert.equal(res.statusCode, 401);
+  res = await app.inject({ method: 'POST', url: '/api/cron/tick', headers: { 'x-cron-key': cronKey('y'.repeat(40)) } });
+  assert.equal(res.statusCode, 200, res.body);
+  // Removing the device.
+  await req('DELETE', `/api/notifications/devices/${n.devices[0].id}`);
+  assert.equal((await req('GET', '/api/notifications')).body.devices.length, 0);
+});
+
+test('transactions search also matches category and subcategory names', async () => {
+  const cook = (await req('GET', '/api/categories')).body.find((c: any) => c.name === 'Cook');
+  const r = await req('POST', '/api/txns', { kind: 'expense', amount: 3000_00, accountId: A['SBI'].id, categoryId: cook.id, date: today, merchant: 'Monthly pay' });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  for (const q of ['cook', 'Household help']) {
+    const list = (await req('GET', `/api/txns?q=${encodeURIComponent(q)}`)).body;
+    const items = Array.isArray(list) ? list : list.items ?? list.txns ?? list.rows;
+    assert.ok(items.some((t: any) => t.id === r.body.id), `search "${q}" finds it`);
+  }
 });

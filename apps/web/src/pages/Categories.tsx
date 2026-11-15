@@ -8,6 +8,13 @@ type Editing = { mode: 'new-parent' } | { mode: 'new-sub'; parent: Cat } | { mod
 
 const ICONS = ['🍲', '🧑‍🍳', '🏠', '🛵', '🚗', '🛍️', '🧾', '🩺', '💈', '🎬', '📚', '✈️', '👪', '🧸', '🐾', '🍻', '🎁', '🎨', '🪔', '💼', '🏦', '🧮', '📈', '📊', '🏘️', '🧑‍💻', '💰', '💳', '📱', '⚡', '💧', '🔥', '🏋️', '💊', '🧪', '🦷', '👓', '🎓', '⛽', '🔧', '🅿️', '🚆', '🍼', '💍', '🎉', '🙏', '🏖️', '🖥️', '🎮', '📦', '•'];
 
+/** Bold the part of a name that matches the search. */
+function highlight(name: string, q: string) {
+  const i = q.trim() ? name.toLowerCase().indexOf(q.trim().toLowerCase()) : -1;
+  if (i < 0) return name;
+  return <>{name.slice(0, i)}<mark>{name.slice(i, i + q.trim().length)}</mark>{name.slice(i + q.trim().length)}</>;
+}
+
 /** Settings → Categories: every expense and income category with its subcategories. Add, rename, re-icon, hide. */
 export function Categories() {
   const qc = useQueryClient();
@@ -15,12 +22,12 @@ export function Categories() {
   const [cls, setCls] = useState<'expense' | 'income'>('expense');
   const [showHidden, setShowHidden] = useState(false);
   const [q, setQ] = useState('');
-  const [open, setOpen] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<Editing | null>(null);
   const cats = useQuery({ queryKey: ['categories', 'all'], queryFn: () => api<Cat[]>('/api/categories?all=1') });
 
   const tree = useMemo(() => {
     const all = (cats.data ?? []).filter((c) => c.class === cls && (showHidden || !c.is_archived));
+    // While searching, a match in the other tab switches to it (handled below via otherHits).
     const needle = q.trim().toLowerCase();
     const parents = all.filter((c) => !c.parent_id).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
     return parents.map((p) => {
@@ -30,8 +37,9 @@ export function Categories() {
     }).filter((x) => x.hit);
   }, [cats.data, cls, showHidden, q]);
 
-  const toggle = (id: string) => setOpen((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const counts = { parents: tree.length, subs: tree.reduce((s, x) => s + x.subs.length, 0) };
+  const other = cls === 'expense' ? 'income' : 'expense';
+  const otherHits = q.trim() ? (cats.data ?? []).filter((c) => c.class === other && (showHidden || !c.is_archived) && c.name.toLowerCase().includes(q.trim().toLowerCase())).length : 0;
 
   async function setHidden(c: Cat, hidden: boolean) {
     try {
@@ -57,50 +65,33 @@ export function Categories() {
           <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} style={{ marginRight: 6 }} />Show hidden
         </label>
       </div>
-      <div className="spread" style={{ margin: '0 2px 8px' }}>
-        <span className="tiny faint">{counts.parents} categories · {counts.subs} subcategories</span>
-        <span className="row" style={{ gap: 6 }}>
-          <button className="btn small" onClick={() => setOpen(new Set(tree.map((x) => x.p.id)))}><span className="wide-only">Expand all</span><span className="narrow-only">Expand</span></button>
-          <button className="btn small" onClick={() => setOpen(new Set())}><span className="wide-only">Collapse all</span><span className="narrow-only">Collapse</span></button>
-        </span>
-      </div>
+      <div className="tiny faint" style={{ margin: '0 2px 8px' }}>{counts.parents} categories · {counts.subs} subcategories · tap a subcategory to rename or hide it</div>
       {cls === 'income' && <p className="tiny faint" style={{ margin: '0 2px 10px' }}>Categories marked <b>not income</b> are money coming in that isn't earnings (repayments, refunds, gifts). They stay out of your income totals.</p>}
 
       {!cats.data ? <div className="card"><div className="skeleton" /></div> : (
         <div className="list cat-list">
-          {tree.map(({ p, subs }) => {
-            const isOpen = open.has(p.id) || !!q.trim();
-            return (
-              <div key={p.id} className={`cat-group ${p.is_archived ? 'hidden' : ''}`}>
-                <div className="item cat-head">
-                  <button className="cat-toggle" onClick={() => toggle(p.id)} aria-expanded={isOpen}>
-                    <span className="cat-icon" aria-hidden>{p.icon ?? '•'}</span>
-                    <span className="grow" style={{ textAlign: 'left' }}>
-                      <span className="title">{p.name}</span>
-                      <span className="sub">{subs.length ? `${subs.length} subcategor${subs.length === 1 ? 'y' : 'ies'}` : 'No subcategories'}{p.not_income ? ' · not income' : ''}{p.is_archived ? ' · hidden' : ''}</span>
-                    </span>
-                    <span className={`chev ${isOpen ? 'open' : ''}`} aria-hidden>›</span>
-                  </button>
-                  <button className="btn small" onClick={() => setEditing({ mode: 'edit', cat: p })}>Edit</button>
-                </div>
-                {isOpen && (
-                  <div className="cat-subs">
-                    {subs.map((s) => (
-                      <div key={s.id} className={`cat-sub ${s.is_archived ? 'hidden' : ''}`}>
-                        <span className="grow">{s.icon ? `${s.icon} ` : ''}{s.name}{s.is_archived ? <span className="tiny faint"> · hidden</span> : null}</span>
-                        <button className="btn small" onClick={() => setEditing({ mode: 'edit', cat: s })}>Edit</button>
-                        {s.is_archived
-                          ? <button className="btn small" onClick={() => setHidden(s, false)}>Show</button>
-                          : <button className="btn small" onClick={() => setHidden(s, true)}>Hide</button>}
-                      </div>
-                    ))}
-                    <button className="cat-add" onClick={() => setEditing({ mode: 'new-sub', parent: p })}>+ Subcategory in {p.name}</button>
-                  </div>
-                )}
+          {tree.map(({ p, subs }) => (
+            <div key={p.id} className={`cat-group ${p.is_archived ? 'hidden' : ''}`}>
+              <div className="cat-head">
+                <span className="cat-icon" aria-hidden>{p.icon ?? '•'}</span>
+                <span className="grow">
+                  <span className="title">{p.name}</span>
+                  <span className="sub">{subs.length ? `${subs.length} subcategor${subs.length === 1 ? 'y' : 'ies'}` : 'No subcategories yet'}{p.not_income ? ' · not income' : ''}{p.is_archived ? ' · hidden' : ''}</span>
+                </span>
+                <button className="btn small" onClick={() => setEditing({ mode: 'edit', cat: p })}>Edit</button>
               </div>
-            );
-          })}
-          {tree.length === 0 && <div className="empty">No categories match “{q}”.</div>}
+              <div className="cat-chips">
+                {subs.map((s) => (
+                  <button key={s.id} className={`cat-chip ${s.is_archived ? 'hidden' : ''}`} onClick={() => setEditing({ mode: 'edit', cat: s })} title="Rename, change icon or hide">
+                    {s.icon ? `${s.icon} ` : ''}{highlight(s.name, q)}
+                  </button>
+                ))}
+                <button className="cat-chip add" onClick={() => setEditing({ mode: 'new-sub', parent: p })}>+ Subcategory</button>
+              </div>
+            </div>
+          ))}
+          {tree.length === 0 && otherHits > 0 && <div className="empty">{otherHits} match{otherHits === 1 ? '' : 'es'} in {other === 'income' ? 'Income' : 'Expenses'}. <button className="btn small" style={{ marginLeft: 6 }} onClick={() => setCls(other)}>Show them</button></div>}
+          {tree.length === 0 && otherHits === 0 && <div className="empty">No categories match “{q}”. <button className="btn small" style={{ marginLeft: 6 }} onClick={() => setEditing({ mode: 'new-parent' })}>Add “{q}”</button></div>}
         </div>
       )}
       <p className="tiny faint" style={{ margin: '12px 2px' }}>Hiding a category keeps its past transactions and totals; it just stops showing when you add new ones. Salary, Interest and the "Other" categories are used by the app itself, so they can be renamed but not hidden.</p>

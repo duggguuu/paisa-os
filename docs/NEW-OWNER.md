@@ -17,6 +17,7 @@ This guide sets up **your own copy**. It takes about 45 minutes, once, and costs
 7. [Your iPhone: install the app and turn on Face ID](#7-your-iphone-install-the-app-and-turn-on-face-id)
 8. [Your laptop: set a PIN](#8-your-laptop-set-a-pin)
 9. [Getting started inside the app](#9-getting-started-inside-the-app)
+   - [Reminders and notifications](#reminders-and-notifications)
 10. [Getting updates](#10-getting-updates)
 11. [Backups](#11-backups)
 12. [Privacy checklist](#12-privacy-checklist)
@@ -204,6 +205,23 @@ Do these once, in this order:
 
 **Only salary counts as income.** Money coming in that isn't earnings (a friend paying you back, money from family, refunds) goes under **"Money in (not income)"**. It still shows in your balances; it just isn't counted as earnings. At the bottom of **Salary & tax** you can review your incoming money and move anything that isn't earnings out of income, using **Select all** to do several at once.
 
+### Reminders and notifications
+
+Paisa can nudge you three times a day (morning, afternoon, night) to add your expenses, and remind you before any **mandate or subscription** renews.
+
+1. **On your iPhone:** open Paisa **from the home-screen icon** (it doesn't work in plain Safari), then go to **Settings → Notifications → Turn on notifications** and tap **Allow**. Do the same on your laptop if you want them there too.
+2. Pick your three times (default 9 AM, 2 PM and 9 PM). **Show amounts in notifications** is off, because notifications appear on your lock screen.
+3. **One-time setup so reminders arrive on time.** The free server sleeps when unused, so an hourly "alarm" on GitHub wakes it:
+   1. In the app: **Settings → Notifications → How**. You'll need two things from there, **your app address** and **Copy key**.
+   2. On GitHub, open **your** `paisa-os-app` → **Settings → Secrets and variables → Actions → New repository secret**:
+      - Name `PAISA_URL`, value: your app address (e.g. `https://paisa-os-ab12.onrender.com`).
+      - Name `PAISA_CRON_KEY`, value: the key you copied.
+   3. Open the **Actions** tab of your repo. Because it's a fork, GitHub asks first: click **I understand my workflows, go ahead and enable them**.
+   4. Click **Reminders → Run workflow → Run workflow**. Within a minute the box in Settings → Notifications turns green.
+4. **Mandates & subscriptions** (More menu): add each auto-debit (Netflix, gym, insurance, SIPs, UPI AutoPay, e-NACH…) with its next renewal date, and under **Remind me** choose when you want to hear about it (e.g. *1 day before at 9 AM* and *on the day at 9 PM*).
+
+The key only lets the alarm ask your app to send your reminders. It can't read anything. Keep it private anyway.
+
 **Hide amounts:** tap the **eye** button (on Home, in the laptop sidebar, or the small floating button on your phone) to hide every amount, for example when someone is looking at your screen. Tap again to show them. On a laptop, **Shift + H** does the same. It stays the way you left it on that device.
 
 **Themes:** tap the palette icon on Home to choose a look, light or dark.
@@ -245,6 +263,7 @@ That's it. Your data in Neon is never touched by an update.
 - [ ] **Paisa password** is unique (used nowhere else).
 - [ ] **Face ID** on your phone, **PIN** on your laptop, **Lock Paisa** on.
 - [ ] **Your fork has no collaborators.**
+- [ ] **Show amounts in notifications** stays off unless your lock screen is private.
 - [ ] If you ask an AI assistant about your money, use **your own account**: conversations stay in the account that had them.
 
 ---

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SecuritySettings } from '../components/Security';
+import { NotificationSettings } from '../components/Notifications';
 import { ModeSeg, ThemeList } from '../components/Appearance';
 import { api, authHeaders, forgetUnlockKey } from '../lib';
 import { useUi } from '../App';
@@ -55,6 +56,11 @@ export function Settings() {
         {book === 'demo' && (
           <button className="btn small" style={{ marginTop: 10 }} onClick={async () => { await api('/api/demo/reset', { method: 'POST' }); await qc.invalidateQueries(); toast('Sample data reset'); }}>Reset sample data</button>
         )}
+      </div>
+
+      <div className="section">
+        <div className="section-title">Notifications</div>
+        <NotificationSettings />
       </div>
 
       <div className="section">

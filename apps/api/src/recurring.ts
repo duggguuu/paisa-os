@@ -28,12 +28,24 @@ export const RuleInput = z.object({
   firstDue: date.optional(),          // defaults to the next matching date from today
   endDate: date.optional().nullable(),
   autoPost: z.boolean().default(false),
+  /** Repeat every N cycles: monthly + 3 = quarterly, + 6 = half-yearly; weekly + 2 = fortnightly. */
+  every: z.number().int().min(1).max(24).default(1),
+  /** Mandate / subscription details (null = an ordinary bill). */
+  mandate: z.object({
+    type: z.enum(['subscription', 'upi_autopay', 'enach', 'card_autopay', 'standing_instruction', 'other']),
+    provider: z.string().trim().max(80).optional().nullable(),
+    umrn: z.string().trim().max(60).optional().nullable(),
+    maxAmount: z.number().int().min(0).max(1e13).optional().nullable(),
+    notes: z.string().trim().max(300).optional().nullable(),
+  }).optional().nullable(),
+  /** Renewal reminders, in IST: days before the due date and the hour to send. */
+  reminders: z.array(z.object({ daysBefore: z.number().int().min(0).max(30), hour: z.number().int().min(0).max(23) })).max(6).default([]),
 }).refine((r) => (r.kind === 'transfer' ? !!r.toAccountId : !!r.categoryId), 'transfers need a destination account; others need a category')
   .refine((r) => r.cadence !== 'weekly' || r.day <= 7, 'weekly rules use day 1 (Mon) to 7 (Sun)');
-export type RuleInput = z.infer<typeof RuleInput>;
+export type RuleInput = Omit<z.infer<typeof RuleInput>, 'every' | 'reminders'> & Partial<Pick<z.infer<typeof RuleInput>, 'every' | 'reminders'>>;
 
 type Cadence = 'weekly' | 'monthly' | 'yearly';
-interface RuleShape { cadence: Cadence; day: number; month: number | null }
+interface RuleShape { cadence: Cadence; day: number; month: number | null; every?: number }
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const lastDay = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).getUTCDate(); // m is 1-based
@@ -55,10 +67,16 @@ export function firstOnOrAfter(r: RuleShape, from: string): string {
   return here >= from ? here : ymd(y + 1, mm, r.day);
 }
 
-/** The occurrence after `due`. */
+/** The occurrence after `due` (honours "every N": quarterly, half-yearly, fortnightly…). */
 export function nextAfter(r: RuleShape, due: string): string {
-  return firstOnOrAfter(r, addDays(due, 1));
+  const n = Math.max(1, r.every ?? 1);
+  if (n === 1) return firstOnOrAfter(r, addDays(due, 1));
+  const [y, m] = due.split('-').map(Number);
+  if (r.cadence === 'weekly') return addDays(due, 7 * n);
+  if (r.cadence === 'monthly') { const k = (m - 1) + n; return ymd(y + Math.floor(k / 12), (k % 12) + 1, r.day); }
+  return ymd(y + n, r.month ?? m, r.day);
 }
+const shapeOf = (r: any): RuleShape => ({ cadence: r.cadence, day: r.day, month: r.month, every: r.every ?? 1 });
 
 export async function listRules(sql: Sql | Tx, bookId: string) {
   return sql<any[]>`
@@ -97,10 +115,11 @@ export async function createRule(sql: Sql, bookId: string, input: RuleInput) {
   const next = input.firstDue ?? firstOnOrAfter(shape, todayIST());
   return sql.begin(async (tx) => {
     const [row] = await tx<{ id: string }[]>`
-      insert into recurring_rule (book_id, name, kind, amount, account_id, category_id, to_account_id, merchant, cadence, day, month, next_due, end_date, auto_post)
+      insert into recurring_rule (book_id, name, kind, amount, account_id, category_id, to_account_id, merchant, cadence, day, month, next_due, end_date, auto_post, every, mandate, reminders)
       values (${bookId}, ${input.name}, ${input.kind}, ${input.amount}, ${input.accountId}, ${input.kind === 'transfer' ? null : input.categoryId ?? null},
               ${input.kind === 'transfer' ? input.toAccountId ?? null : null}, ${input.merchant ?? null}, ${input.cadence}, ${input.day},
-              ${shape.month}, ${next}, ${input.endDate ?? null}, ${input.autoPost})
+              ${shape.month}, ${next}, ${input.endDate ?? null}, ${input.autoPost}, ${input.every ?? 1},
+              ${input.mandate ? tx.json(input.mandate as any) : null}, ${tx.json((input.reminders ?? []) as any)})
       returning id`;
     await audit(tx, bookId, 'recurring', row.id, 'create', null, input, 'user');
     return row.id;
@@ -120,7 +139,10 @@ export async function updateRule(sql: Sql, bookId: string, ruleId: string, input
       update recurring_rule set name = ${input.name}, kind = ${input.kind}, amount = ${input.amount}, account_id = ${input.accountId},
         category_id = ${input.kind === 'transfer' ? null : input.categoryId ?? null}, to_account_id = ${input.kind === 'transfer' ? input.toAccountId ?? null : null},
         merchant = ${input.merchant ?? null}, cadence = ${input.cadence}, day = ${input.day}, month = ${shape.month}, next_due = ${next},
-        end_date = ${input.endDate ?? null}, auto_post = ${input.autoPost}, is_active = ${input.isActive ?? before.is_active}
+        end_date = ${input.endDate ?? null}, auto_post = ${input.autoPost}, is_active = ${input.isActive ?? before.is_active},
+        every = ${input.every ?? before.every ?? 1},
+        mandate = ${input.mandate === undefined ? before.mandate : input.mandate ? tx.json(input.mandate as any) : null},
+        reminders = ${input.reminders === undefined ? tx.json(before.reminders ?? []) : tx.json(input.reminders as any)}
       where id = ${ruleId}`;
     await audit(tx, bookId, 'recurring', ruleId, 'update', before, input, 'user');
   });
@@ -139,7 +161,7 @@ export async function deleteRule(sql: Sql, bookId: string, ruleId: string) {
 }
 
 async function advance(tx: Tx, rule: any) {
-  const next = nextAfter({ cadence: rule.cadence, day: rule.day, month: rule.month }, rule.next_due);
+  const next = nextAfter(shapeOf(rule), rule.next_due);
   const ended = rule.end_date && next > rule.end_date;
   await tx`update recurring_rule set next_due = ${next}, is_active = ${ended ? false : rule.is_active} where id = ${rule.id}`;
 }
@@ -222,7 +244,7 @@ export async function upcoming(sql: Sql | Tx, bookId: string, period: Range, tod
     for (let i = 0; i < 60 && due < period.to; i++) {
       if (r.end_date && due > r.end_date) break;
       items.push({ ruleId: r.id, name: r.name, date: due, amount: Number(r.amount), kind: r.kind, overdue: due < today, icon: r.category_icon ?? r.account_icon });
-      due = nextAfter({ cadence: r.cadence, day: r.day, month: r.month }, due);
+      due = nextAfter(shapeOf(r), due);
     }
   }
   items.sort((a, b) => a.date.localeCompare(b.date));

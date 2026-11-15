@@ -17,12 +17,15 @@ import { todayIST, periodContaining } from './money.js';
 import { registerExtras } from './routes-extra.js';
 import * as passkeys from './passkeys.js';
 import { postAutoDue } from './recurring.js';
+import * as notify from './notify.js';
 
 export interface AppConfig {
   sql: Sql;
   appSecret: string;
   publicUrl: string; // where the app is served, used for the Kite redirect
   webDist?: string;
+  /** Tests inject a fake Web Push sender. */
+  pushSend?: (...args: any[]) => Promise<any>;
   secureCookies?: boolean;
   fetch?: typeof fetch;
   logger?: boolean;
@@ -296,6 +299,13 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     }
   });
 
+  // Scheduler (GitHub Actions, hourly): auto-log due bills and send due reminders. Authenticated by a
+  // key derived from APP_SECRET (shown to the owner in Settings → Notifications), not by a session.
+  app.post('/api/cron/tick', async (req, reply) => {
+    if (!notify.cronKeyOk(cfg.appSecret, req.headers['x-cron-key'])) return reply.status(401).send({ error: 'bad_key' });
+    return notify.tick(sql, cfg.publicUrl, new Date(), cfg.pushSend as any);
+  });
+
   // ---------- everything below needs a session ----------
   await app.register(async (api) => {
     api.addHook('preHandler', async (req) => requireAuth(req));
@@ -337,6 +347,36 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
       await sql`update app_user set pin_hash = null, pin_length = null, pin_failures = 0 where id = ${req.userId!}`;
       return { ok: true };
     });
+
+    // Notifications: devices, daily reminders, delivery setup
+    api.get('/api/notifications', async (req) => {
+      const [keys, prefs, devices, [last]] = await Promise.all([
+        notify.vapidKeys(sql), notify.getPrefs(sql, req.userId!),
+        sql<any[]>`select id, device, created_at, last_ok_at from push_subscription where user_id = ${req.userId!} order by created_at`,
+        sql<any[]>`select value from app_setting where key = 'last_tick'`,
+      ]);
+      return { publicKey: keys.publicKey, prefs, devices, cronKey: notify.cronKey(cfg.appSecret), appUrl: cfg.publicUrl, lastTick: last?.value?.at ?? null };
+    });
+    api.put('/api/notifications/prefs', async (req) => {
+      const b = z.object({ daily: z.object({ enabled: z.boolean(), hours: z.array(z.number().int().min(0).max(23)).max(6) }), amounts: z.boolean() }).parse(req.body);
+      await notify.setPrefs(sql, req.userId!, b);
+      return { ok: true };
+    });
+    api.post('/api/notifications/subscribe', async (req) => {
+      const b = z.object({
+        subscription: z.object({ endpoint: z.string().url().max(1000), keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }) }),
+        device: z.string().max(60).optional().nullable(),
+      }).parse(req.body);
+      await notify.subscribe(sql, req.userId!, b.subscription, b.device ?? null);
+      return { ok: true };
+    });
+    api.delete('/api/notifications/devices/:id', async (req) => {
+      await sql`delete from push_subscription where id = ${(req.params as any).id} and user_id = ${req.userId!}`;
+      return { ok: true };
+    });
+    api.post('/api/notifications/test', async (req) => notify.sendToUser(sql, cfg.publicUrl, req.userId!, {
+      title: 'Paisa notifications are on ✅', body: 'You’ll get your daily reminders and renewal alerts here.', url: '/settings', tag: 'test',
+    }, cfg.pushSend as any));
 
     // Accounts and categories
     api.get('/api/accounts', async (req) => {
@@ -401,7 +441,9 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
           ${q.from ? sql`and t.occurred_on >= ${q.from}` : sql``}
           ${q.to ? sql`and t.occurred_on < ${q.to}` : sql``}
           ${q.kind ? sql`and t.kind = ${q.kind}` : sql``}
-          ${like ? sql`and (t.merchant ilike ${like} or t.description ilike ${like} or t.note ilike ${like} or ${q.q!} = any(t.tags))` : sql``}
+          ${like ? sql`and (t.merchant ilike ${like} or t.description ilike ${like} or t.note ilike ${like} or ${q.q!} = any(t.tags)
+                 or exists (select 1 from posting sp join account sc on sc.id = sp.account_id left join account spc on spc.id = sc.parent_id
+                            where sp.txn_id = t.id and sc.kind = 'category' and (sc.name ilike ${like} or spc.name ilike ${like})))` : sql``}
           ${q.accountId ? sql`and exists (select 1 from posting p where p.txn_id = t.id and p.account_id = ${q.accountId})` : sql``}
           ${q.categoryId ? sql`and exists (select 1 from posting p join account a on a.id = p.account_id where p.txn_id = t.id and (a.id = ${q.categoryId} or a.parent_id = ${q.categoryId}))` : sql``}
           ${q.min !== undefined ? sql`and (select sum(abs(p.amount)) / 2 from posting p where p.txn_id = t.id) >= ${q.min}` : sql``}

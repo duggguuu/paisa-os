@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, money, parseRupees, todayIST, addDays, uuid, shortDate, maskText } from '../lib';
 import { Sheet, useUi } from '../App';
 import { Icon } from './Icons';
+import { CategoryPicker } from './CategoryPicker';
 import { useNavigate } from 'react-router-dom';
 import { parseSpoken, speechSupported, listen, type Draft } from '../voice';
 
@@ -50,7 +51,6 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const [date, setDate] = useState<string>(edit?.date ?? todayIST());
   const [note, setNote] = useState(edit?.note ?? '');
   const [splitWith, setSplitWith] = useState<string[]>([]);
-  const [showAllCats, setShowAllCats] = useState(false);
   const [touched, setTouched] = useState({ category: !!initial, account: !!initial });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -160,13 +160,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
 
   const cats = (categories.data ?? []).filter((c) => c.class === (kind === 'income' ? 'income' : 'expense'));
   const byId = new Map(cats.map((c) => [c.id, c]));
-  const label = (c: any) => (c.parent_id ? `${byId.get(c.parent_id)?.icon ?? ''} ${c.name}` : `${c.icon ?? ''} ${c.name}`).trim();
-  const quick = [...cats]
-    .filter((c) => c.parent_id || !cats.some((x) => x.parent_id === c.id))
-    .sort((a, b) => b.recent_uses - a.recent_uses || a.sort - b.sort)
-    .slice(0, 8);
-  if (categoryId && !quick.some((c) => c.id === categoryId) && byId.get(categoryId)) quick.unshift(byId.get(categoryId));
-
+  const label = (c: any) => (c.parent_id ? `${byId.get(c.parent_id)?.name ?? ''} › ${c.name}` : `${c.icon ?? ''} ${c.name ?? ''}`).trim();
   const paise = parseRupees(amount);
   const canSplit = kind === 'expense' && !edit && people.length > 0;
 
@@ -270,13 +264,8 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
         {kind !== 'transfer' && (
           <div className="field">
             <label>Category</label>
-            <div className="chips">
-              {(showAllCats ? cats.filter((c) => c.parent_id || !cats.some((x) => x.parent_id === c.id)) : quick).map((c) => (
-                <button type="button" key={c.id} className={`chip ${categoryId === c.id ? 'on' : ''}`}
-                  onClick={() => { setCategoryId(c.id); setTouched((t) => ({ ...t, category: true })); }}>{label(c)}</button>
-              ))}
-              <button type="button" className="chip" onClick={() => setShowAllCats((s) => !s)}>{showAllCats ? 'Fewer' : 'All categories…'}</button>
-            </div>
+            <CategoryPicker cats={categories.data ?? []} cls={kind === 'income' ? 'income' : 'expense'} value={categoryId}
+              onChange={(id) => { setCategoryId(id); setTouched((t) => ({ ...t, category: true })); }} />
           </div>
         )}
 

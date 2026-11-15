@@ -25,6 +25,7 @@ import { Debts } from './pages/Debts';
 import { Fds } from './pages/Fds';
 import { Salary } from './pages/Salary';
 import { Categories } from './pages/Categories';
+import { Mandates } from './pages/Mandates';
 import { PrivacyToggle, usePrivacy } from './components/PrivacyToggle';
 import { isPrivate, setPrivate } from './lib';
 
@@ -78,6 +79,11 @@ function Shell() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [add, setAdd] = useState<QuickAddPreset | null>(null);
+  // A daily reminder opens the app with ?add=1: go straight to "Add transaction".
+  useEffect(() => {
+    const p = new URLSearchParams(loc.search);
+    if (p.get('add') === '1' && loc.pathname === '/') { setAdd({}); navigate('/', { replace: true }); }
+  }, [loc.search, loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   const [txn, setTxn] = useState<string | null>(null);
   const [toastState, setToast] = useState<{ msg: string; action?: { label: string; run: () => void }; id: number } | null>(null);
   const [book, setBookState] = useState(getBook());
@@ -122,6 +128,7 @@ function Shell() {
           <NavLink to="/copilot"><Icon name="sparkle" />AI Copilot</NavLink>
           <NavLink to="/budgets"><Icon name="pie" />Budget Planner</NavLink>
           <NavLink to="/recurring"><Icon name="repeat" />Bills &amp; recurring</NavLink>
+          <NavLink to="/mandates"><Icon name="repeat" />Mandates &amp; subs</NavLink>
           <NavLink to="/insights"><Icon name="spark" />Insights</NavLink>
           <div className="nav-group">Tools</div>
           <NavLink to="/import"><Icon name="upload" />Import</NavLink>
@@ -157,6 +164,7 @@ function Shell() {
             <Route path="/fds" element={<Fds />} />
             <Route path="/salary" element={<Salary />} />
             <Route path="/categories" element={<Categories />} />
+            <Route path="/mandates" element={<Mandates />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </div>
