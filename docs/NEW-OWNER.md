@@ -1,71 +1,275 @@
-# Paisa OS: your own private copy
+# Paisa OS: your own private finance app
 
-This is a personal finance app (expenses, budgets, salary and tax, loans, FDs, goals) that runs on **your own free accounts**. Nobody else, including whoever gave you this code, can see your data. Here's why:
+Paisa OS keeps track of your money: spending, budgets, salary and income tax, loans, FDs, goals and money you've lent. It runs on your phone like an app (Face ID included) and on your laptop in the browser.
 
-- **Your data lives in a database you create and own** (Neon). Only you have its password.
-- **The app runs on a server you create and own** (Render), with a secret key that only your server knows.
-- **It has its own web address**, so logins, Face ID and passkeys are tied to your copy only.
-- **There is no shared server, no shared database and no admin account.** Another person's copy of Paisa has no way to reach yours, because it doesn't have your database password or your server.
-
-Setup takes about 30 minutes, once. It costs ₹0.
+This guide sets up **your own copy**. It takes about 45 minutes, once, and costs ₹0.
 
 ---
 
-## What you need
+## Contents
 
-- A laptop with a browser.
-- An email address that **only you** can read. Use it for all three sign-ups below, and turn on two-factor login for it.
+1. [Why your data stays yours](#1-why-your-data-stays-yours)
+2. [Before you start](#2-before-you-start)
+3. [GitHub: get your copy of the app](#3-github-get-your-copy-of-the-app)
+4. [Neon: create your database](#4-neon-create-your-database)
+5. [Render: put the app online](#5-render-put-the-app-online)
+6. [First visit: create your login](#6-first-visit-create-your-login)
+7. [Your iPhone: install the app and turn on Face ID](#7-your-iphone-install-the-app-and-turn-on-face-id)
+8. [Your laptop: set a PIN](#8-your-laptop-set-a-pin)
+9. [Getting started inside the app](#9-getting-started-inside-the-app)
+10. [Getting updates](#10-getting-updates)
+11. [Backups](#11-backups)
+12. [Privacy checklist](#12-privacy-checklist)
+13. [If something goes wrong](#13-if-something-goes-wrong)
 
-## 1. GitHub: hold your copy of the code
+---
 
-1. Sign up at **github.com** with your email. Turn on two-factor authentication (Settings → Password and authentication).
-2. Click **New repository**. Name it `paisa-os` and choose **Private**. Don't add a README.
-3. Upload the code you were given:
-   - **Easiest:** on the empty repo page, click **uploading an existing file**, then drag in every file and folder from the `paisa-os` folder you received. Commit.
-   - **Or, if someone pushes it for you:** invite them as a collaborator for those 5 minutes, then **remove them** (Settings → Collaborators). The repo only holds code, never your data, but nobody else should be able to change the code your app runs.
+## 1. Why your data stays yours
 
-## 2. Neon: your database
+The app is made of three pieces, and **you own all three**:
 
-1. Sign up at **neon.tech** with the same email and turn on two-factor login.
-2. **Create project**:
-   - Name: `paisa`.
-   - Region: **AWS Asia Pacific (Singapore)**.
-3. On the project dashboard, click **Connect**. Turn **Connection pooling off**, then copy the connection string. It starts with `postgresql://` and ends with `?sslmode=require`.
-4. Keep it somewhere safe, such as your password manager. **This string is the key to your data. Never share it or paste it into chats.**
+| Piece | What it holds | Who can get in |
+|---|---|---|
+| **Your GitHub copy** | The app's code only. Never any of your money data. | You |
+| **Your Neon database** | All of your data: transactions, balances, salary, everything. | You |
+| **Your Render server** | Runs the app at your own web address. | You |
 
-## 3. Render: run the app
+So:
 
-1. Sign up at **render.com**. Choose **Sign in with GitHub**, so Render can see your `paisa-os` repo. Turn on two-factor login.
-2. Click **New → Blueprint** and pick your `paisa-os` repo. Render reads `render.yaml` and creates a free web service.
-3. It asks for **DATABASE_URL**: paste the Neon string from step 2.
-4. It creates **APP_SECRET** by itself. Don't change it later.
-5. Click **Apply**. The first build takes about 5 minutes. When it says **Live**, open the address it shows, for example `https://paisa-os-xxxx.onrender.com`.
+- **Nobody else can see your data.** That includes the person who shared this app with you. Their copy of Paisa runs on their own accounts and has no way to reach your database, because it doesn't have your database password.
+- **You can't see theirs either.** Your copy has no link to their database or their server.
+- **Your code started fresh.** The code you receive contains no one else's data, and none of the history of how it was built.
+- **Updates come only when you choose.** An update changes code only, never data, and nothing reaches your app until you approve it (see [section 10](#10-getting-updates)).
+- **Reading files stays on your phone.** Screenshots, payslips and bank statements you upload are read on your own device; they aren't sent anywhere to be read.
 
-## 4. First visit: create your login
+---
 
-1. Open your address. The first person to visit becomes the **only** owner, so do this straight away.
-2. Enter your email, a password of at least 10 characters that you don't use anywhere else, and your bank account names (for example "SBI, ICICI Bank"). The first bank is where your salary lands.
-3. On your iPhone: open the address in Safari → Share → **Add to Home Screen**. Open the app from there, then go to **Settings → Security → Set up Face ID on this device**.
-4. On your laptop: go to **Settings → Security → Laptop PIN**. From then on, every new tab asks for the PIN.
+## 2. Before you start
 
-You also get a separate **sample data** book to explore (Settings). It never mixes with your real records.
+You need:
 
-## Keeping it private: a short checklist
+- **A laptop** with Chrome or Safari. Setup is much easier on a laptop than a phone.
+- **An email address that only you can read.** You'll use it for all three sign-ups below. Turn on two-step login for it if you haven't (Gmail: myaccount.google.com → Security → 2-Step Verification).
+- **A password manager, or a safe place to note things down.** You'll create a few passwords and one long "connection string".
+- **The invite.** The person sharing the app will invite your GitHub username to a repository called **`paisa-os-app`**. Send them your username after step 3.1.
 
-- [ ] Two-factor login on your email, GitHub, Neon and Render.
-- [ ] Your **own Apple ID / iCloud**. Passkeys (Face ID logins) sync through iCloud Keychain, so a shared Apple ID would share them.
-- [ ] Your own phone passcode, and your own user account on any shared computer.
-- [ ] Never share the Neon connection string, your Render login or your app password. Not even with someone you trust, and not in chats with AI assistants.
-- [ ] Use your own AI account if you ask an assistant about your money. Conversations live in that account.
-- [ ] **Updates:** Render redeploys whenever *your* repo changes. Only you can change it, so nothing reaches your app unless you add it. If you're sent a newer version, read what changed before you upload it.
+Keep this guide open in one tab and do the steps in another.
 
-## If something goes wrong
+---
 
-- **The app shows "Waking up…" for a while:** free Render services sleep after 15 minutes idle. The first visit takes up to a minute.
-- **You forget your password:** there's no email reset (by design, nothing is sent anywhere). Instead:
-  1. In Render → your service → **Environment**, add `RESET_OWNER_PASSWORD` with a new password (10+ characters). Save; the app restarts.
-  2. Log in with that password.
-  3. **Delete the variable again** and save.
+## 3. GitHub: get your copy of the app
 
-  Every device is logged out, and the laptop PIN is cleared. Set it again in Settings.
-- **Backups:** Settings → Export downloads all your data. Neon also keeps a short history you can restore from (Branches → restore).
+GitHub stores code. You'll make your own copy (a **fork**) of the app.
+
+### 3.1 Create your account
+
+1. Go to **github.com** and click **Sign up**.
+2. Enter your email, a strong password and a username (for example `priya-r`). Finish the verification.
+3. Turn on two-factor login:
+   1. Click your profile picture (top right) → **Settings** → **Password and authentication**.
+   2. Click **Enable two-factor authentication**, then follow the steps using an authenticator app (Google Authenticator, Microsoft Authenticator or 1Password).
+   3. **Save the recovery codes** somewhere safe.
+4. **Send your GitHub username** to the person sharing the app so they can invite you.
+
+### 3.2 Accept the invite
+
+1. You'll get an email titled *"… invited you to collaborate on paisa-os-app"*. You'll also see a notification on github.com.
+2. Click **View invitation**, then **Accept invitation**.
+
+The `paisa-os-app` page opens. It holds a clean copy of the app's code and nothing else.
+
+### 3.3 Make your own copy (fork)
+
+1. On the `paisa-os-app` page, click **Fork** (top right).
+2. Fill in:
+   - **Owner:** you.
+   - **Repository name:** leave it as `paisa-os-app`.
+   - **Copy the main branch only:** leave it ticked.
+3. Click **Create fork**.
+
+You now have **`your-username/paisa-os-app`**. It's private, and this is the copy your app will run from.
+
+> Your copy of the code is linked to the shared one only so you can **pull in updates when you choose**. Nothing flows the other way: your data is never in the code, and no one can change your copy except you.
+
+---
+
+## 4. Neon: create your database
+
+Neon stores all of your data. The free plan gives 0.5 GB, which is years of transactions, and it doesn't expire.
+
+1. Go to **neon.tech** → **Sign up**. Use the same email, or **Continue with GitHub**.
+2. Turn on two-factor login: profile picture → **Account settings** → **Security**.
+3. Click **Create project** (or **New project**) and fill in:
+   - **Project name:** `paisa`.
+   - **Postgres version:** leave the default.
+   - **Region:** **AWS Asia Pacific (Singapore)**, the closest to India.
+4. Click **Create**.
+5. On the project dashboard, click **Connect** (top right). In the window that opens:
+   - **Branch:** `main` · **Database:** `neondb` · **Role:** leave as is.
+   - Turn **Connection pooling** **off**.
+   - Copy the **connection string**. It looks like this:
+
+     ```
+     postgresql://neondb_owner:AbCdEf123@ep-something-123456.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+     ```
+6. Save it in your password manager as **"Paisa database"**.
+
+> ⚠️ **This connection string is the key to all your data.** Never send it to anyone or paste it into a chat (including AI assistants), an email or a document. The only place it goes is Render, in the next step.
+
+---
+
+## 5. Render: put the app online
+
+Render runs the app and gives it a web address.
+
+1. Go to **render.com** → **Get Started**. Choose **Sign up with GitHub** and allow Render to access your account.
+2. Turn on two-factor login: profile picture → **Account Settings** → **Security**.
+3. Give Render access to your repo:
+   1. Click **New** (top right) → **Blueprint**.
+   2. If `paisa-os-app` isn't listed, click **Configure account** / **Connect GitHub**, choose **Only select repositories**, pick **`your-username/paisa-os-app`** and click **Install**.
+4. Back on **New Blueprint**, pick **`paisa-os-app`** and click **Connect**.
+5. Render reads the setup file in the code and shows one free web service called `paisa-os`. Fill in:
+   - **Blueprint name:** `paisa`.
+   - **DATABASE_URL:** paste the Neon connection string from step 4.
+   - **APP_SECRET:** Render fills it in for you. **Never change it later**; it protects your logins and saved keys.
+6. Click **Apply** (or **Deploy Blueprint**). The first build takes 5–8 minutes. Click into the `paisa-os` service and open **Logs** to watch it.
+7. When it says **Live**, your address appears at the top of the service page, for example **`https://paisa-os-ab12.onrender.com`**. Save it.
+
+**About the free plan:** the app sleeps after 15 minutes of no use. The next visit wakes it in about a minute (you'll see the logo with "Waking up…"); after that it's fast.
+
+---
+
+## 6. First visit: create your login
+
+**Do this straight after step 5.** The first person to open the address becomes the app's only owner. After that, nobody else can create a login on your copy.
+
+1. Open your address on your laptop.
+2. You'll see **"Your money, finally in one place."** Fill in:
+   - **Email.**
+   - **Password:** at least 10 characters, and **not one you use anywhere else**.
+   - **Your bank accounts:** your bank names separated by commas, for example `SBI, ICICI Bank`. **Put the bank your salary goes into first.**
+3. Click **Create and continue**.
+
+You're in. You get two separate **books**:
+
+- **My money:** your real one. Your banks and Cash, each starting at ₹0.
+- **Sample data:** made-up transactions to explore. Switch in **Settings**; a yellow banner shows whenever you're looking at it. It never mixes with your real data.
+
+---
+
+## 7. Your iPhone: install the app and turn on Face ID
+
+1. On your iPhone, open your address in **Safari** (it must be Safari).
+2. Tap **Share** (the square with an arrow) → **Add to Home Screen** → **Add**.
+3. Open **Paisa** from your home screen and log in with your email and password.
+4. Go to **Settings → Security → Face ID (phone) → Set up Face ID on this device** and approve with Face ID.
+5. Under **Lock Paisa**, keep both switches on:
+   - **Lock Paisa**: the lock itself.
+   - **Every time it opens**: asks for Face ID whenever you open the app.
+   - Then pick how long it can be idle before it locks again (5 minutes is a good default).
+
+From now on, opening Paisa asks for Face ID.
+
+> Face ID logins are saved in your iCloud Keychain. Use **your own Apple ID**; a shared Apple ID would share them.
+
+---
+
+## 8. Your laptop: set a PIN
+
+1. Open your address in Chrome or Safari and log in.
+2. Go to **Settings → Security → Laptop PIN → Set a PIN**.
+3. Enter a 4–6 digit PIN twice, plus your account password. Patterns like 1111 or 1234 aren't allowed.
+
+From now on, every new tab or browser restart asks for the PIN, and your password always works too. After 5 wrong PINs, the PIN is paused until you unlock with your password.
+
+---
+
+## 9. Getting started inside the app
+
+Do these once, in this order:
+
+1. **Set your balances.** **Accounts** → tap each bank → enter today's balance. Do the same for Cash.
+2. **Add your cards and wallets.** **Accounts → + Add** for credit cards, wallets (e.g. PhonePe) and investments. For a credit card, enter what you currently owe on it.
+3. **Your salary.** **More → Salary & tax**:
+   - **Upload payslips:** PDF, Excel, CSV or TXT, several at once. Paisa reads the earnings and deductions, and can set your monthly salary from the latest one.
+   - Or tap **Type it in** to enter it by hand.
+   - Pick the bank it lands in and the pay day. **Last day of the month** is the default; Paisa logs it for you that day.
+   - The **Tax simulator** shows your tax under the New Regime, with "what if" sliders.
+4. **Past transactions (optional).** **Import**: download a statement from your net banking as PDF, Excel, CSV or TXT and upload it. If you choose a password-protected PDF, it asks for the password. You then review every row before saving anything.
+5. **Adding money in and out day to day:**
+   - Tap **+**, or speak: tap the mic and say *"spent 450 on Swiggy from ICICI card yesterday"*.
+   - Or tap 📷 to scan a bill or receipt.
+6. **Zerodha (optional).** To see your stocks and mutual funds at market value, go to **Settings → Zerodha (Kite)**. It needs your own Kite Connect app from developers.kite.trade (Zerodha may charge for it); Settings shows the exact **redirect URL** to give that app. Then tap **Accounts → Holdings → Log in & sync** about once a day. Paisa only reads your holdings; it can't place orders.
+7. **Optional extras:** **Budget Planner**, **Goals**, **Bills & recurring**, **Owe & owed** (money you've lent, borrowed, or that friends owe you), **FDs** and **Splitwise** (import its exports or screenshots).
+
+**Only salary counts as income.** Money coming in that isn't earnings (a friend paying you back, money from family, refunds) goes under **"Money in (not income)"**. It still shows in your balances; it just isn't counted as earnings. At the bottom of **Salary & tax** you can review your incoming money and move anything that isn't earnings out of income, using **Select all** to do several at once.
+
+**Themes:** tap the palette icon on Home to choose a look, light or dark.
+
+---
+
+## 10. Getting updates
+
+When the app gets new features, they arrive in the shared `paisa-os-app`. **Your app doesn't change until you pull them in.** It takes one tap:
+
+1. Open **github.com/your-username/paisa-os-app**.
+2. If there's an update, you'll see **"This branch is 1 commit behind …:main"**.
+3. *(Optional)* To see what changed, click **Sync fork → Compare**. Updates only ever touch code files; your data isn't in the code.
+4. Click **Sync fork → Update branch**.
+5. Render notices and redeploys by itself in about 5 minutes. Check under **Render → paisa-os → Events**.
+
+That's it. Your data in Neon is never touched by an update.
+
+**Rules that keep it private:**
+
+- **Never add anyone as a collaborator on your fork** (Settings → Collaborators should stay empty). Only you should be able to change the code your app runs.
+- **Don't change APP_SECRET or DATABASE_URL in Render** unless you're moving your database on purpose.
+- **Keep a backup copy of the code:** every few months, on your fork page, click **Code → Download ZIP**. If you're ever removed from the shared repo, GitHub deletes your fork, but **your app keeps running** and **your data is untouched**. You'd just make a new private repo from the ZIP and point Render at it (Render → Settings → Repository).
+
+---
+
+## 11. Backups
+
+- **Inside the app:** **Settings → Export everything** downloads all your data as a file. Do it monthly and keep it somewhere private, such as a password-protected folder.
+- **Neon:** **Branches → Restore** can roll the database back to an earlier moment (within the free plan's history window).
+
+---
+
+## 12. Privacy checklist
+
+- [ ] Two-factor login on **email, GitHub, Neon and Render**.
+- [ ] **Your own Apple ID**, phone passcode and laptop user account.
+- [ ] The **Neon connection string** is only in your password manager and in Render.
+- [ ] **Paisa password** is unique (used nowhere else).
+- [ ] **Face ID** on your phone, **PIN** on your laptop, **Lock Paisa** on.
+- [ ] **Your fork has no collaborators.**
+- [ ] If you ask an AI assistant about your money, use **your own account**: conversations stay in the account that had them.
+
+---
+
+## 13. If something goes wrong
+
+**"Waking up…" for a while.** The free plan sleeps after 15 idle minutes. Wait about a minute and it opens.
+
+**The build failed on Render.**
+1. Open **Render → paisa-os → Events**, click the failed deploy and read the last lines of the log.
+2. Check that **DATABASE_URL** (Render → paisa-os → **Environment**) is the full Neon string, starting with `postgresql://`, and that **Connection pooling** was off when you copied it.
+3. Click **Manual Deploy → Deploy latest commit**.
+
+**I forgot my password.** There's no email reset, because nothing is ever sent anywhere. Instead:
+1. Go to Render → paisa-os → **Environment** → **Add Environment Variable**.
+2. Name: `RESET_OWNER_PASSWORD`. Value: a new password of 10+ characters. Click **Save**; the app restarts.
+3. Log in with the new password.
+4. **Delete that variable again** and save.
+
+All devices are logged out and the laptop PIN is cleared; set them up again in Settings.
+
+**Face ID stopped working, or I have a new phone.** Log in with your password, then go to **Settings → Security → Set up Face ID on this device**. You can remove old devices from the same screen.
+
+**The PIN is "paused".** That happens after 5 wrong tries. Tap **Use password**; the PIN works again after that.
+
+**A Zerodha login comes back saying the app is locked.** Open the app, unlock it, then tap **Accounts → Holdings → Log in & sync** again.
+
+**An update broke something.** In Render → paisa-os → **Events**, open the previous successful deploy and click **Rollback**. Your data isn't affected. Then tell the person who shares the updates.
+
+**Something else.** Render → paisa-os → **Logs** shows what the app is doing.
