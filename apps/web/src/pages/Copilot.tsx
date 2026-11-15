@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib';
+import { api, maskText } from '../lib';
 import { Icon } from '../components/Icons';
 import { listen, speechSupported } from '../voice';
 
@@ -88,7 +88,7 @@ export function Copilot() {
       <div className="chat" aria-live="polite">
         {msgs.map((m, i) => (
           <div key={i} className={`bubble-msg ${m.role === 'user' ? 'me' : 'ai'}`}>
-            <Rich text={m.content} />
+            <Rich text={m.role === 'assistant' ? maskText(m.content) : m.content} />
             {m.role === 'assistant' && m.engine && <span className="eng">{m.engine === 'claude' ? 'Answered by Claude' : 'Worked out from your data on your server'}</span>}
           </div>
         ))}

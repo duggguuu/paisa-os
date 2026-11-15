@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
-import { api, money, compact, periodLabel, todayIST, dayLabel, shortDate } from '../lib';
+import { api, money, compact, periodLabel, todayIST, dayLabel, shortDate, maskText } from '../lib';
+import { PrivacyToggle } from '../components/PrivacyToggle';
 import { Icon, tint } from '../components/Icons';
 import { useUi } from '../App';
 import { TransRow } from './Activity';
@@ -52,6 +53,7 @@ export function Home() {
           <h1 className="page-title" style={{ margin: 0 }}>{periodLabel('month', h.month.from, h.month.to)}</h1>
         </div>
         <div className="head-actions">
+          <PrivacyToggle className="icon-plain" />
           <button className="icon-plain" aria-label="Theme" onClick={() => setThemes(true)}><Icon name="palette" /></button>
           <Link to="/copilot" className="icon-plain" aria-label="AI Copilot"><Icon name="sparkle" /></Link>
         </div>
@@ -91,7 +93,7 @@ export function Home() {
       </Link>
 
       {warn && (
-        <Link to="/insights" className="note-line"><span aria-hidden>{warn.icon}</span><span className="grow">{warn.title}</span><Icon name="chevron" /></Link>
+        <Link to="/insights" className="note-line"><span aria-hidden>{warn.icon}</span><span className="grow">{maskText(warn.title)}</span><Icon name="chevron" /></Link>
       )}
 
       {(h.dueSoon?.length ?? 0) > 0 && (

@@ -590,3 +590,17 @@ html:root { --bar-track: color-mix(in srgb, var(--ink) 8%, transparent); --bar: 
 @media (min-width: 900px) { .page-anim > .sheet { animation: pop 200ms var(--ease); animation-delay: 0s; } }
 .narrow-only { display: none; }
 @media (max-width: 520px) { .wide-only { display: none; } .narrow-only { display: inline; } }
+
+/* ---------- Privacy mode (hide amounts) ---------- */
+.privacy-btn svg { width: 20px; height: 20px; }
+.privacy-btn.on { color: var(--accent); }
+.nav-privacy { display: flex; align-items: center; gap: 10px; width: 100%; margin: 4px 0 10px; padding: 9px 12px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); font: inherit; font-size: 13.5px; cursor: pointer; transition: background 160ms, color 160ms, border-color 160ms; }
+.nav-privacy:hover { color: var(--ink); background: var(--surface-2); }
+.nav-privacy.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.privacy-float { position: fixed; left: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 31; width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center; border: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: var(--ink-2); box-shadow: var(--shadow); cursor: pointer; }
+.privacy-float.on { color: var(--accent); border-color: var(--accent); }
+@media (min-width: 900px) { .privacy-float { display: none; } }
+html[data-privacy] .hero-num, html[data-privacy] .tax-big { letter-spacing: 0.05em; }

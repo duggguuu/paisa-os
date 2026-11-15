@@ -25,6 +25,8 @@ import { Debts } from './pages/Debts';
 import { Fds } from './pages/Fds';
 import { Salary } from './pages/Salary';
 import { Categories } from './pages/Categories';
+import { PrivacyToggle, usePrivacy } from './components/PrivacyToggle';
+import { isPrivate, setPrivate } from './lib';
 
 interface Ui {
   openAdd: (preset?: QuickAddPreset) => void;
@@ -63,6 +65,16 @@ export function App() {
 
 function Shell() {
   const loc = useLocation();
+  // Privacy mode: re-render everything when amounts are hidden or shown (money() reads the flag).
+  usePrivacy();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (e.shiftKey && !e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'h' && !/input|textarea|select/i.test(t.tagName) && !t.isContentEditable) setPrivate(!isPrivate());
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [add, setAdd] = useState<QuickAddPreset | null>(null);
@@ -97,6 +109,7 @@ function Shell() {
       <div className="app">
         <nav className="sidebar" aria-label="Main">
           <div className="brand"><img src="/logo-mark.png" alt="" className="logo-img" />Paisa OS</div>
+          <PrivacyToggle className="nav-privacy" label />
           {links.filter(([to]) => to !== '/more').map(([to, label, icon]) => (
             <NavLink key={to} to={to} end={to === '/'}><Icon name={icon} />{label}</NavLink>
           ))}
@@ -148,6 +161,7 @@ function Shell() {
           </Routes>
           </div>
         </main>
+        {loc.pathname !== '/' && <PrivacyToggle className="privacy-float" />}
         <button className="fab-float" aria-label="Add transaction" title="Add transaction" onClick={() => setAdd({})}><Icon name="plus" /></button>
         <nav className="tabbar" aria-label="Main">
           {links.map(([to, label, icon]) => (

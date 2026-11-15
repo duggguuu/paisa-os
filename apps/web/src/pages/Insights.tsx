@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../lib';
+import { api, maskText } from '../lib';
 import { RuleSheet } from './Recurring';
 
 export interface Insight {
@@ -15,11 +15,11 @@ export function InsightCard({ i, onRecurring }: { i: Insight; onRecurring: (r: R
     <div className={`insight ${i.tone}`}>
       <div className="ins-icon" aria-hidden>{i.icon}</div>
       <div className="grow">
-        <div className="ins-title">{i.title}</div>
-        <div className="small muted">{i.body}</div>
+        <div className="ins-title">{maskText(i.title)}</div>
+        <div className="small muted">{maskText(i.body)}</div>
         {i.action && (
           <button className="ins-action" onClick={() => (i.action!.recurring ? onRecurring(i.action!.recurring) : navigate(i.action!.to!))}>
-            {i.action.label} ›
+            {maskText(i.action.label)} ›
           </button>
         )}
       </div>

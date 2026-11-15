@@ -48,7 +48,35 @@ const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR',
 const inr0 = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 /** ₹1,23,456.78 — paise in, Indian grouping out. Drops ".00" when `whole` is set. */
+// ---------- privacy mode: hide every amount ----------
+/**
+ * When on, money() and compact() return a fixed mask (same length for every amount, so not even
+ * the size leaks) and maskText() hides amounts inside free text (insights, copilot answers).
+ * Remembered per device. Toggling dispatches 'paisa:privacy'; the app shell re-renders on it.
+ */
+const PRIV_KEY = 'paisa.privacy';
+let privacy = (() => { try { return localStorage.getItem(PRIV_KEY) === '1'; } catch { return false; } })();
+export const MASK = '₹ •••••';
+export const isPrivate = () => privacy;
+export function setPrivate(on: boolean) {
+  privacy = on;
+  try { localStorage.setItem(PRIV_KEY, on ? '1' : '0'); } catch { /* storage unavailable */ }
+  if (typeof document !== 'undefined') document.documentElement.toggleAttribute('data-privacy', on);
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('paisa:privacy'));
+}
+if (typeof document !== 'undefined') document.documentElement.toggleAttribute('data-privacy', privacy);
+/** Hide amounts inside text: ₹1,234.50 · ₹12.4k · Rs 500 · INR 2,000 · 1.2 lakh · 3 crore. */
+export function maskText(s: string): string {
+  if (!privacy || !s) return s;
+  return s
+    .replace(/[−-]?(?:₹|\brs\.?|\binr)\s?[\d,]+(?:\.\d+)?\s?(?:k|l|lakhs?|cr|crores?)?\b/gi, MASK)
+    .replace(/\b\d[\d,.]*\s?(?:lakhs?|crores?)\b/gi, MASK);
+}
+/** A bare number that would give amounts away (units held, daily totals). */
+export const maskNum = (s: string | number) => (privacy ? '•••••' : String(s));
+
 export function money(paise: number, opts: { whole?: boolean; sign?: boolean } = {}): string {
+  if (privacy) return MASK;
   const r = paise / 100;
   const s = opts.whole || Number.isInteger(r) ? inr0.format(Math.abs(r)) : inr.format(Math.abs(r));
   const neg = paise < 0 ? '−' : opts.sign && paise > 0 ? '+' : '';
@@ -57,6 +85,7 @@ export function money(paise: number, opts: { whole?: boolean; sign?: boolean } =
 
 /** Compact: ₹950, ₹12.4k, ₹1.2L, ₹3.4Cr */
 export function compact(paise: number): string {
+  if (privacy) return MASK;
   const r = Math.abs(paise / 100);
   const neg = paise < 0 ? '−' : '';
   const f = (n: number, u: string) => `${neg}₹${n >= 100 ? Math.round(n) : n.toFixed(1).replace(/\.0$/, '')}${u}`;

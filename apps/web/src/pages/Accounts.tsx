@@ -2,7 +2,7 @@ import { tint } from '../components/Icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { api, money, compact, parseRupees, KIND_LABEL, KIND_ICON, todayIST, dayLabel } from '../lib';
+import { api, money, compact, parseRupees, KIND_LABEL, KIND_ICON, todayIST, dayLabel, maskNum, maskText } from '../lib';
 import { Sheet, useUi } from '../App';
 import { RollingMoney } from '../components/Rolling';
 
@@ -144,7 +144,7 @@ function Investments({ k }: { k: any }) {
               <div className="avatar" aria-hidden>{h.asset_type === 'mf' ? '🧺' : '📈'}</div>
               <div className="grow">
                 <div className="title">{h.instrument}</div>
-                <div className="sub">{h.asset_type === 'mf' ? 'Mutual fund' : 'Stock/ETF'} · {Number(h.quantity).toLocaleString('en-IN', { maximumFractionDigits: 3 })} @ ₹{Number(h.last_price).toLocaleString('en-IN')}</div>
+                <div className="sub">{h.asset_type === 'mf' ? 'Mutual fund' : 'Stock/ETF'} · {maskNum(Number(h.quantity).toLocaleString('en-IN', { maximumFractionDigits: 3 }))} @ {maskText(`₹${Number(h.last_price).toLocaleString('en-IN')}`)}</div>
               </div>
               <div className="amt">
                 <div className="num">{money(h.value_paise, { whole: true })}</div>

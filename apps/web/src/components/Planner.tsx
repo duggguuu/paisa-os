@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, money, compact, pct, parseRupees } from '../lib';
+import { api, money, compact, pct, parseRupees, maskText } from '../lib';
 import { Icon, tint } from './Icons';
 import { MiniBars, Gauge } from './Charts';
 import type { Insight } from '../pages/Insights';
@@ -58,7 +58,7 @@ export function HealthCard({ h, expanded = false }: { h: any; expanded?: boolean
         <Gauge score={h.score} label={h.label} />
         <div>
           <div className="h-label" style={{ color: color(h.score) }}>{h.label}</div>
-          <div className="h-tip">{h.focus ? h.focus.tip : 'Everything looks healthy. Keep it up.'}</div>
+          <div className="h-tip">{h.focus ? maskText(h.focus.tip) : 'Everything looks healthy. Keep it up.'}</div>
         </div>
       </div>
       {open && (
@@ -67,7 +67,7 @@ export function HealthCard({ h, expanded = false }: { h: any; expanded?: boolean
             <div className="hp" key={x.key}>
               <span>{x.label}</span><b className="num">{x.score}</b>
               <span className="meter"><i style={{ width: `${x.score}%`, background: color(x.score) }} /></span>
-              <span className="d">{x.detail}{x.tip ? `. ${x.tip}` : ''}</span>
+              <span className="d">{maskText(x.detail)}{x.tip ? `. ${maskText(x.tip)}` : ''}</span>
             </div>
           ))}
           <p className="tiny faint" style={{ margin: 0 }}>Weighted: savings rate and emergency fund 25 each, budgets and card dues 15 each, spending trend and goals 10 each.</p>
@@ -87,7 +87,7 @@ export function AiCard({ insights }: { insights: Insight[] | undefined }) {
     <div className="ai-card">
       <div className="ai-top"><span><Icon name="sparkle" /> AI insights</span><span>This month</span></div>
       <h3>{head.title}</h3>
-      <p>{head.body}</p>
+      <p>{maskText(head.body)}</p>
       <div className="ai-actions">
         <button className="btn small" onClick={() => navigate('/copilot')}>Ask Copilot</button>
         <button className="btn small ghost" onClick={() => navigate('/insights')}>View full analysis →</button>
@@ -103,7 +103,7 @@ export function QuickInsights({ insights, max = 6 }: { insights: Insight[]; max?
     <div className="quick-grid">
       {insights.slice(0, max).map((i) => (
         <button key={i.id} className={`qi ${i.tone}`} onClick={() => navigate(i.action?.to ?? '/insights')}>
-          <span className="qi-ico" aria-hidden>{i.icon}</span><span>{i.title}</span>
+          <span className="qi-ico" aria-hidden>{i.icon}</span><span>{maskText(i.title)}</span>
         </button>
       ))}
     </div>

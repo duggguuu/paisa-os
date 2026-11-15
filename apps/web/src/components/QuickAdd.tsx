@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, money, parseRupees, todayIST, addDays, uuid, shortDate } from '../lib';
+import { api, money, parseRupees, todayIST, addDays, uuid, shortDate, maskText } from '../lib';
 import { Sheet, useUi } from '../App';
 import { Icon } from './Icons';
 import { useNavigate } from 'react-router-dom';
@@ -82,7 +82,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
         if (c) { setCategoryId(c); }
       }
       setSource('receipt');
-      setHeard(`receipt: ${[g.merchant, g.amount && `₹${g.amount}`, g.date].filter(Boolean).join(' · ')}`);
+      setHeard(`receipt: ${[g.merchant, g.amount && maskText(`₹${g.amount}`), g.date].filter(Boolean).join(' · ')}`);
     } catch (e: any) {
       setVoiceErr(`Couldn't scan: ${e.message}`);
     } finally { setScan(null); }

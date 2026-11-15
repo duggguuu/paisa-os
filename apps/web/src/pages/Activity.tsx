@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
-import { api, money, parseRupees, shortDate, addDays, todayIST, periodLabel } from '../lib';
+import { api, money, parseRupees, shortDate, addDays, todayIST, periodLabel, maskNum } from '../lib';
 import { Icon } from '../components/Icons';
 import { useUi } from '../App';
 
@@ -186,8 +186,8 @@ function Calendar({ data, onPick }: { data: any; onPick: (d: string) => void }) 
         return (
           <button key={day} className={`tcell ${day === today ? 'today' : ''}`} onClick={() => onPick(day)} disabled={day > today}>
             <span className={`tday ${dow === 0 ? 'sun' : dow === 6 ? 'sat' : ''}`}>{Number(day.slice(8))}</span>
-            {v && Number(v.income) > 0 && <span className="tamt inc num">{Math.round(v.income / 100).toLocaleString('en-IN')}</span>}
-            {v && Number(v.expense) > 0 && <span className="tamt exp num">{Math.round(v.expense / 100).toLocaleString('en-IN')}</span>}
+            {v && Number(v.income) > 0 && <span className="tamt inc num">{maskNum(Math.round(v.income / 100).toLocaleString('en-IN'))}</span>}
+            {v && Number(v.expense) > 0 && <span className="tamt exp num">{maskNum(Math.round(v.expense / 100).toLocaleString('en-IN'))}</span>}
           </button>
         );
       })}
