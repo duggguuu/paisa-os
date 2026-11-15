@@ -1,7 +1,7 @@
 /**
  * Voice / natural-language entry.
  *
- * Turns a sentence like "spent 450 on Swiggy from HDFC card yesterday" into a draft
+ * Turns a sentence like "spent 450 on Swiggy from ICICI card yesterday" into a draft
  * transaction. Parsing is local and deterministic (no AI service): the result only
  * pre-fills the Add sheet, and nothing is saved until you tap Save.
  */
@@ -101,7 +101,7 @@ function extractDate(s: string, today = todayIST()): { date?: string; rest: stri
 const GENERIC = new Set(['bank', 'account', 'card', 'credit', 'debit', 'wallet', 'savings', 'salary', 'the', 'my', 'of', 'a']);
 const norm = (s: string) => s.toLowerCase().replace(/(\d),(?=\d)/g, '$1').replace(/[^a-z0-9₹. ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-/** Every account mentioned, in the order spoken. "HDFC card" prefers the card over HDFC Bank. */
+/** Every account mentioned, in the order spoken. "ICICI card" prefers the card over ICICI Bank. */
 function findAccounts(s: string, accounts: Acc[]): { ids: string[]; rest: string } {
   const hits: { id: string; at: number; len: number; score: number }[] = [];
   for (const a of accounts) {

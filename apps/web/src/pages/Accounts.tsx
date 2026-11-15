@@ -219,7 +219,7 @@ function AccountSheet({ account, kind, onClose }: { account?: any; kind?: string
           </div>
         )}
         <div className="field"><label>{k === 'receivable' ? 'Name' : 'Account name'}</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} required maxLength={60} placeholder={k === 'receivable' ? 'Rohan' : 'Axis Bank'} /></div>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} required maxLength={60} placeholder={k === 'receivable' ? 'Rohan' : 'SBI'} /></div>
         {k !== 'receivable' && k !== 'cash' && (
           <div className="field"><label>Bank or provider (optional)</label>
             <input className="input" value={institution} onChange={(e) => setInstitution(e.target.value)} maxLength={60} /></div>
