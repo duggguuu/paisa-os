@@ -11,7 +11,7 @@ const cases: [string, Record<string, unknown>][] = [
   ['uber 320', { amount: '320', merchant: 'Uber', categoryId: 'Cab & auto' }],
   ['two thousand five hundred rent from ICICI bank', { amount: '2500', categoryId: 'Rent', accountId: 'ICICI Bank' }],
   ['coffee at third wave 280 cash', { amount: '280', merchant: 'Third Wave', categoryId: 'Snacks & coffee', accountId: 'Cash' }],
-  ['got salary 1.2 lakh in SBI', { kind: 'income', amount: '120000', categoryId: 'Salary', accountId: 'SBI' }],
+  ['got salary 68k in SBI', { kind: 'income', amount: '68000', categoryId: 'Salary', accountId: 'SBI' }],
   ['transfer 5000 from SBI to PhonePe wallet', { kind: 'transfer', amount: '5000', accountId: 'SBI', toAccountId: 'PhonePe Wallet' }],
   ['dinner 1800 on ICICI card split with Aditi and Rohan', { categoryId: 'Dining out', accountId: 'ICICI Credit Card', splitWith: ['Aditi', 'Rohan'] }],
   ['petrol 2k on 12th', { amount: '2000', categoryId: 'Fuel', date: '2026-11-12' }],

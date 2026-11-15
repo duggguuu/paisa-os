@@ -81,7 +81,7 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
   for (let d = start; d <= today; d = addDays(d, 1)) {
     const day = Number(d.slice(8));
     const dow = new Date(parseDate(d)).getUTCDay();
-    if (day === 1) add({ kind: 'income', date: d, amount: 1_20_000 * 100, categoryId: C('Salary'), accountId: acc.axis, merchant: 'Acme Labs', description: 'Salary' });
+    if (day === 1) add({ kind: 'income', date: d, amount: 68_000 * 100, categoryId: C('Salary'), accountId: acc.axis, merchant: 'Acme Labs', description: 'Salary' });
     if (day === 2) add({ kind: 'transfer', date: d, amount: 3_000 * 100, fromAccountId: acc.axis, toAccountId: acc.cash, description: 'ATM withdrawal' });
     if (day === 2 || day === 16) add({ kind: 'transfer', date: d, amount: 1_500 * 100, fromAccountId: acc.axis, toAccountId: acc.paytm, description: 'Wallet top-up' });
     if (day === 3) exp(d, 22_000, 'Housing/Rent', 'axis', 'Landlord', 'Monthly rent');
@@ -159,7 +159,7 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
     ['Rent', 'expense', 22_000, 'axis', 'Housing/Rent', 'monthly', 3, false],
     ['Netflix', 'expense', 649, 'card', 'Bills & subscriptions/Subscriptions', 'monthly', 7, true],
     ['Nifty 50 SIP', 'transfer', 10_000, 'axis', 'zerodha', 'monthly', 10, true],
-    ['Salary', 'income', 1_20_000, 'axis', 'Salary', 'monthly', 1, false],
+    ['Salary', 'income', 68_000, 'axis', 'Salary', 'monthly', 1, false],
     ['Phone recharge', 'expense', 299, 'paytm', 'Bills & subscriptions/Mobile', 'monthly', 22, false],
   ] as const) {
     const shape = { cadence: cadence as 'monthly', day, month: null };

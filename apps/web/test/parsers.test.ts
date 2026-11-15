@@ -15,7 +15,7 @@ Statement of Account No - 9180XXXXXXXX1234 for the period (From : 01-10-2026 To 
 Tran Date,CHQNO,PARTICULARS,DR,CR,BAL,SOL
 01-10-2026,,OPENING BALANCE,,,"1,00,000.00",
 02-10-2026,,UPI/P2M/427512345678/SWIGGY LIMITED/Payment/AXIS BANK,450.00,,"99,550.00",4567
-03-10-2026,,NEFT/AXISN12345678901/ACME TECHNOLOGIES PVT LTD/SALARY OCT,,"1,20,000.00","2,19,550.00",4567
+03-10-2026,,NEFT/AXISN12345678901/ACME TECHNOLOGIES PVT LTD/SALARY OCT,,"68,000.00","1,67,550.00",4567
 05-10-2026,,ATM-WDL/MUMBAI ANDHERI/1234,"5,000.00",,"2,14,550.00",4567
 07-10-2026,,BILLDESK/HDFC CREDIT CARD PAYMENT/AB12,"26,257.00",,"1,88,293.00",4567
 10-10-2026,,ACH-DR/ICCL ZERODHA/SIP,"10,000.00",,"1,78,293.00",4567
@@ -34,7 +34,7 @@ test('statement: Axis CSV with a preamble', () => {
   const s = parseStatement(AXIS);
   assert.equal(s.rows.length, 6, 'opening balance line has no amount');
   assert.deepEqual(s.rows[0], { date: '2026-10-02', description: 'UPI/P2M/427512345678/SWIGGY LIMITED/Payment/AXIS BANK', amount: -450_00, balance: 99_550_00, ref: '427512345678', merchant: 'Swiggy' });
-  assert.equal(s.rows[1].amount, 1_20_000_00);
+  assert.equal(s.rows[1].amount, 68_000_00);
   assert.equal(s.rows[1].merchant, 'Acme');
   assert.deepEqual(s.closing, { balance: 1_79_105_00, date: '2026-10-31' });
 });

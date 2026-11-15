@@ -623,28 +623,28 @@ test('salary: structure → monthly credit on the last day; payslips; only salar
   const L = (name: string, rupees: number, kind?: string) => ({ name, monthly: rupees * 100, ...(kind ? { kind } : {}) });
   let r = await req('PUT', '/api/salary', {
     employer: 'Acme', accountId: A['SBI'].id, payDay: 31,
-    earnings: [L('Basic', 60000), L('HRA', 30000), L('Special allowance', 35000)],
-    deductions: [L('Employee PF', 7200, 'pf'), L('Professional tax', 200, 'pt'), L('Income tax (TDS)', 12000, 'tds')],
-    employerContrib: [L('Employer PF', 7200, 'pf')], annualBonus: 0, autoPost: false,
+    earnings: [L('Basic', 30000), L('HRA', 15000), L('Special allowance', 23000)],
+    deductions: [L('Employee PF', 3600, 'pf'), L('Professional tax', 200, 'pt'), L('Income tax (TDS)', 1500, 'tds')],
+    employerContrib: [L('Employer PF', 3600, 'pf')], annualBonus: 0, autoPost: false,
   });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.net, (125000 - 19400) * 100);
+  assert.equal(r.body.net, (68000 - 5300) * 100);
   let s = (await req('GET', '/api/salary')).body;
-  assert.equal(s.profile.gross, 125000_00);
-  assert.equal(s.rule.amount, 105600_00);
+  assert.equal(s.profile.gross, 68000_00);
+  assert.equal(s.rule.amount, 62700_00);
   const due = s.rule.nextDue;
   const [y, m] = due.split('-').map(Number);
   assert.equal(Number(due.slice(8)), new Date(Date.UTC(y, m, 0)).getUTCDate(), 'due on the last day of the month');
   // Saving again updates the same rule.
-  r = await req('PUT', '/api/salary', { ...{ employer: 'Acme', accountId: A['SBI'].id, payDay: 31, earnings: [L('Basic', 60000), L('HRA', 30000), L('Special allowance', 40000)], deductions: [L('Income tax (TDS)', 12000, 'tds')], employerContrib: [], autoPost: false } });
+  r = await req('PUT', '/api/salary', { ...{ employer: 'Acme', accountId: A['SBI'].id, payDay: 31, earnings: [L('Basic', 30000), L('HRA', 15000), L('Special allowance', 25000)], deductions: [L('Income tax (TDS)', 1500, 'tds')], employerContrib: [], autoPost: false } });
   assert.equal((await req('GET', '/api/salary')).body.rule.id, s.rule.id);
   // Payslip with TDS.
-  r = await req('PUT', `/api/salary/slips/${today.slice(0, 7)}`, { earnings: [L('Basic', 60000), L('HRA', 30000)], deductions: [L('Income tax (TDS)', 9000, 'tds'), L('Employee PF', 7200, 'pf')] });
+  r = await req('PUT', `/api/salary/slips/${today.slice(0, 7)}`, { earnings: [L('Basic', 30000), L('HRA', 15000)], deductions: [L('Income tax (TDS)', 1000, 'tds'), L('Employee PF', 3600, 'pf')] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   s = (await req('GET', '/api/salary')).body;
   assert.equal(s.slips.length, 1);
-  assert.equal(s.slips[0].tds, 9000_00);
-  assert.equal(s.slips[0].net, (90000 - 16200) * 100);
+  assert.equal(s.slips[0].tds, 1000_00);
+  assert.equal(s.slips[0].net, (45000 - 4600) * 100);
 
   // Money in: a friend repaying is logged under "Other income" first, then marked not income.
   const cats = (await req('GET', '/api/categories')).body;
