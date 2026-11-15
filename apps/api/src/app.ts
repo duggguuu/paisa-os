@@ -2,6 +2,8 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { z, ZodError } from 'zod';
 import type { Sql } from './db.js';
 import { hashPassword, verifyPassword, newToken, sha256, makeCipher } from './crypto.js';
@@ -42,6 +44,43 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
   const cipher = makeCipher(cfg.appSecret);
   const app = Fastify({ logger: cfg.logger ?? false, bodyLimit: 1_000_000, trustProxy: cfg.trustProxy ?? false });
   await app.register(cookie, { secret: cfg.appSecret });
+
+  // ---------- security headers (every response) ----------
+  // A strict Content Security Policy: only this app's own scripts run (the two small inline scripts in
+  // index.html are allowed by exact hash), nothing is fetched from other sites, and the app can't be
+  // framed. OCR files are self-hosted for this reason. API responses are never cached.
+  const inlineHashes: string[] = [];
+  const indexHtml = cfg.webDist ? path.join(cfg.webDist, 'index.html') : null;
+  if (indexHtml && fs.existsSync(indexHtml)) {
+    for (const m of fs.readFileSync(indexHtml, 'utf8').matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)) {
+      inlineHashes.push(`'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`);
+    }
+  }
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'wasm-unsafe-eval' ${inlineHashes.join(' ')}`.trim(),
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+  app.addHook('onSend', async (req, reply, payload) => {
+    reply.header('content-security-policy', csp);
+    reply.header('x-content-type-options', 'nosniff');
+    reply.header('referrer-policy', 'no-referrer');
+    reply.header('x-frame-options', 'DENY');
+    reply.header('cross-origin-opener-policy', 'same-origin');
+    reply.header('permissions-policy', 'camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()');
+    if (cfg.secureCookies) reply.header('strict-transport-security', 'max-age=63072000; includeSubDomains');
+    if (req.url.startsWith('/api/')) reply.header('cache-control', 'no-store');
+    return payload;
+  });
 
   // ---------- errors ----------
   app.setErrorHandler((err: any, _req, reply) => {
@@ -202,13 +241,14 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
   // Single-user app: setup works exactly once, while no user exists.
   app.post('/api/auth/setup', async (req, reply) => {
     const body = Credentials.parse(req.body);
+    const banks = z.object({ banks: z.array(z.string().trim().min(1).max(40)).max(6).optional() }).parse(req.body ?? {}).banks ?? [];
     const userId = await sql.begin(async (tx) => {
       await tx`lock table app_user in exclusive mode`;
       const [{ n }] = await tx<{ n: number }[]>`select count(*)::int as n from app_user`;
       if (n > 0) throw new LedgerError('already_setup', 'This app already has an owner. Log in instead.', 409);
       const [u] = await tx<{ id: string }[]>`insert into app_user (email, password_hash) values (${body.email.toLowerCase()}, ${await hashPassword(body.password)}) returning id`;
       const real = await createBook(tx, u.id, 'My money', false);
-      await seedRealBookAccounts(tx, real);
+      await seedRealBookAccounts(tx, real, banks);
       await createBook(tx, u.id, 'Demo', true);
       return u.id;
     });
@@ -310,7 +350,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     });
     api.get('/api/categories', async (req) => {
       return sql<any[]>`
-        select a.id, a.name, a.class, a.parent_id, a.icon, a.sort,
+        select a.id, a.name, a.class, a.parent_id, a.icon, a.sort, (a.class = 'income' and not counts_as_income(a)) as not_income,
           (select count(*)::int from posting p join txn t on t.id = p.txn_id
              where p.account_id = a.id and t.status = 'posted' and t.occurred_on > current_date - 90) as recent_uses
         from account a where a.book_id = ${B(req)} and a.kind = 'category' and not a.is_archived

@@ -23,6 +23,7 @@ import { More } from './pages/More';
 import { Stuff } from './pages/Stuff';
 import { Debts } from './pages/Debts';
 import { Fds } from './pages/Fds';
+import { Salary } from './pages/Salary';
 
 interface Ui {
   openAdd: (preset?: QuickAddPreset) => void;
@@ -100,6 +101,7 @@ function Shell() {
           ))}
           <NavLink to="/goals"><Icon name="target" />Goals</NavLink>
           <NavLink to="/stuff"><Icon name="wallet" />Stuff</NavLink>
+          <NavLink to="/salary"><Icon name="wallet" />Salary &amp; tax</NavLink>
           <NavLink to="/debts"><Icon name="users" />Owe &amp; owed</NavLink>
           <NavLink to="/fds"><Icon name="wallet" />FDs</NavLink>
           <div className="nav-group">Plan</div>
@@ -139,6 +141,7 @@ function Shell() {
             <Route path="/stuff" element={<Stuff />} />
             <Route path="/debts" element={<Debts />} />
             <Route path="/fds" element={<Fds />} />
+            <Route path="/salary" element={<Salary />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </div>

@@ -16,6 +16,7 @@ export function Stuff() {
   const { toast } = useUi();
   const [tab, setTab] = useState<List>('own');
   const items = useQuery({ queryKey: ['stuff'], queryFn: () => api<any[]>('/api/stuff') });
+  const snap = useQuery({ queryKey: ['stuff-snapshot'], queryFn: () => api<{ available: boolean }>('/api/stuff/snapshot'), staleTime: Infinity });
   const [buy, setBuy] = useState<{ prefill?: any } | null>(null);
   const [sell, setSell] = useState<any | null | 'pick'>(null);
   const [edit, setEdit] = useState<any | null>(null);
@@ -48,12 +49,21 @@ export function Stuff() {
         </div>
       </div>
 
-      {items.data && all.length === 0 && (
+      {items.data && all.length === 0 && snap.data && (
         <div className="card empty-state">
           <div style={{ fontSize: 32 }}>🧺</div>
-          <b>Bring in "Yash's Stuff"</b>
-          <p className="small muted">Your Own, Want, Asked-about and Dropped lists from the sheet (as of 14 Nov). After that, purchases and sales update them here.</p>
-          <button className="btn accent" onClick={importSheet}>Import my sheet</button>
+          {snap.data?.available ? (
+            <>
+              <b>Bring in your sheet</b>
+              <p className="small muted">Your Own, Want, Asked-about and Dropped lists from the sheet snapshot. After that, purchases and sales update them here.</p>
+              <button className="btn accent" onClick={importSheet}>Import my sheet</button>
+            </>
+          ) : (
+            <>
+              <b>Nothing here yet</b>
+              <p className="small muted">Tap “I bought…” to add things from order screenshots or a sentence. They land in Own, and selling them moves them out.</p>
+            </>
+          )}
         </div>
       )}
 
@@ -260,7 +270,9 @@ function SaleSheet({ item, own, onClose }: { item: any | null; own: any[]; onClo
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => api<any[]>('/api/accounts') });
   const cats = useQuery({ queryKey: ['categories'], queryFn: () => api<any[]>('/api/categories') });
   const into = (accounts.data ?? []).filter((a) => ['bank', 'cash', 'wallet'].includes(a.kind) && !a.is_archived);
-  const otherIncome = (cats.data ?? []).find((c) => c.class === 'income' && c.name === 'Other income')?.id;
+  // Selling your things is money in, not income.
+  const otherIncome = (cats.data ?? []).find((c) => c.class === 'income' && c.name === 'Other money in')?.id
+    ?? (cats.data ?? []).find((c) => c.class === 'income' && c.name === 'Other income')?.id;
   const [text, setText] = useState('');
   const [picked, setPicked] = useState<any | null>(item);
   const [price, setPrice] = useState('');

@@ -14,7 +14,7 @@ async function incomeSeries(sql: Sql, bookId: string, ranges: { from: string; to
     select r.idx::int as idx, coalesce(-sum(p.amount), 0)::bigint as total
     from unnest(${ranges.map((x) => x.from)}::date[], ${ranges.map((x) => x.to)}::date[]) with ordinality as r(f, t, idx)
     left join txn x on x.book_id = ${bookId} and x.status = 'posted' and x.occurred_on >= r.f and x.occurred_on < r.t
-    left join posting p on p.txn_id = x.id and p.account_id in (select id from account where book_id = ${bookId} and class = 'income')
+    left join posting p on p.txn_id = x.id and p.account_id in (select id from account ia where ia.book_id = ${bookId} and counts_as_income(ia))
     group by r.idx order by r.idx`;
   return ranges.map((_, i) => Number(rows[i]?.total ?? 0));
 }

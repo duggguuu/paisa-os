@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import type { FastifyInstance } from 'fastify';
@@ -19,14 +20,14 @@ const swExpenses = [
   { // before the start date: Rohan paid ₹1,000 dinner, split 50/50 → you owe Rohan ₹500
     id: 101, description: 'Dinner at Toit', cost: '1000.0', currency_code: 'INR', date: '2026-01-05T14:00:00Z', payment: false, deleted_at: null,
     category: { name: 'Dining out' },
-    users: [{ user_id: ME, user: u(ME, 'Yash'), paid_share: '0.0', owed_share: '500.0', net_balance: '-500.0' },
+    users: [{ user_id: ME, user: u(ME, 'Sam'), paid_share: '0.0', owed_share: '500.0', net_balance: '-500.0' },
             { user_id: ROHAN, user: u(ROHAN, 'Rohan'), paid_share: '1000.0', owed_share: '500.0', net_balance: '500.0' }],
     repayments: [{ from: ME, to: ROHAN, amount: '500.0' }],
   },
   { // you paid ₹1,200 groceries for three → Rohan and Aditi owe ₹400 each
     id: 102, description: 'BigBasket order', cost: '1200.0', currency_code: 'INR', date: '2026-02-10T05:00:00Z', payment: false, deleted_at: null,
     category: { name: 'Groceries' },
-    users: [{ user_id: ME, user: u(ME, 'Yash'), paid_share: '1200.0', owed_share: '400.0', net_balance: '800.0' },
+    users: [{ user_id: ME, user: u(ME, 'Sam'), paid_share: '1200.0', owed_share: '400.0', net_balance: '800.0' },
             { user_id: ROHAN, user: u(ROHAN, 'Rohan'), paid_share: '0.0', owed_share: '400.0', net_balance: '-400.0' },
             { user_id: ADITI, user: u(ADITI, 'Aditi'), paid_share: '0.0', owed_share: '400.0', net_balance: '-400.0' }],
     repayments: [{ from: ROHAN, to: ME, amount: '400.0' }, { from: ADITI, to: ME, amount: '400.0' }],
@@ -34,7 +35,7 @@ const swExpenses = [
   { // settle up: Rohan paid you ₹300
     id: 103, description: 'Payment', cost: '300.0', currency_code: 'INR', date: '2026-03-01T05:00:00Z', payment: true, deleted_at: null,
     users: [{ user_id: ROHAN, user: u(ROHAN, 'Rohan'), paid_share: '300.0', owed_share: '0.0', net_balance: '300.0' },
-            { user_id: ME, user: u(ME, 'Yash'), paid_share: '0.0', owed_share: '300.0', net_balance: '-300.0' }],
+            { user_id: ME, user: u(ME, 'Sam'), paid_share: '0.0', owed_share: '300.0', net_balance: '-300.0' }],
     repayments: [{ from: ME, to: ROHAN, amount: '300.0' }],
   },
   { id: 104, description: 'Deleted thing', cost: '50', currency_code: 'INR', date: '2026-03-02T05:00:00Z', payment: false, deleted_at: '2026-03-03T00:00:00Z',
@@ -47,7 +48,7 @@ const fakeFetch: typeof fetch = async (input: any) => {
   const s = String(input);
   const json = (d: unknown, status = 200) => new Response(JSON.stringify(d), { status });
   if (s.includes('splitwise.com')) {
-    if (s.includes('/get_current_user')) return json({ user: { id: ME, first_name: 'Yash', last_name: 'G' } });
+    if (s.includes('/get_current_user')) return json({ user: { id: ME, first_name: 'Sam', last_name: 'G' } });
     if (s.includes('/get_expenses')) return json({ expenses: new URL(s).searchParams.get('offset') === '0' ? swExpenses : [] });
   }
   const ok = (data: unknown) => json({ status: 'success', data });
@@ -83,7 +84,7 @@ before(async () => {
   await sql.unsafe('drop schema public cascade; create schema public;');
   await migrate(sql);
   app = await buildApp({ sql, appSecret: 'y'.repeat(40), publicUrl: 'http://localhost:8080', fetch: fakeFetch });
-  await req('POST', '/api/auth/setup', { email: 'f@example.com', password: 'correct horse battery' });
+  await req('POST', '/api/auth/setup', { email: 'f@example.com', password: 'correct horse battery', banks: ['Axis Bank', 'HDFC Bank'] });
   for (const a of (await req('GET', '/api/accounts')).body) A[a.name] = a;
   for (const c of (await req('GET', '/api/categories')).body) C[c.name] = c.id;
   await req('PATCH', `/api/accounts/${A['Axis Bank'].id}`, { openingBalance: 100_000_00, openingDate: '2025-12-01' });
@@ -235,11 +236,11 @@ test('insights: spots a steady monthly charge and offers to track it', async () 
 });
 
 test('Splitwise spreadsheet import (free accounts): balances, overlap between exports, sign detection', async () => {
-  const K = 'Kabir M', M = 'Meera P', ME_ = 'Yash G';
+  const K = 'Kabir M', M = 'Meera P', ME_ = 'Sam R';
   const group = { name: 'Flat.csv', rows: [
     { date: '2026-01-05', description: 'Dinner at Toit', category: 'Dining out', cost: 1000_00, currency: 'INR', nets: { [ME_]: -500_00, [K]: 500_00, [M]: 0 } },
     { date: '2026-02-10', description: 'BigBasket order', category: 'Groceries', cost: 1200_00, currency: 'INR', nets: { [ME_]: 800_00, [K]: -400_00, [M]: -400_00 } },
-    { date: '2026-03-01', description: 'Kabir M. paid Yash G.', category: 'Payment', cost: 300_00, currency: 'INR', nets: { [ME_]: -300_00, [K]: 300_00, [M]: 0 } },
+    { date: '2026-03-01', description: 'Kabir M. paid Sam R.', category: 'Payment', cost: 300_00, currency: 'INR', nets: { [ME_]: -300_00, [K]: 300_00, [M]: 0 } },
   ] };
   const friend = { name: 'Kabir.csv', rows: [
     { date: '2026-01-05', description: 'Dinner at Toit', category: 'Dining out', cost: 1000_00, currency: 'INR', nets: { [ME_]: -500_00, [K]: 500_00 } }, // repeat of the group row
@@ -391,7 +392,9 @@ test('app lock: locks after idle and on every new open; Face ID or password unlo
   assert.equal((await req('GET', '/api/accounts', undefined, '')).status, 200, 'no lock when it is off');
 });
 
-test('stuff: sheet import, purchase moves Want→Own by product code, sell moves Own→Sold', async () => {
+// Clean exports of the app (for another owner) leave the personal sheet snapshot out.
+const HAS_SNAPSHOT = fs.existsSync(new URL('../data/stuff-sheet.json', import.meta.url));
+test('stuff: sheet import, purchase moves Want→Own by product code, sell moves Own→Sold', { skip: !HAS_SNAPSHOT && 'no sheet snapshot in this copy' }, async () => {
   let r = await req('POST', '/api/stuff/import-sheet');
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.added, 114);
@@ -612,4 +615,55 @@ test('Kite callback works as a plain page load while the app lock is on (no tab 
   // Data routes are still locked for that tab.
   assert.equal((await app.inject({ method: 'GET', url: '/api/accounts', headers: { cookie } })).statusCode, 423);
   await req('PUT', '/api/security', { lockEnabled: false });
+});
+
+test('salary: structure → monthly credit on the last day; payslips; only salary counts as income', async () => {
+  const L = (name: string, rupees: number, kind?: string) => ({ name, monthly: rupees * 100, ...(kind ? { kind } : {}) });
+  let r = await req('PUT', '/api/salary', {
+    employer: 'Acme', accountId: A['Axis Bank'].id, payDay: 31,
+    earnings: [L('Basic', 60000), L('HRA', 30000), L('Special allowance', 35000)],
+    deductions: [L('Employee PF', 7200, 'pf'), L('Professional tax', 200, 'pt'), L('Income tax (TDS)', 12000, 'tds')],
+    employerContrib: [L('Employer PF', 7200, 'pf')], annualBonus: 0, autoPost: false,
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.net, (125000 - 19400) * 100);
+  let s = (await req('GET', '/api/salary')).body;
+  assert.equal(s.profile.gross, 125000_00);
+  assert.equal(s.rule.amount, 105600_00);
+  const due = s.rule.nextDue;
+  const [y, m] = due.split('-').map(Number);
+  assert.equal(Number(due.slice(8)), new Date(Date.UTC(y, m, 0)).getUTCDate(), 'due on the last day of the month');
+  // Saving again updates the same rule.
+  r = await req('PUT', '/api/salary', { ...{ employer: 'Acme', accountId: A['Axis Bank'].id, payDay: 31, earnings: [L('Basic', 60000), L('HRA', 30000), L('Special allowance', 40000)], deductions: [L('Income tax (TDS)', 12000, 'tds')], employerContrib: [], autoPost: false } });
+  assert.equal((await req('GET', '/api/salary')).body.rule.id, s.rule.id);
+  // Payslip with TDS.
+  r = await req('PUT', `/api/salary/slips/${today.slice(0, 7)}`, { earnings: [L('Basic', 60000), L('HRA', 30000)], deductions: [L('Income tax (TDS)', 9000, 'tds'), L('Employee PF', 7200, 'pf')] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  s = (await req('GET', '/api/salary')).body;
+  assert.equal(s.slips.length, 1);
+  assert.equal(s.slips[0].tds, 9000_00);
+  assert.equal(s.slips[0].net, (90000 - 16200) * 100);
+
+  // Money in: a friend repaying is logged under "Other income" first, then marked not income.
+  const cats = (await req('GET', '/api/categories')).body;
+  const otherIncome = cats.find((c: any) => c.class === 'income' && c.name === 'Other income');
+  const repay = cats.find((c: any) => c.class === 'income' && c.name === 'Repayments');
+  assert.ok(repay && repay.not_income, 'Repayments is a money-in category');
+  assert.equal(cats.find((c: any) => c.name === 'Refunds & cashback').not_income, true);
+  assert.equal(otherIncome.not_income, false);
+  const before = (await req('GET', `/api/trans/month?anchor=${today}`)).body.income;
+  const axis = await bal('Axis Bank');
+  r = await req('POST', '/api/txns', { kind: 'income', amount: 5000_00, accountId: A['Axis Bank'].id, categoryId: otherIncome.id, date: today, merchant: 'Rahul UPI' });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const txnId = r.body.id;
+  assert.equal((await req('GET', `/api/trans/month?anchor=${today}`)).body.income, before + 5000_00);
+  const list = (await req('GET', '/api/money-in')).body;
+  assert.ok(list.some((x: any) => x.id === txnId && x.counted));
+  r = await req('POST', '/api/money-in/reclassify', { txnIds: [txnId], categoryId: repay.id });
+  assert.equal(r.body.moved, 1);
+  assert.equal((await req('GET', `/api/trans/month?anchor=${today}`)).body.income, before, 'no longer income');
+  assert.equal(await bal('Axis Bank'), axis + 5000_00, 'the money is still in the bank');
+  const st = (await req('GET', `/api/stats?period=month&anchor=${today}`)).body;
+  assert.ok(st.summary.moneyIn >= 5000_00, 'shown as money in');
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });

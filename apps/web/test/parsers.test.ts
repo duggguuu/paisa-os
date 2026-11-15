@@ -8,7 +8,7 @@ import { parseCasText } from '../src/cas.ts';
 const fx = JSON.parse(fs.readFileSync(new URL('./fixtures.json', import.meta.url), 'utf8'));
 
 // Axis-style CSV: preamble lines, then Tran Date / CHQNO / PARTICULARS / DR / CR / BAL / SOL.
-const AXIS = `Name :- YASH GOHEL
+const AXIS = `Name :- SAM RAO
 Account No :- 9180XXXXXXXX1234
 Statement of Account No - 9180XXXXXXXX1234 for the period (From : 01-10-2026 To : 31-10-2026)
 
@@ -65,7 +65,7 @@ test('statement: booking guesses (ATM → cash, card bill, SIP, salary, interest
   assert.deepEqual(g[3], { kind: 'transfer', categoryId: null, otherAccountId: 'card' });
   assert.deepEqual(g[4], { kind: 'transfer', categoryId: null, otherAccountId: 'inv' });
   assert.deepEqual(g[5], { kind: 'income', categoryId: 'Interest', otherAccountId: null });
-  assert.equal(extractMerchant('NEFT CR-HDFC0000001-ACME CORP-YASH-HDFCN52026'), 'Acme Corp');
+  assert.equal(extractMerchant('NEFT CR-HDFC0000001-ACME CORP-SAM-HDFCN52026'), 'Acme Corp');
 });
 
 test('receipt: total, date and shop from OCR text', () => {
@@ -106,23 +106,24 @@ Closing Unit Balance: 512.345 NAV on 31-Oct-2026: INR 89.2332 Total Cost Value: 
 
 test('Splitwise export: rows, person columns, total row ignored, "you" guessed across files', async () => {
   const { parseSplitwiseCsv, guessMe } = await import('../src/splitwise-csv.ts');
-  const group = parseSplitwiseCsv(`Date,Description,Category,Cost,Currency,Yash G,Kabir M,Meera P
+  const group = parseSplitwiseCsv(`Date,Description,Category,Cost,Currency,Sam R,Kabir M,Meera P
 2026-02-10,BigBasket order,Groceries,1200.00,INR,800.00,-400.00,-400.00
-2026-03-01,Kabir M. paid Yash G.,Payment,300.00,INR,-300.00,300.00,0.00
+2026-03-01,Kabir M. paid Sam R.,Payment,300.00,INR,-300.00,300.00,0.00
 
 2026-11-14,Total balance, , ,INR,500.00,-100.00,-400.00
 `, 'Flat.csv');
-  assert.deepEqual(group.people, ['Yash G', 'Kabir M', 'Meera P']);
+  assert.deepEqual(group.people, ['Sam R', 'Kabir M', 'Meera P']);
   assert.equal(group.rows.length, 2, 'the Total balance row has no cost, so it is skipped');
   const real = group.rows.filter((r) => r.description !== 'Total balance');
-  assert.deepEqual(real[0], { date: '2026-02-10', description: 'BigBasket order', category: 'Groceries', cost: 1200_00, currency: 'INR', nets: { 'Yash G': 800_00, 'Kabir M': -400_00, 'Meera P': -400_00 } });
-  const friend = parseSplitwiseCsv('Date,Description,Category,Cost,Currency,Yash G,Kabir M\n2026-02-20,Movie,Movies,600,INR,300,-300\n', 'Kabir.csv');
+  assert.deepEqual(real[0], { date: '2026-02-10', description: 'BigBasket order', category: 'Groceries', cost: 1200_00, currency: 'INR', nets: { 'Sam R': 800_00, 'Kabir M': -400_00, 'Meera P': -400_00 } });
+  const friend = parseSplitwiseCsv('Date,Description,Category,Cost,Currency,Sam R,Kabir M\n2026-02-20,Movie,Movies,600,INR,300,-300\n', 'Kabir.csv');
   assert.equal(guessMe([group, friend]), null, 'ambiguous with one friend export: the app asks');
-  const friend2 = parseSplitwiseCsv('Date,Description,Category,Cost,Currency,Riya T,Yash G\n2026-04-02,Cab,Taxi,400,INR,-200,200\n', 'Riya.csv');
-  assert.equal(guessMe([group, friend, friend2]), 'Yash G');
+  const friend2 = parseSplitwiseCsv('Date,Description,Category,Cost,Currency,Riya T,Sam R\n2026-04-02,Cab,Taxi,400,INR,-200,200\n', 'Riya.csv');
+  assert.equal(guessMe([group, friend, friend2]), 'Sam R');
 });
 
-test('orders: the H&M order from real OCR of three overlapping screenshots', async () => {
+const HAS_HM = fs.existsSync(new URL('./hm-ocr.json', import.meta.url));  // personal fixture; not in clean exports
+test('orders: the H&M order from real OCR of three overlapping screenshots', { skip: !HAS_HM && 'no personal OCR fixture in this copy' }, async () => {
   const { parseOrderText, mergeOrders } = await import('../src/orders.ts');
   const ocr = JSON.parse(fs.readFileSync(new URL('./hm-ocr.json', import.meta.url), 'utf8'));
   const o = mergeOrders(['13', '14', '15'].map((k) => parseOrderText(ocr[k])));

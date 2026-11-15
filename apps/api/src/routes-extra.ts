@@ -15,6 +15,7 @@ import * as copilot from './copilot.js';
 import * as stuff from './stuff.js';
 import * as debts from './debts.js';
 import * as fds from './fds.js';
+import * as salary from './salary.js';
 import { todayIST } from './money.js';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -98,7 +99,7 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
     const range = periodContaining('month', q.anchor ?? todayIST(), req.book!.month_start_day);
     const days = await sql<{ day: string; income: number; expense: number }[]>`
       select t.occurred_on::text as day,
-        coalesce(-sum(p.amount) filter (where a.class = 'income'), 0)::bigint as income,
+        coalesce(-sum(p.amount) filter (where counts_as_income(a)), 0)::bigint as income,
         coalesce(sum(p.amount) filter (where a.class = 'expense'), 0)::bigint as expense
       from txn t join posting p on p.txn_id = t.id join account a on a.id = p.account_id
       where t.book_id = ${B(req)} and t.status = 'posted' and t.kind <> 'opening'
@@ -115,7 +116,7 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
     const months = Array.from({ length: 12 }, (_, i) => shiftPeriod('month', first, i, msd));
     const rows = await sql<{ idx: number; income: number; expense: number }[]>`
       select r.idx::int as idx,
-        coalesce(-sum(p.amount) filter (where a.class = 'income'), 0)::bigint as income,
+        coalesce(-sum(p.amount) filter (where counts_as_income(a)), 0)::bigint as income,
         coalesce(sum(p.amount) filter (where a.class = 'expense'), 0)::bigint as expense
       from unnest(${months.map((m) => m.from)}::date[], ${months.map((m) => m.to)}::date[]) with ordinality as r(f, t, idx)
       left join txn x on x.book_id = ${B(req)} and x.status = 'posted' and x.kind <> 'opening' and x.occurred_on >= r.f and x.occurred_on < r.t
@@ -134,6 +135,7 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
     const b = z.object({ items: z.array(stuff.ItemInput).max(2000) }).parse(req.body);
     return stuff.importItems(sql, B(req), b.items);
   });
+  api.get('/api/stuff/snapshot', async () => ({ available: stuff.hasSnapshot() }));
   api.post('/api/stuff/import-sheet', async (req) => stuff.importItems(sql, B(req), stuff.sheetSnapshot().map((i) => stuff.ItemInput.parse(i))));
   api.post('/api/stuff/purchase', async (req) => stuff.purchase(sql, B(req), stuff.PurchaseInput.parse(req.body)));
   api.post('/api/stuff/sell', async (req) => stuff.sell(sql, B(req), stuff.SaleInput.parse(req.body)));
@@ -172,6 +174,13 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
   api.post('/api/debts', async (req) => debts.setDebt(sql, B(req), debts.DebtInput.parse(req.body)));
   api.post('/api/loans', async (req) => debts.createLoan(sql, B(req), debts.LoanInput.parse(req.body)));
   api.put('/api/loans/:id', async (req) => debts.updateLoan(sql, B(req), (req.params as any).id, debts.LoanInput.parse(req.body)));
+  // Salary, payslips, and money-in review
+  api.get('/api/salary', async (req) => salary.getSalary(sql, B(req)));
+  api.put('/api/salary', async (req) => salary.saveSalary(sql, B(req), salary.SalaryInput.parse(req.body)));
+  api.put('/api/salary/slips/:month', async (req) => salary.saveSlip(sql, B(req), (req.params as any).month, salary.SlipInput.parse(req.body)));
+  api.delete('/api/salary/slips/:month', async (req) => { await salary.deleteSlip(sql, B(req), (req.params as any).month); return { ok: true }; });
+  api.get('/api/money-in', async (req) => salary.moneyIn(sql, B(req)));
+  api.post('/api/money-in/reclassify', async (req) => salary.reclassify(sql, B(req), salary.ReclassInput.parse(req.body)));
   // Fixed deposits, grouped by bank
   api.get('/api/fds', async (req) => fds.listFds(sql, B(req)));
   api.post('/api/fds', async (req) => fds.createFd(sql, B(req), fds.FdInput.parse(req.body)));

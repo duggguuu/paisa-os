@@ -215,5 +215,6 @@ export function guessBooking(row: StatementRow, ctx: { accounts: Acc[]; categori
     const id = ctx.historyCategoryId ?? guessCategory(t, ctx.categories, 'expense') ?? (/(charges|chrg|fee|gst on|sms alert|annual fee)/.test(t) ? cat('expense', 'Bank charges') : null) ?? cat('expense', 'Other');
     return { kind: 'expense', categoryId: id, otherAccountId: null };
   }
-  return { kind: 'income', categoryId: ctx.historyCategoryId ?? cat('income', 'Other income'), otherAccountId: null };
+  // Only salary (and interest/dividends) is income; any other credit defaults to "money in, not income".
+  return { kind: 'income', categoryId: ctx.historyCategoryId ?? cat('income', 'Other money in') ?? cat('income', 'Other income'), otherAccountId: null };
 }

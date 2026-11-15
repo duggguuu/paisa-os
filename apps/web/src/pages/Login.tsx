@@ -8,6 +8,7 @@ export function Login({ setupNeeded, passkeyLogin }: { setupNeeded: boolean; pas
   const qc = useQueryClient();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [banks, setBanks] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const faceId = useFaceIdLogin(!setupNeeded && !!passkeyLogin);
@@ -16,7 +17,7 @@ export function Login({ setupNeeded, passkeyLogin }: { setupNeeded: boolean; pas
     e.preventDefault();
     setErr(null); setBusy(true);
     try {
-      await api(setupNeeded ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', body: { email, password } });
+      await api(setupNeeded ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', body: setupNeeded ? { email, password, banks: banks.split(',').map((b) => b.trim()).filter(Boolean) } : { email, password } });
       await qc.invalidateQueries({ queryKey: ['auth'] });
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   }
@@ -35,7 +36,12 @@ export function Login({ setupNeeded, passkeyLogin }: { setupNeeded: boolean; pas
           <div className="field"><label htmlFor="pw">Password</label>
             <input id="pw" className="input" type="password" autoComplete={setupNeeded ? 'new-password' : 'current-password'} minLength={10}
               value={password} onChange={(e) => setPassword(e.target.value)} required />
-            {setupNeeded && <span className="tiny faint">At least 10 characters.</span>}</div>
+            {setupNeeded && <span className="tiny faint">At least 10 characters. Use one you don't use anywhere else.</span>}</div>
+          {setupNeeded && (
+            <div className="field"><label htmlFor="banks">Your bank accounts</label>
+              <input id="banks" className="input" placeholder="e.g. SBI, ICICI Bank" value={banks} onChange={(e) => setBanks(e.target.value)} />
+              <span className="tiny faint">Separate with commas. The first one is where your salary lands. You can add more later.</span></div>
+          )}
           {err && <p className="error" role="alert">{err}</p>}
           <button className="btn accent block" disabled={busy}>{busy ? 'One moment…' : setupNeeded ? 'Create and continue' : 'Log in'}</button>
         </form>

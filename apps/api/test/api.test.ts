@@ -45,7 +45,7 @@ test('API requires a session', async () => {
 test('setup creates the owner, a real book with your accounts, and a seeded demo book', async () => {
   let r = await req('GET', '/api/auth/status');
   assert.equal(r.body.setupNeeded, true);
-  r = await req('POST', '/api/auth/setup', { email: 'yash@example.com', password: 'correct horse battery' });
+  r = await req('POST', '/api/auth/setup', { email: 'owner@example.com', password: 'correct horse battery', banks: ['Axis Bank', 'HDFC Bank'] });
   assert.equal(r.status, 200);
   r = await req('GET', '/api/accounts');
   assert.deepEqual(r.body.filter((a: any) => a.class === 'asset').map((a: any) => a.name), ['Axis Bank', 'HDFC Bank', 'Cash']);

@@ -39,7 +39,10 @@ export async function ocrImages(files: File[], onProgress?: (p: number, label: s
   onProgress?.(0.05, 'Loading reader (first time only)…');
   const { createWorker } = await import('tesseract.js');
   let idx = 0;
+  // Everything is served by this app (copied from node_modules at build time): no CDN, so a
+  // compromised third party can't run code here, and the strict CSP stays intact.
   const worker = await createWorker('eng', 1, {
+    workerPath: '/ocr/worker.min.js', corePath: '/ocr', langPath: '/ocr', workerBlobURL: false,
     logger: (m: any) => { if (m.status === 'recognizing text') onProgress?.(0.15 + ((idx + m.progress) / files.length) * 0.8, `Reading ${files.length > 1 ? `screenshot ${idx + 1} of ${files.length}` : 'image'}…`); },
   });
   try {

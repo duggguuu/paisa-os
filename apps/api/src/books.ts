@@ -31,19 +31,24 @@ export const DEFAULT_CATEGORIES: { expense: [string, string, string[]][]; income
     ['Refunds & cashback', '↩️', []],
     ['Gifts received', '🎁', []],
     ['Other income', '•', []],
+    ['Money in (not income)', '📥', ['Repayments', 'From family', 'Reimbursements', 'Other money in']],
   ],
 };
+
+/** Income categories that are money coming in but not earnings (excluded from income totals). */
+export const NOT_INCOME = new Set(['Money in (not income)', 'Refunds & cashback', 'Gifts received']);
 
 async function insertCategories(tx: Tx, bookId: string) {
   for (const cls of ['expense', 'income'] as const) {
     let sort = 0;
     for (const [name, icon, subs] of DEFAULT_CATEGORIES[cls]) {
+      const meta = cls === 'income' && NOT_INCOME.has(name) ? { not_income: true } : {};
       const [parent] = await tx<{ id: string }[]>`
-        insert into account (book_id, class, kind, name, icon, sort) values (${bookId}, ${cls}, 'category', ${name}, ${icon}, ${sort++})
+        insert into account (book_id, class, kind, name, icon, sort, meta) values (${bookId}, ${cls}, 'category', ${name}, ${icon}, ${sort++}, ${tx.json(meta)})
         returning id`;
       let s = 0;
       for (const sub of subs) {
-        await tx`insert into account (book_id, class, kind, name, parent_id, sort) values (${bookId}, ${cls}, 'category', ${sub}, ${parent.id}, ${s++})`;
+        await tx`insert into account (book_id, class, kind, name, parent_id, sort, meta) values (${bookId}, ${cls}, 'category', ${sub}, ${parent.id}, ${s++}, ${tx.json(meta)})`;
       }
     }
   }
@@ -58,10 +63,12 @@ export async function createBook(tx: Tx, userId: string, name: string, isDemo: b
 }
 
 /** Your real book starts with your stated accounts at zero; you enter the opening balances. */
-export async function seedRealBookAccounts(tx: Tx, bookId: string) {
+export async function seedRealBookAccounts(tx: Tx, bookId: string, banks: string[] = []) {
+  // Nothing personal is baked in: the owner names their banks at setup (or gets one generic account).
+  const names = [...new Set(banks.map((b) => b.trim()).filter(Boolean))].slice(0, 6);
   const accounts: [string, string, string, string, object][] = [
-    ['Axis Bank', 'bank', 'Axis Bank', '🏦', { salary: true, debit_card: true }],
-    ['HDFC Bank', 'bank', 'HDFC Bank', '🏦', { debit_card: true }],
+    ...(names.length ? names : ['Bank account']).map((n, i): [string, string, string, string, object] =>
+      [n, 'bank', names.length ? n : '', '🏦', i === 0 ? { salary: true, debit_card: true } : { debit_card: true }]),
     ['Cash', 'cash', '', '💵', {}],
   ];
   let sort = 0;

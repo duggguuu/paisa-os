@@ -95,14 +95,20 @@ export async function importItems(sql: Sql, bookId: string, items: Item[]) {
   return { added, skipped };
 }
 
-/** The sheet snapshot bundled with the app (data/stuff-sheet.json). */
-export function sheetSnapshot(): Item[] {
+/** The owner's sheet snapshot (data/stuff-sheet.json), if this copy of the app has one. Clean exports don't. */
+function snapshotFile() {
   const here = path.dirname(fileURLToPath(import.meta.url));
   for (const d of [path.resolve(here, '../data'), path.resolve(here, '../../data')]) {
     const f = path.join(d, 'stuff-sheet.json');
-    if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf8'));
+    if (fs.existsSync(f)) return f;
   }
-  throw new LedgerError('no_snapshot', 'sheet snapshot not found', 500);
+  return null;
+}
+export const hasSnapshot = () => snapshotFile() !== null;
+export function sheetSnapshot(): Item[] {
+  const f = snapshotFile();
+  if (!f) throw new LedgerError('no_snapshot', 'This copy of the app has no sheet snapshot', 404);
+  return JSON.parse(fs.readFileSync(f, 'utf8'));
 }
 
 // ---------- buying ----------

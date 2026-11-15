@@ -32,17 +32,19 @@ export function resolvePeriod(type: PeriodType, anchor: string, monthStartDay: n
 }
 
 export async function summary(tx: Tx, bookId: string, r: Range, today = todayIST()) {
-  const [row] = await tx<{ spent: number; earned: number; income_txns: number }[]>`
+  const [row] = await tx<{ spent: number; earned: number; income_txns: number; money_in: number }[]>`
     select
       coalesce(sum(p.amount) filter (where a.class = 'expense'), 0)::bigint as spent,
-      coalesce(-sum(p.amount) filter (where a.class = 'income'), 0)::bigint as earned,
-      count(distinct t.id) filter (where a.class = 'income')::int as income_txns
+      coalesce(-sum(p.amount) filter (where counts_as_income(a)), 0)::bigint as earned,
+      count(distinct t.id) filter (where counts_as_income(a))::int as income_txns,
+      coalesce(-sum(p.amount) filter (where a.class = 'income' and not counts_as_income(a)), 0)::bigint as money_in
     from txn t join posting p on p.txn_id = t.id join account a on a.id = p.account_id
     where t.book_id = ${bookId} and t.status = 'posted' and t.occurred_on >= ${r.from} and t.occurred_on < ${r.to}`;
   const saved = row.earned - row.spent;
   return {
     spent: row.spent,
     earned: row.earned,
+    moneyIn: Number(row.money_in),           // inflows that aren't income (repayments, refunds, gifts…)
     saved: row.income_txns > 0 ? saved : null,
     savingsRate: row.income_txns > 0 && row.earned > 0 ? saved / row.earned : null,
     noIncomeLogged: row.income_txns === 0,
@@ -216,7 +218,7 @@ export async function byIncomeCategory(tx: Tx, bookId: string, r: Range) {
     select coalesce(c.parent_id, c.id) as id, max(coalesce(pc.name, c.name)) as name, max(coalesce(pc.icon, c.icon)) as icon,
            (-sum(p.amount))::bigint as amount
     from txn t join posting p on p.txn_id = t.id join account c on c.id = p.account_id left join account pc on pc.id = c.parent_id
-    where t.book_id = ${bookId} and t.status = 'posted' and c.class = 'income'
+    where t.book_id = ${bookId} and t.status = 'posted' and counts_as_income(c)
       and t.occurred_on >= ${r.from} and t.occurred_on < ${r.to}
     group by 1 having sum(p.amount) <> 0 order by amount desc`;
   return rows.map((x) => ({ ...x, amount: Number(x.amount) }));
