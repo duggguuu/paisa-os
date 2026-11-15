@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SecuritySettings } from '../components/Security';
@@ -54,6 +55,14 @@ export function Settings() {
         {book === 'demo' && (
           <button className="btn small" style={{ marginTop: 10 }} onClick={async () => { await api('/api/demo/reset', { method: 'POST' }); await qc.invalidateQueries(); toast('Sample data reset'); }}>Reset sample data</button>
         )}
+      </div>
+
+      <div className="section">
+        <div className="section-title">Categories</div>
+        <Link to="/categories" className="card" style={{ display: 'block' }}>
+          <b>Expense &amp; income categories</b>
+          <div className="tiny faint" style={{ marginTop: 2 }}>Add your own categories and subcategories, rename them, change icons, or hide ones you don't use.</div>
+        </Link>
       </div>
 
       <div className="section">

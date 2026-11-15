@@ -3,35 +3,49 @@ import type { Sql, Tx } from './db.js';
 import { audit, LedgerError } from './ledger.js';
 import { todayIST } from './money.js';
 
-/** Default category tree. Icons are emoji so they render everywhere without an icon font. */
+/**
+ * Default category tree (category › subcategory). Icons are emoji so they render everywhere.
+ * Existing names never change (past transactions point at them); new ones are added by migration 009
+ * for books created before. Keep the two in step when you add defaults.
+ */
 export const DEFAULT_CATEGORIES: { expense: [string, string, string[]][]; income: [string, string, string[]][] } = {
   expense: [
-    ['Food', '🍲', ['Groceries', 'Dining out', 'Delivery', 'Snacks & coffee']],
-    ['Housing', '🏠', ['Rent', 'Maintenance', 'Electricity', 'Internet', 'Water & gas']],
-    ['Transport', '🛵', ['Fuel', 'Cab & auto', 'Public transport', 'Parking & tolls', 'Vehicle service']],
-    ['Shopping', '🛍️', ['Apparel', 'Electronics', 'Household', 'Gifts given']],
-    ['Bills & subscriptions', '🧾', ['Mobile', 'Subscriptions', 'Insurance']],
-    ['Health', '🩺', ['Doctor', 'Medicines', 'Fitness']],
-    ['Entertainment', '🎬', ['Movies & events', 'Games', 'Outings']],
-    ['Personal care', '💈', []],
-    ['Education', '📚', ['Courses', 'Books']],
-    ['Travel', '✈️', ['Flights & trains', 'Stays', 'Local travel']],
-    ['Family', '👪', ['Parents', 'Siblings']],
-    ['Social life', '🍻', []],
-    ['Hobbies', '🎨', []],
-    ['Religious & charity', '🪔', []],
-    ['Fees & charges', '🏦', ['Bank charges', 'Interest paid', 'Late fees']],
-    ['Taxes', '🧮', []],
+    ['Food', '🍲', ['Groceries', 'Ration & staples', 'Vegetables & fruits', 'Milk & dairy', 'Meat, fish & eggs', 'Bakery & sweets', 'Drinking water', 'Dining out', 'Delivery', 'Snacks & coffee', 'Office meals']],
+    ['Household help', '🧑‍🍳', ['Cook', 'Maid', 'Cleaning', 'Laundry & ironing', 'Driver', 'Babysitter & nanny', 'Gardener', 'Security & watchman']],
+    ['Housing', '🏠', ['Rent', 'Maintenance', 'Electricity', 'Internet', 'Water & gas', 'Cooking gas (LPG)', 'Repairs & services', 'Furniture & furnishing', 'Appliances', 'Home decor', 'Pest control', 'Property tax', 'Brokerage & deposit']],
+    ['Transport', '🛵', ['Fuel', 'Cab & auto', 'Public transport', 'Parking & tolls', 'Vehicle service', 'Train', 'Bike & car rental', 'FASTag recharge']],
+    ['Vehicle', '🚗', ['Insurance', 'Spare parts & tyres', 'Accessories', 'Washing & detailing', 'Fines & challans', 'PUC & registration', 'Road tax']],
+    ['Shopping', '🛍️', ['Apparel', 'Footwear', 'Accessories', 'Jewellery', 'Electronics', 'Household', 'Home & kitchen', 'Gifts given', 'Stationery', 'Online orders']],
+    ['Bills & subscriptions', '🧾', ['Mobile', 'Subscriptions', 'Insurance', 'DTH & cable TV', 'OTT streaming', 'Music streaming', 'Cloud & software', 'News & magazines']],
+    ['Health', '🩺', ['Doctor', 'Medicines', 'Fitness', 'Medical tests & scans', 'Hospital', 'Dental', 'Eye care', 'Therapy & counselling', 'Physiotherapy', 'Vaccines', 'Supplements', 'Health insurance']],
+    ['Personal care', '💈', ['Salon & grooming', 'Skincare', 'Cosmetics', 'Spa & massage', 'Toiletries']],
+    ['Entertainment', '🎬', ['Movies & events', 'Games', 'Outings', 'Concerts & shows', 'Sports events', 'Adventure & activities']],
+    ['Education', '📚', ['Courses', 'Books', 'School fees', 'College fees', 'Coaching & tuition', 'Exam fees', 'Online learning', 'Stationery & supplies']],
+    ['Travel', '✈️', ['Flights & trains', 'Stays', 'Local travel', 'Visa & passport', 'Travel insurance', 'Food on trips', 'Sightseeing', 'Forex & card fees']],
+    ['Family', '👪', ['Parents', 'Siblings', 'Partner', 'Relatives', 'Elder care']],
+    ['Kids', '🧸', ['Daycare', 'School supplies', 'Toys', 'Clothes', 'Activities & classes', 'Baby care']],
+    ['Pets', '🐾', ['Pet food', 'Vet', 'Grooming', 'Pet supplies']],
+    ['Social life', '🍻', ['Parties', 'Drinks', 'Treats for friends', 'Dates']],
+    ['Gifts & occasions', '🎁', ['Birthdays', 'Weddings', 'Festivals', 'Anniversaries']],
+    ['Hobbies', '🎨', ['Sports & gear', 'Music', 'Photography', 'Gaming', 'Arts & crafts']],
+    ['Religious & charity', '🪔', ['Donations', 'Temple & worship', 'Pooja items', 'Religious events']],
+    ['Work', '💼', ['Office supplies', 'Co-working', 'Professional fees', 'Work travel', 'Memberships']],
+    ['Fees & charges', '🏦', ['Bank charges', 'Interest paid', 'Late fees', 'Card annual fee', 'Processing fees', 'Convenience fees', 'Brokerage']],
+    ['Taxes', '🧮', ['Income tax', 'Advance tax', 'GST', 'Professional tax']],
     ['Other', '•', []],
   ],
   income: [
-    ['Salary', '💼', []],
-    ['Interest', '🏦', []],
+    ['Salary', '💼', ['Bonus', 'Incentive & commission', 'Arrears', 'Leave encashment']],
+    ['Business & freelance', '🧑‍💻', ['Freelance', 'Consulting', 'Business income', 'Side projects']],
+    ['Interest', '🏦', ['Savings interest', 'FD interest', 'RD interest', 'Bond interest']],
     ['Dividends', '📈', []],
-    ['Refunds & cashback', '↩️', []],
-    ['Gifts received', '🎁', []],
-    ['Other income', '•', []],
-    ['Money in (not income)', '📥', ['Repayments', 'From family', 'Reimbursements', 'Other money in']],
+    ['Capital gains', '📊', ['Stocks', 'Mutual funds', 'Property', 'Gold']],
+    ['Rental income', '🏘️', ['House rent', 'Other rent']],
+    ['Pension', '👵', []],
+    ['Other income', '•', ['Prizes & winnings', 'Royalties']],
+    ['Refunds & cashback', '↩️', ['Refunds', 'Cashback & rewards']],
+    ['Gifts received', '🎁', ['Cash gifts', 'Shagun']],
+    ['Money in (not income)', '📥', ['Repayments', 'From family', 'Reimbursements', 'Sold something', 'Deposit returned', 'Insurance claims', 'Other money in']],
   ],
 };
 
@@ -171,8 +185,38 @@ export const CategoryInput = z.object({
   name: z.string().trim().min(1).max(60),
   class: z.enum(['expense', 'income']),
   parentId: z.string().uuid().optional().nullable(),
-  icon: z.string().max(8).optional().nullable(),
+  icon: z.string().max(16).optional().nullable(),
+  /** New top-level income category only: money coming in that isn't earnings (excluded from income). */
+  notIncome: z.boolean().optional(),
 });
+
+/** Categories the app itself relies on (fallbacks, salary, interest): they can be renamed but not hidden. */
+const SYSTEM_CATEGORIES = new Set(['salary', 'interest', 'interest paid', 'other', 'other income', 'other money in', 'bank charges', 'money in (not income)']);
+
+export const CategoryPatch = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  icon: z.string().max(16).optional().nullable(),
+  isArchived: z.boolean().optional(),
+});
+
+export async function updateCategory(sql: Sql, bookId: string, id: string, p: z.infer<typeof CategoryPatch>) {
+  return sql.begin(async (tx) => {
+    const [before] = await tx<any[]>`select * from account where id = ${id} and book_id = ${bookId} and kind = 'category'`;
+    if (!before) throw new LedgerError('not_found', 'category not found', 404);
+    if (p.isArchived && SYSTEM_CATEGORIES.has(String(before.name).toLowerCase()))
+      throw new LedgerError('system_category', `${before.name} is used by the app itself, so it can't be hidden. You can rename it.`, 400);
+    try {
+      await tx`update account set name = coalesce(${p.name ?? null}, name), icon = ${p.icon === undefined ? before.icon : p.icon},
+                 is_archived = coalesce(${p.isArchived ?? null}, is_archived) where id = ${id}`;
+    } catch (e: any) {
+      if (e?.code === '23505') throw new LedgerError('duplicate_name', `${p.name} already exists there`, 409);
+      throw e;
+    }
+    // Hiding a category hides its subcategories too; showing it again brings them back.
+    if (p.isArchived !== undefined && !before.parent_id) await tx`update account set is_archived = ${p.isArchived} where parent_id = ${id}`;
+    await audit(tx, bookId, 'category', id, 'update', before, p, 'user');
+  });
+}
 
 export async function createCategory(sql: Sql, bookId: string, input: z.infer<typeof CategoryInput>) {
   return sql.begin(async (tx) => {
@@ -183,9 +227,16 @@ export async function createCategory(sql: Sql, bookId: string, input: z.infer<ty
       if (p.class !== input.class) throw new LedgerError('bad_parent', 'parent is a different type of category');
       if (p.parent_id) throw new LedgerError('too_deep', 'categories go two levels deep: category › subcategory');
     }
+    // Subcategories inherit "not income" from their parent; new top-level income categories can opt in.
+    const [parent] = input.parentId ? await tx<{ meta: any }[]>`select meta from account where id = ${input.parentId}` : [];
+    const notIncome = input.class === 'income' && (input.parentId ? !!parent?.meta?.not_income : !!input.notIncome);
+    const [{ next }] = await tx<{ next: number }[]>`
+      select coalesce(max(sort), -1)::int + 1 as next from account
+      where book_id = ${bookId} and kind = 'category' and class = ${input.class} and parent_id is not distinct from ${input.parentId ?? null}`;
     try {
       const [row] = await tx<{ id: string }[]>`
-        insert into account (book_id, class, kind, name, parent_id, icon) values (${bookId}, ${input.class}, 'category', ${input.name}, ${input.parentId ?? null}, ${input.icon ?? null})
+        insert into account (book_id, class, kind, name, parent_id, icon, sort, meta)
+        values (${bookId}, ${input.class}, 'category', ${input.name}, ${input.parentId ?? null}, ${input.icon ?? null}, ${next}, ${tx.json(notIncome ? { not_income: true } : {})})
         returning id`;
       await audit(tx, bookId, 'category', row.id, 'create', null, input, 'user');
       return row.id;

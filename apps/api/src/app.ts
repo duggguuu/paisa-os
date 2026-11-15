@@ -8,7 +8,7 @@ import { z, ZodError } from 'zod';
 import type { Sql } from './db.js';
 import { hashPassword, verifyPassword, newToken, sha256, makeCipher } from './crypto.js';
 import { TxnInput, createTxn, updateTxn, voidTxn, restoreTxn, getTxn, accountBalances, bookIntegrity, LedgerError } from './ledger.js';
-import { AccountInput, AccountPatch, CategoryInput, createAccount, updateAccount, createCategory, createBook, seedRealBookAccounts } from './books.js';
+import { AccountInput, AccountPatch, CategoryInput, CategoryPatch, createAccount, updateAccount, createCategory, updateCategory, createBook, seedRealBookAccounts } from './books.js';
 import * as stats from './stats.js';
 import { home, netWorth, safeToSpend } from './dashboard.js';
 import * as kite from './kite.js';
@@ -350,13 +350,14 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     });
     api.get('/api/categories', async (req) => {
       return sql<any[]>`
-        select a.id, a.name, a.class, a.parent_id, a.icon, a.sort, (a.class = 'income' and not counts_as_income(a)) as not_income,
+        select a.id, a.name, a.class, a.parent_id, a.icon, a.sort, a.is_archived, (a.class = 'income' and not counts_as_income(a)) as not_income,
           (select count(*)::int from posting p join txn t on t.id = p.txn_id
              where p.account_id = a.id and t.status = 'posted' and t.occurred_on > current_date - 90) as recent_uses
-        from account a where a.book_id = ${B(req)} and a.kind = 'category' and not a.is_archived
+        from account a where a.book_id = ${B(req)} and a.kind = 'category' and (not a.is_archived or ${(req.query as any)?.all === '1'})
         order by a.class, a.sort, a.name`;
     });
     api.post('/api/categories', async (req) => ({ id: await createCategory(sql, B(req), CategoryInput.parse(req.body)) }));
+    api.patch('/api/categories/:id', async (req) => { await updateCategory(sql, B(req), (req.params as any).id, CategoryPatch.parse(req.body)); return { ok: true }; });
 
     // Category suggestion: what did you use last time for this merchant?
     api.get('/api/suggest', async (req) => {

@@ -24,6 +24,7 @@ import { Stuff } from './pages/Stuff';
 import { Debts } from './pages/Debts';
 import { Fds } from './pages/Fds';
 import { Salary } from './pages/Salary';
+import { Categories } from './pages/Categories';
 
 interface Ui {
   openAdd: (preset?: QuickAddPreset) => void;
@@ -142,6 +143,7 @@ function Shell() {
             <Route path="/debts" element={<Debts />} />
             <Route path="/fds" element={<Fds />} />
             <Route path="/salary" element={<Salary />} />
+            <Route path="/categories" element={<Categories />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </div>

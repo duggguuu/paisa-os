@@ -669,3 +669,54 @@ test('salary: structure → monthly credit on the last day; payslips; only salar
   assert.ok(st.summary.moneyIn >= 5000_00, 'shown as money in');
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
+
+test('categories: rich defaults; migration 009 fills gaps in older books; add, rename, hide', async () => {
+  let cats = (await req('GET', '/api/categories')).body;
+  const find = (name: string, parent?: string) => cats.find((c: any) => c.name === name && (parent === undefined || cats.find((p: any) => p.id === c.parent_id)?.name === parent));
+  assert.ok(find('Cook', 'Household help'), 'Household help › Cook');
+  assert.ok(find('Ration & staples', 'Food'));
+  assert.ok(find('Medical tests & scans', 'Health'));
+  assert.ok(find('Fines & challans', 'Vehicle'));
+  assert.ok(find('Freelance', 'Business & freelance'));
+  assert.equal(find('Sold something', 'Money in (not income)').not_income, true);
+  assert.equal(find('Rental income').not_income, false);
+
+  // An "older" book: remove one whole group and one subcategory, then re-run the migration.
+  const fuelId = find('Fuel', 'Transport').id;
+  const hh = find('Household help');
+  await sql`delete from account where parent_id = ${hh.id}`;
+  await sql`delete from account where id = ${hh.id}`;
+  await sql`delete from account where id = ${find('Pest control', 'Housing').id}`;
+  const m009 = fs.readFileSync(new URL('../../../db/migrations/009_more_categories.sql', import.meta.url), 'utf8');
+  await sql.unsafe(m009);
+  await sql.unsafe(m009);                             // twice: nothing duplicated
+  cats = (await req('GET', '/api/categories')).body;
+  assert.ok(find('Cook', 'Household help') && find('Pest control', 'Housing'), 'gaps filled');
+  assert.equal(find('Fuel', 'Transport').id, fuelId, 'existing categories untouched');
+  assert.equal(cats.filter((c: any) => c.name === 'Cook').length, 1);
+
+  // Add a category and a subcategory, rename, hide.
+  let r = await req('POST', '/api/categories', { name: 'Side hustle', class: 'income', icon: '💰' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const side = r.body.id;
+  r = await req('POST', '/api/categories', { name: 'Etsy shop', class: 'income', parentId: side });
+  assert.equal(r.status, 200);
+  r = await req('POST', '/api/categories', { name: 'Etsy shop', class: 'income', parentId: side });
+  assert.equal(r.status, 409, 'no duplicates under one parent');
+  r = await req('POST', '/api/categories', { name: 'Security deposit', class: 'income', parentId: find('Money in (not income)').id });
+  cats = (await req('GET', '/api/categories')).body;
+  assert.equal(find('Security deposit').not_income, true, 'subcategories inherit not-income');
+  assert.equal(find('Etsy shop').not_income, false);
+  r = await req('POST', '/api/categories', { name: 'Loan from friend', class: 'income', notIncome: true });
+  cats = (await req('GET', '/api/categories')).body;
+  assert.equal(find('Loan from friend').not_income, true);
+  r = await req('PATCH', `/api/categories/${side}`, { name: 'Side business', icon: '🧑‍💻' });
+  assert.equal(r.status, 200);
+  r = await req('PATCH', `/api/categories/${side}`, { isArchived: true });
+  cats = (await req('GET', '/api/categories')).body;
+  assert.ok(!find('Side business') && !find('Etsy shop'), 'hiding a category hides its subcategories');
+  const all = (await req('GET', '/api/categories?all=1')).body;
+  assert.ok(all.some((c: any) => c.name === 'Etsy shop' && c.is_archived));
+  r = await req('PATCH', `/api/categories/${find('Salary').id}`, { isArchived: true });
+  assert.equal(r.status, 400, 'Salary cannot be hidden');
+});
