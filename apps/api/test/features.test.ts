@@ -458,20 +458,20 @@ test('loans: principal vs total, EMI split into interest + principal', async () 
   const { loanMath, principalFromTotal } = await import('../src/debts.js');
   // ₹20,00,000 at 12% with a ₹19,000 EMI can't be the principal: monthly interest (₹20,000) would exceed the EMI.
   assert.equal(loanMath(20_00_000_00, 12, 19_000_00).emiTooSmall, true);
-  let r = await req('POST', '/api/loans', { lender: 'Acme Finance', mode: 'principal', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
+  let r = await req('POST', '/api/loans', { lender: 'Lender A', name: 'Home Loan', mode: 'principal', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 422);
   assert.match(r.body.message, /total of your remaining EMIs/);
   // As the total of remaining EMIs: ~105.3 EMIs, principal ≈ ₹12.3 lakh.
   const p = principalFromTotal(20_00_000_00, 12, 19_000_00);
   assert.ok(p > 12_20_000_00 && p < 12_45_000_00, `principal ${p}`);
-  r = await req('POST', '/api/loans', { lender: 'Acme Finance', mode: 'total', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
+  r = await req('POST', '/api/loans', { lender: 'Lender A', name: 'Home Loan', mode: 'total', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.principal, p);
   assert.equal(r.body.monthsLeft, 106);
-  const loanBal = await bal('Acme Finance loan');
+  const loanBal = await bal('Home Loan');
   assert.equal(loanBal, p, 'outstanding = principal');
   const d = (await req('GET', '/api/debts')).body;
-  const loan = d.loans.find((l: any) => l.name === 'Acme Finance loan');
+  const loan = d.loans.find((l: any) => l.name === 'Home Loan');
   assert.equal(loan.emi, 19_000_00);
   assert.ok(loan.nextEmi, 'EMI is a recurring bill');
   // Log one EMI: interest = outstanding × 12%/12 is spending; the rest reduces the loan.
@@ -482,7 +482,7 @@ test('loans: principal vs total, EMI split into interest + principal', async () 
   assert.equal(r.status, 200, JSON.stringify(r.body));
   const interest = Math.round(p * 0.12 / 12);
   assert.equal(await bal('SBI'), axisBefore - 19_000_00);
-  assert.equal(await bal('Acme Finance loan'), p - (19_000_00 - interest));
+  assert.equal(await bal('Home Loan'), p - (19_000_00 - interest));
   const spentAfter = (await req('GET', `/api/trans/month?anchor=${today}`)).body.expense;
   assert.ok(spentAfter >= interest, 'interest counts as spending');
   void spentBefore;
@@ -536,10 +536,10 @@ test('FDs: grouped by bank, maturity value, maturing pays principal + interest i
 });
 
 test('interest-only loan: payment is all interest, principal stays; a loan can be corrected', async () => {
-  let r = await req('POST', '/api/loans', { lender: 'Acme Flexi', type: 'interest_only', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
+  let r = await req('POST', '/api/loans', { lender: 'Lender B', name: 'Personal Loan', type: 'interest_only', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.principal, 20_00_000_00, 'no "EMI too small" for interest-only');
-  let loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Acme Flexi loan');
+  let loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Personal Loan');
   assert.equal(loan.type, 'interest_only');
   assert.equal(loan.interestNow, 19_000_00);
   assert.equal(loan.monthsLeft, null);
@@ -548,15 +548,15 @@ test('interest-only loan: payment is all interest, principal stays; a loan can b
   await sql`update recurring_rule set next_due = ${today} where id = ${loan.ruleId}`;
   r = await req('POST', `/api/recurring/${loan.ruleId}/log`, {});
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(await bal('Acme Flexi loan'), 20_00_000_00, 'principal unchanged');
+  assert.equal(await bal('Personal Loan'), 20_00_000_00, 'principal unchanged');
   assert.equal(await bal('SBI'), axis - 19_000_00);
   const [t] = await sql<{ kind: string }[]>`select kind from txn where recurring_id = ${loan.ruleId}`;
   assert.equal(t.kind, 'expense');
   // Correct it: say it is really an EMI loan with a different principal; the rule follows.
-  r = await req('PUT', `/api/loans/${loan.id}`, { lender: 'Acme Flexi', type: 'emi', mode: 'principal', amount: 10_00_000_00, rate: 12, emi: 25_000_00, emiDay: 7, fromAccountId: A['SBI'].id });
+  r = await req('PUT', `/api/loans/${loan.id}`, { lender: 'Lender B', name: 'Personal Loan', type: 'emi', mode: 'principal', amount: 10_00_000_00, rate: 12, emi: 25_000_00, emiDay: 7, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(await bal('Acme Flexi loan'), 10_00_000_00);
-  loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Acme Flexi loan');
+  assert.equal(await bal('Personal Loan'), 10_00_000_00);
+  loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Personal Loan');
   assert.equal(loan.type, 'emi');
   assert.equal(loan.emi, 25_000_00);
   assert.ok(loan.monthsLeft > 0);

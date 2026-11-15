@@ -5,7 +5,7 @@ import { Sheet, useUi } from '../App';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const shortDate = (d: string) => `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
-const BANKS = ['SBI', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak', 'Bajaj Finance', 'IDFC First', 'Bank of Baroda', 'PNB', 'Yes Bank'];
+const BANKS = ['SBI', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak', 'IDFC First', 'Bank of Baroda', 'PNB', 'Yes Bank'];
 
 function left(d: number | null) {
   if (d === null) return '';
