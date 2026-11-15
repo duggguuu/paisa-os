@@ -45,10 +45,10 @@ test('API requires a session', async () => {
 test('setup creates the owner, a real book with your accounts, and a seeded demo book', async () => {
   let r = await req('GET', '/api/auth/status');
   assert.equal(r.body.setupNeeded, true);
-  r = await req('POST', '/api/auth/setup', { email: 'owner@example.com', password: 'correct horse battery', banks: ['Axis Bank', 'HDFC Bank'] });
+  r = await req('POST', '/api/auth/setup', { email: 'owner@example.com', password: 'correct horse battery', banks: ['SBI', 'ICICI Bank'] });
   assert.equal(r.status, 200);
   r = await req('GET', '/api/accounts');
-  assert.deepEqual(r.body.filter((a: any) => a.class === 'asset').map((a: any) => a.name), ['Axis Bank', 'HDFC Bank', 'Cash']);
+  assert.deepEqual(r.body.filter((a: any) => a.class === 'asset').map((a: any) => a.name), ['SBI', 'ICICI Bank', 'Cash']);
   assert.ok(r.body.every((a: any) => a.balance === 0), 'real accounts start at zero');
   r = await req('GET', '/api/home');
   assert.equal(r.body.monthSummary.spent, 0, 'real book has no demo transactions');
@@ -65,12 +65,12 @@ test('setup cannot run twice', async () => {
 
 test('quick-add flow: create expense, see it in stats, void it', async () => {
   const accounts = (await req('GET', '/api/accounts')).body;
-  const axis = accounts.find((a: any) => a.name === 'Axis Bank');
+  const axis = accounts.find((a: any) => a.name === 'SBI');
   await req('PATCH', `/api/accounts/${axis.id}`, { openingBalance: 50_000_00, openingDate: '2026-11-01' });
   const cats = (await req('GET', '/api/categories')).body;
   const dining = cats.find((c: any) => c.name === 'Dining out');
   const key = crypto.randomUUID();
-  const body = { kind: 'expense', date: '2026-11-14', amount: 450_00, accountId: axis.id, categoryId: dining.id, merchant: 'Toit', idempotencyKey: key };
+  const body = { kind: 'expense', date: '2026-11-14', amount: 450_00, accountId: axis.id, categoryId: dining.id, merchant: 'Barbeque Nation', idempotencyKey: key };
   const created = await req('POST', '/api/txns', body);
   assert.equal(created.status, 201);
   const again = await req('POST', '/api/txns', body);
@@ -80,7 +80,7 @@ test('quick-add flow: create expense, see it in stats, void it', async () => {
   assert.equal(s.body.summary.spent, 450_00);
   assert.equal(s.body.categories[0].name, 'Food');
   assert.equal(s.body.summary.noIncomeLogged, true);
-  const sug = await req('GET', '/api/suggest?merchant=toit');
+  const sug = await req('GET', '/api/suggest?merchant=barbeque%20nation');
   assert.equal(sug.body.categoryId, dining.id);
   assert.equal(sug.body.accountId, axis.id);
   await req('DELETE', `/api/txns/${created.body.id}`);

@@ -181,7 +181,7 @@ export function PurchaseSheet({ onClose, prefill }: { onClose: () => void; prefi
 
   function fromText() {
     const s = parseStuffSentence(text);
-    if (!s.items.length) { setErr('Write it like: "bought an Anker charger for 2,499 from Amazon on HDFC card".'); return; }
+    if (!s.items.length) { setErr('Write it like: "bought an Anker charger for 2,499 from Amazon on my card".'); return; }
     setErr(null);
     setItems(s.items.map((i) => ({ name: i.name, category: itemCategory(i.name), paid: i.amount != null ? String(i.amount / 100) : '' })));
     if (s.store) setStore(s.store);
@@ -221,7 +221,7 @@ export function PurchaseSheet({ onClose, prefill }: { onClose: () => void; prefi
           </label>
           {scan && <div className="scan-progress" style={{ marginTop: 10 }}><span style={{ width: `${Math.round(scan.p * 100)}%` }} /><em>{scan.label}</em></div>}
           <div className="tiny faint" style={{ textAlign: 'center', margin: '12px 0' }}>or type it</div>
-          <textarea className="input" rows={3} placeholder='e.g. "bought an Anker charger for 2,499 and a cable for 499 from Amazon on HDFC card"' value={text} onChange={(e) => setText(e.target.value)} />
+          <textarea className="input" rows={3} placeholder='e.g. "bought an Anker charger for 2,499 and a cable for 499 from Amazon on my card"' value={text} onChange={(e) => setText(e.target.value)} />
           <button className="btn block" style={{ marginTop: 8 }} disabled={!text.trim()} onClick={fromText}>Continue</button>
         </>
       ) : (
@@ -314,7 +314,7 @@ function SaleSheet({ item, own, onClose }: { item: any | null; own: any[]; onClo
     <Sheet title="Sold something" onClose={onClose}>
       {!picked ? (
         <>
-          <input className="input" autoFocus placeholder='e.g. "sold my PS5 for 30k to Rohan into Axis"' value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') readSentence(); }} />
+          <input className="input" autoFocus placeholder='e.g. "sold my old phone for 12k to Rohan"' value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') readSentence(); }} />
           <div className="list" style={{ marginTop: 8 }}>
             {matches.map((o) => <button key={o.id} className="item" onClick={() => { setPicked(o); readSentence(); }}><div className="grow"><div className="title">{o.name}</div><div className="sub">{o.category}</div></div></button>)}
           </div>

@@ -12,7 +12,7 @@ export interface Order { store: string | null; items: OrderItem[]; total: number
 
 const rs = (s: string) => Math.round(parseFloat(s.replace(/,/g, '')) * 100);
 const MONEY = /(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)/i;
-const STORES = ['H&M', 'Zara', 'Uniqlo', 'Myntra', 'Amazon', 'Flipkart', 'Ajio', 'Nykaa', 'Decathlon', 'Snitch', 'Rare Rabbit', 'Westside', 'Max', 'Pantaloons', 'Bewakoof', 'Souled Store', 'Andamen', '5feet11', 'YUR', 'Croma', 'Reliance Digital', 'Apple'];
+const STORES = ['H&M', 'Zara', 'Uniqlo', 'Myntra', 'Amazon', 'Flipkart', 'Ajio', 'Nykaa', 'Decathlon', 'Westside', 'Max', 'Pantaloons', 'Bewakoof', 'Souled Store', /*<personal>*/ 'Snitch', 'Rare Rabbit', 'Andamen', '5feet11', 'YUR', /*</personal>*/ 'Croma', 'Reliance Digital', 'Apple'];
 
 /** Category guess for an item name, matching the Stuff sheet's categories. */
 export function itemCategory(name: string): string | null {
@@ -22,7 +22,7 @@ export function itemCategory(name: string): string | null {
   if (/\b(shirt|overshirt|tee|t-shirt|top|henley|polo|sweater|sweatshirt|hoodie|turtleneck|cardigan|kurta|blazer)\b/.test(t)) return 'Clothes — tops';
   if (/\b(shoe|shoes|sneaker|sneakers|derby|loafer|boots?|sandals?|slides|trainers)\b/.test(t)) return 'Footwear';
   if (/\b(watch|casio|timex|seiko)\b/.test(t)) return 'Watch';
-  if (/\b(headphones?|earbuds|iems?|speaker|airdopes|airpods|sennheiser|sony wh)\b/.test(t)) return 'Audio';
+  if (/\b(headphones?|earbuds|iems?|speaker|airdopes|airpods|sony wh)\b/.test(t)) return 'Audio';
   if (/\b(iphone|ipad|macbook|laptop|monitor|charger|cable|keyboard|mouse|ssd|phone|playstation|ps5)\b/.test(t)) return 'Tech';
   if (/\b(coffee|grinder|kettle|dripper|moka|espresso|french press|aeropress)\b/.test(t)) return 'Coffee';
   if (/\b(perfume|fragrance|edp|edt|cologne|attar)\b/.test(t)) return 'Fragrance';
@@ -112,7 +112,7 @@ export interface StuffSentence { kind: 'buy' | 'sell'; items: { name: string; am
 
 const AMOUNT = /(?:₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(k|lakh|lakhs|l)?\b/i;
 function amountOf(s: string) {
-  // Prefer the price after "for/at/@" ("PlayStation 5 for 30k" is 30k, not 5); else the last number.
+  // Prefer the price after "for/at/@" ("Galaxy S21 for 30k" is 30k, not 21); else the last number.
   const priced = s.match(/\b(?:for|at|@)\s*((?:₹|rs\.?|inr)?\s*\d[\d,]*(?:\.\d{1,2})?\s*(?:k|lakh|lakhs|l)?)\b/i);
   const all = [...s.matchAll(new RegExp(AMOUNT.source, 'gi'))];
   const m = priced ? priced[1].match(AMOUNT) : all[all.length - 1];
@@ -121,7 +121,7 @@ function amountOf(s: string) {
   return Math.round(parseFloat(m[1].replace(/,/g, '')) * mult * 100);
 }
 
-/** "bought an Anker charger for 2,499 and a cable for 499 from Amazon on HDFC card" / "sold my PS5 for 30k". */
+/** "bought an Anker charger for 2,499 and a cable for 499 from Amazon on my card" / "sold my old phone for 12k". */
 export function parseStuffSentence(text: string): StuffSentence {
   const t = text.trim();
   const kind: 'buy' | 'sell' = /\b(sold|sell|selling)\b/i.test(t) ? 'sell' : 'buy';

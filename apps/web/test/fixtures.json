@@ -8,8 +8,8 @@
    "is_archived": false
   },
   {
-   "id": "Axis Bank",
-   "name": "Axis Bank",
+   "id": "SBI",
+   "name": "SBI",
    "kind": "bank",
    "class": "asset",
    "is_archived": false
@@ -22,15 +22,15 @@
    "is_archived": false
   },
   {
-   "id": "HDFC Bank",
-   "name": "HDFC Bank",
+   "id": "ICICI Bank",
+   "name": "ICICI Bank",
    "kind": "bank",
    "class": "asset",
    "is_archived": false
   },
   {
-   "id": "Paytm Wallet",
-   "name": "Paytm Wallet",
+   "id": "PhonePe Wallet",
+   "name": "PhonePe Wallet",
    "kind": "wallet",
    "class": "asset",
    "is_archived": false
@@ -50,8 +50,8 @@
    "is_archived": false
   },
   {
-   "id": "HDFC Millennia Card",
-   "name": "HDFC Millennia Card",
+   "id": "ICICI Credit Card",
+   "name": "ICICI Credit Card",
    "kind": "credit_card",
    "class": "liability",
    "is_archived": false

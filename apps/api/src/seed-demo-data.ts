@@ -49,11 +49,11 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
   const mk = async (key: string, name: string, kind: any, opening: number, extra: any = {}) => {
     acc[key] = await createAccount(sql, bookId, { name, kind, openingBalance: opening * 100, openingDate: addDays(start, -1), ...extra });
   };
-  await mk('axis', 'Axis Bank', 'bank', 85_000, { institution: 'Axis Bank', icon: '🏦', meta: { salary: true } });
-  await mk('hdfc', 'HDFC Bank', 'bank', 42_000, { institution: 'HDFC Bank', icon: '🏦' });
+  await mk('axis', 'SBI', 'bank', 85_000, { institution: 'SBI', icon: '🏦', meta: { salary: true } });
+  await mk('hdfc', 'ICICI Bank', 'bank', 42_000, { institution: 'ICICI Bank', icon: '🏦' });
   await mk('cash', 'Cash', 'cash', 3_500, { icon: '💵' });
-  await mk('paytm', 'Paytm Wallet', 'wallet', 1_200, { icon: '👛' });
-  await mk('card', 'HDFC Millennia Card', 'credit_card', 0, { institution: 'HDFC Bank', icon: '💳', meta: { cycle_day: 18, due_day: 7 } });
+  await mk('paytm', 'PhonePe Wallet', 'wallet', 1_200, { icon: '👛' });
+  await mk('card', 'ICICI Credit Card', 'credit_card', 0, { institution: 'ICICI Bank', icon: '💳', meta: { cycle_day: 18, due_day: 7 } });
   await mk('zerodha', 'Zerodha (demo)', 'investment', 2_40_000, { institution: 'Zerodha', icon: '📈' });
   await mk('rohan', 'Rohan', 'receivable', 0, { icon: '🧑' });
   await mk('aditi', 'Aditi', 'receivable', 0, { icon: '👩' });
@@ -96,21 +96,21 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
     if (day === 25) exp(d, 5_000, 'Family/Parents', 'axis', 'Mom', 'Sent home');
     if (dow === 0 || dow === 3) exp(d, between(600, 2_400), 'Food/Groceries', pick(['hdfc', 'card', 'axis']), pick(['BigBasket', 'Zepto', 'Blinkit', 'Nature\'s Basket']));
     if (r() < 0.45) exp(d, between(180, 950), 'Food/Delivery', pick(['card', 'axis', 'paytm']), pick(['Swiggy', 'Zomato']));
-    if (r() < 0.22) exp(d, between(350, 2_200), 'Food/Dining out', pick(['card', 'hdfc']), pick(['Toit', 'Truffles', 'Meghana Foods', 'Third Wave Coffee', 'Blue Tokai']));
+    if (r() < 0.22) exp(d, between(350, 2_200), 'Food/Dining out', pick(['card', 'hdfc']), pick(['Barbeque Nation', 'Truffles', 'Meghana Foods', 'Third Wave Coffee', 'Blue Tokai']));
     if (r() < 0.5) exp(d, between(60, 420), 'Transport/Cab & auto', pick(['paytm', 'axis', 'cash']), pick(['Uber', 'Ola', 'Rapido', 'Namma Yatri']));
     if (day % 9 === 4) exp(d, between(400, 900), 'Transport/Fuel', 'card', pick(['Indian Oil', 'HP Petrol']));
     if (r() < 0.12) exp(d, between(80, 300), 'Food/Snacks & coffee', 'cash', pick(['Chai point', 'Bakery', 'Juice stall']));
-    if (r() < 0.05) exp(d, between(1_200, 6_500), 'Shopping/Apparel', 'card', pick(['Myntra', 'Uniqlo', 'H&M', 'Snitch']));
+    if (r() < 0.05) exp(d, between(1_200, 6_500), 'Shopping/Apparel', 'card', pick(['Myntra', 'Uniqlo', 'H&M', 'Zara']));
     if (r() < 0.04) exp(d, between(500, 4_000), 'Shopping/Household', pick(['card', 'hdfc']), pick(['Amazon', 'IKEA', 'Flipkart']));
     if (r() < 0.06) exp(d, between(300, 1_400), 'Entertainment/Movies & events', 'card', pick(['BookMyShow', 'PVR']));
     if (r() < 0.04) exp(d, between(250, 1_200), 'Health/Medicines', 'axis', pick(['Apollo Pharmacy', 'Tata 1mg']));
     if (r() < 0.03) exp(d, between(400, 900), 'Personal care', 'cash', 'Salon');
   }
 
-  // Shared dinner: you paid ₹3,600 at Toit; Rohan and Aditi owe ₹1,200 each.
+  // Shared dinner: you paid ₹3,600 at Barbeque Nation; Rohan and Aditi owe ₹1,200 each.
   const splitDay = addDays(today, -12);
   add({
-    kind: 'split', date: splitDay, accountId: acc.card, merchant: 'Toit', note: 'Birthday dinner, split 3 ways',
+    kind: 'split', date: splitDay, accountId: acc.card, merchant: 'Barbeque Nation', note: 'Birthday dinner, split 3 ways',
     lines: [
       { amount: 1_200 * 100, categoryId: C('Food/Dining out') },
       { amount: 1_200 * 100, receivableId: acc.rohan, memo: 'Rohan’s share' },
@@ -168,10 +168,10 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
                       ${kind === 'transfer' ? acc[target] : null}, ${name}, ${cadence}, ${day}, ${firstOnOrAfter(shape, addDays(today, 1))}, ${auto})`;
   }
   // Goals: one tracks a real account, the others are earmarks with contributions.
-  const fd = await createAccount(sql, bookId, { name: 'HDFC FD', kind: 'fd', openingBalance: 90_000_00, openingDate: addDays(start, -1), institution: 'HDFC Bank', icon: '🔒' });
+  const fd = await createAccount(sql, bookId, { name: 'HDFC FD', kind: 'fd', openingBalance: 90_000_00, openingDate: addDays(start, -1), institution: 'ICICI Bank', icon: '🔒' });
   for (const [name, icon, target, months, account, contribs] of [
     ['Emergency fund', '🛟', 3_00_000, 18, fd, []],
-    ['MacBook Air', '💻', 1_15_000, 6, null, [[150, 20_000], [120, 15_000], [90, 12_000], [60, 15_000], [30, 12_000], [5, 9_000]]],
+    ['New laptop', '💻', 1_15_000, 6, null, [[150, 20_000], [120, 15_000], [90, 12_000], [60, 15_000], [30, 12_000], [5, 9_000]]],
     ['Goa trip', '🏖️', 40_000, 4, null, [[70, 6_000], [40, 5_000], [10, 4_000]]],
   ] as const) {
     const [g] = await sql<{ id: string }[]>`

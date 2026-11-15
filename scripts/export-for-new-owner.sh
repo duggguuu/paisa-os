@@ -30,10 +30,15 @@ sed -i.bak \
 sed -i.bak -e "s/Mirrors the \"Yash's Stuff\" sheet/Mirrors a wardrobe sheet/" db/migrations/005_stuff.sql
 rm -f CLAUDE.md.bak db/migrations/005_stuff.sql.bak
 rm -f scripts/export-for-new-owner.sh
+# Strip everything marked as the owner's own: whole blocks (// <personal> … // </personal>) and
+# inline lists (/*<personal>*/ … /*</personal>*/), e.g. tests built on the owner's real order.
+find apps -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.mjs' \) -print0 | xargs -0 perl -0pi -e 's{^[ \t]*// <personal>.*?^[ \t]*// </personal>[^\n]*\n}{}gms; s{/\*<personal>\*/.*?/\*</personal>\*/\s*}{}gs'
 
-# Last line of defence: nothing personal may remain.
-if grep -rIl -i -E 'yash|duggguuu|gohel|krishnakul' . ; then
-  echo "Refusing: personal strings found in the files above." >&2
+# Last line of defence: nothing personal may remain (names, IDs, employer, salary and loan figures,
+# the real order, brands from the owner's lists). package-lock.json is skipped: its hashes are random text.
+PERSONAL='yash|duggguuu|gohel|krishnakul|waigee|digicare|tatvacare|cjppg2731n|923010013876510|101408526226|gjahd214|dg311|utib0000012|2432149|24,32,149|25487|25,487|11675|1,01,278|101278|1,03,038|103038|54,019|54019|1,05,038|105038|snitch|rare rabbit|andamen|5feet11|\byur\b|millennia|toit|<personal>'
+if grep -rIl -i -E --exclude=package-lock.json "$PERSONAL" . ; then
+  echo "Refusing: personal data found in the files above." >&2
   exit 1
 fi
 

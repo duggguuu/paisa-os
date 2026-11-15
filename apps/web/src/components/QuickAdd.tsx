@@ -236,7 +236,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
             )}
             {voiceErr ? <div className="tiny error" style={{ margin: '6px 2px 0' }}>{voiceErr}</div>
               : heard ? <div className="tiny muted" style={{ margin: '6px 2px 0' }}>Filled from {heard.startsWith('receipt:') ? heard : `"${heard}"`}. Check it, then Save.</div>
-              : <div className="tiny faint" style={{ margin: '6px 2px 0' }}>Say it ("1,200 at DMart from Axis yesterday") or 📷 scan a receipt.</div>}
+              : <div className="tiny faint" style={{ margin: '6px 2px 0' }}>Say it ("1,200 at DMart from my bank yesterday") or 📷 scan a receipt.</div>}
           </div>
         )}
         {!edit && (

@@ -53,8 +53,8 @@ test('statement: HDFC delimited export', () => {
 
 test('statement: booking guesses (ATM → cash, card bill, SIP, salary, interest, food)', () => {
   const accounts = [
-    { id: 'axis', name: 'Axis Bank', kind: 'bank' }, { id: 'cash', name: 'Cash', kind: 'cash' },
-    { id: 'card', name: 'HDFC Millennia Card', kind: 'credit_card' }, { id: 'inv', name: 'Zerodha', kind: 'investment' },
+    { id: 'axis', name: 'SBI', kind: 'bank' }, { id: 'cash', name: 'Cash', kind: 'cash' },
+    { id: 'card', name: 'ICICI Credit Card', kind: 'credit_card' }, { id: 'inv', name: 'Zerodha', kind: 'investment' },
   ];
   const ctx = { accounts, categories: fx.categories, accountId: 'axis' };
   const rows = parseStatement(AXIS).rows;
@@ -122,6 +122,7 @@ test('Splitwise export: rows, person columns, total row ignored, "you" guessed a
   assert.equal(guessMe([group, friend, friend2]), 'Sam R');
 });
 
+// <personal> Uses the owner's own data; removed from exports.
 const HAS_HM = fs.existsSync(new URL('./hm-ocr.json', import.meta.url));  // personal fixture; not in clean exports
 test('orders: the H&M order from real OCR of three overlapping screenshots', { skip: !HAS_HM && 'no personal OCR fixture in this copy' }, async () => {
   const { parseOrderText, mergeOrders } = await import('../src/orders.ts');
@@ -138,17 +139,18 @@ test('orders: the H&M order from real OCR of three overlapping screenshots', { s
   assert.equal(o.items[2].category, 'Clothes — bottoms');
   assert.equal(o.items[0].colour, 'Dark brown');
 });
+// </personal>
 
 test('orders: bought/sold sentences', async () => {
   const { parseStuffSentence } = await import('../src/orders.ts');
-  let s = parseStuffSentence('bought an Anker charger for 2,499 and a USB-C cable for 499 from Amazon on HDFC card');
+  let s = parseStuffSentence('bought an Anker charger for 2,499 and a USB-C cable for 499 from Amazon on ICICI card');
   assert.equal(s.kind, 'buy');
   assert.deepEqual(s.items, [{ name: 'Anker charger', amount: 249900 }, { name: 'USB-C cable', amount: 49900 }]);
   assert.equal(s.total, 299800);
   assert.equal(s.store, 'Amazon');
-  s = parseStuffSentence('sold my PlayStation 5 for 30k');
+  s = parseStuffSentence('sold my Galaxy S21 for 30k');
   assert.equal(s.kind, 'sell');
-  assert.deepEqual(s.items, [{ name: 'PlayStation 5', amount: 3000000 }]);
+  assert.deepEqual(s.items, [{ name: 'Galaxy S21', amount: 3000000 }]);
 });
 
 test('splitwise: balances from a friends-list screenshot', async () => {

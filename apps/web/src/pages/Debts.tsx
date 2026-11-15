@@ -205,7 +205,7 @@ function LoanSheet({ params, loan, onClose }: { params: URLSearchParams; loan?: 
           <button className={type === 'interest_only' ? 'on' : ''} onClick={() => setType('interest_only')}>Interest only</button>
         </div>
       </div>
-      <div className="field"><label>Lender</label><input className="input" value={lender} onChange={(e) => setLender(e.target.value)} placeholder="e.g. Bajaj Finance" /></div>
+      <div className="field"><label>Lender</label><input className="input" value={lender} onChange={(e) => setLender(e.target.value)} placeholder="Bank or lender" /></div>
       <div className="grid2">
         <div className="field"><label>{type === 'interest_only' ? 'Principal owed (₹)' : 'Amount (₹)'}</label><input className="input num" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
         <div className="field"><label>Interest (% a year)</label><input className="input num" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} /></div>
@@ -233,7 +233,7 @@ function LoanSheet({ params, loan, onClose }: { params: URLSearchParams; loan?: 
               ? <span>{views.asPrincipal.months} EMIs left, paid off {monthYear(views.asPrincipal.payoff)}, ≈ {money(views.asPrincipal.interestLeft, { whole: true })} interest to go.</span>
               : <span className="exp">Can't be: at {R}% the interest alone would be {money(Math.round((A! * R) / 1200), { whole: true })} a month, more than the EMI.</span>}
           </button>
-          <span className="tiny faint">Your loan statement or the Bajaj app shows "principal outstanding". Pick whichever matches.</span>
+          <span className="tiny faint">Your loan statement or the lender's app shows "principal outstanding". Pick whichever matches.</span>
         </div>
       )}
 

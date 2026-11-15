@@ -59,7 +59,7 @@ export function Home() {
 
       {noAccountsYet && (
         <div className="banner">
-          <span>Start by entering what's in Axis, HDFC and your wallet today.</span>
+          <span>Start by entering today's balance in each of your accounts.</span>
           <Link to="/accounts" style={{ color: 'var(--accent)', fontWeight: 600 }}>Set balances</Link>
         </div>
       )}

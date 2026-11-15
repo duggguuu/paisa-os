@@ -23,8 +23,8 @@ before(async () => {
   await migrate(sql);
   const [u] = await sql<{ id: string }[]>`insert into app_user (email, password_hash) values ('t@example.com', 'x') returning id`;
   book = await sql.begin((tx) => createBook(tx, u.id, 'Test', false));
-  A.axis = await createAccount(sql, book, { name: 'Axis Bank', kind: 'bank', openingBalance: 50_000_00, openingDate: '2026-01-01' });
-  A.hdfc = await createAccount(sql, book, { name: 'HDFC Bank', kind: 'bank', openingBalance: 10_000_00, openingDate: '2026-01-01' });
+  A.axis = await createAccount(sql, book, { name: 'SBI', kind: 'bank', openingBalance: 50_000_00, openingDate: '2026-01-01' });
+  A.hdfc = await createAccount(sql, book, { name: 'ICICI Bank', kind: 'bank', openingBalance: 10_000_00, openingDate: '2026-01-01' });
   A.card = await createAccount(sql, book, { name: 'Card', kind: 'credit_card', openingBalance: 0 });
   A.zerodha = await createAccount(sql, book, { name: 'Zerodha', kind: 'investment', openingBalance: 0 });
   A.rohan = await createAccount(sql, book, { name: 'Rohan', kind: 'receivable', openingBalance: 0 });
@@ -79,7 +79,7 @@ test('audit log is append-only', async () => {
 
 test('expense reduces the bank and counts as spending', async () => {
   const before = await bal(A.axis);
-  await createTxn(sql, book, { kind: 'expense', date: '2026-02-03', amount: 450_00, accountId: A.axis, categoryId: cat('Food/Dining out'), merchant: 'Toit', idempotencyKey: key() });
+  await createTxn(sql, book, { kind: 'expense', date: '2026-02-03', amount: 450_00, accountId: A.axis, categoryId: cat('Food/Dining out'), merchant: 'Barbeque Nation', idempotencyKey: key() });
   assert.equal(await bal(A.axis), before - 450_00);
   const s = await stats.summary(sql, book, { from: '2026-02-01', to: '2026-03-01' });
   assert.equal(s.spent, 450_00);
@@ -127,7 +127,7 @@ test('card purchase is spending once; paying the card bill is not spending again
 test('split bill: only your share is spending, friends owe the rest', async () => {
   const r = { from: '2026-05-01', to: '2026-06-01' };
   const t = await createTxn(sql, book, {
-    kind: 'split', date: '2026-05-04', accountId: A.card, merchant: 'Toit', idempotencyKey: key(),
+    kind: 'split', date: '2026-05-04', accountId: A.card, merchant: 'Barbeque Nation', idempotencyKey: key(),
     lines: [{ amount: 1_200_00, categoryId: cat('Food/Dining out') }, { amount: 1_200_00, receivableId: A.rohan }],
   });
   const s = await stats.summary(sql, book, r);

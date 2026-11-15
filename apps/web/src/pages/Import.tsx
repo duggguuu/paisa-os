@@ -128,8 +128,7 @@ function StatementImport() {
         </label>
         <details className="tiny muted" style={{ marginTop: 10 }}>
           <summary>How to download it</summary>
-          <p><b>Axis:</b> Net banking → Accounts → Statement → pick dates → Download as <b>CSV</b>.<br />
-            <b>HDFC:</b> Net banking → Accounts → Download historical statement → format <b>Delimited</b> (or TXT).<br />
+          <p>In net banking or your bank's app: Accounts → Statement → pick the dates → download as <b>CSV, Excel, TXT</b> or <b>PDF</b>. CSV or Excel reads most reliably.<br />
             <b>Credit cards:</b> most only give PDFs; if yours offers CSV/Excel, save it as CSV and import it against the card.</p>
         </details>
         {err && <p className="error">{err}</p>}

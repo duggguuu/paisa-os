@@ -18,7 +18,7 @@ const ME = 1, ROHAN = 2, ADITI = 3;
 const u = (id: number, first: string) => ({ id, first_name: first, last_name: null });
 const swExpenses = [
   { // before the start date: Rohan paid ₹1,000 dinner, split 50/50 → you owe Rohan ₹500
-    id: 101, description: 'Dinner at Toit', cost: '1000.0', currency_code: 'INR', date: '2026-01-05T14:00:00Z', payment: false, deleted_at: null,
+    id: 101, description: 'Dinner at Barbeque Nation', cost: '1000.0', currency_code: 'INR', date: '2026-01-05T14:00:00Z', payment: false, deleted_at: null,
     category: { name: 'Dining out' },
     users: [{ user_id: ME, user: u(ME, 'Sam'), paid_share: '0.0', owed_share: '500.0', net_balance: '-500.0' },
             { user_id: ROHAN, user: u(ROHAN, 'Rohan'), paid_share: '1000.0', owed_share: '500.0', net_balance: '500.0' }],
@@ -84,10 +84,10 @@ before(async () => {
   await sql.unsafe('drop schema public cascade; create schema public;');
   await migrate(sql);
   app = await buildApp({ sql, appSecret: 'y'.repeat(40), publicUrl: 'http://localhost:8080', fetch: fakeFetch });
-  await req('POST', '/api/auth/setup', { email: 'f@example.com', password: 'correct horse battery', banks: ['Axis Bank', 'HDFC Bank'] });
+  await req('POST', '/api/auth/setup', { email: 'f@example.com', password: 'correct horse battery', banks: ['SBI', 'ICICI Bank'] });
   for (const a of (await req('GET', '/api/accounts')).body) A[a.name] = a;
   for (const c of (await req('GET', '/api/categories')).body) C[c.name] = c.id;
-  await req('PATCH', `/api/accounts/${A['Axis Bank'].id}`, { openingBalance: 100_000_00, openingDate: '2025-12-01' });
+  await req('PATCH', `/api/accounts/${A['SBI'].id}`, { openingBalance: 100_000_00, openingDate: '2025-12-01' });
 });
 after(async () => { await app.close(); await sql.end(); });
 
@@ -103,7 +103,7 @@ test('recurring: due-date maths (month ends, weeks, years)', () => {
 test('recurring: bills due this month come out of safe-to-spend; logging is once-only', async () => {
   const before = (await req('GET', '/api/home')).body.safeToSpend;
   const r = await req('POST', '/api/recurring', {
-    name: 'Rent', kind: 'expense', amount: 25_000_00, accountId: A['Axis Bank'].id, categoryId: C['Rent'],
+    name: 'Rent', kind: 'expense', amount: 25_000_00, accountId: A['SBI'].id, categoryId: C['Rent'],
     cadence: 'monthly', day: Number(today.slice(8)), firstDue: today,
   });
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -114,28 +114,28 @@ test('recurring: bills due this month come out of safe-to-spend; logging is once
 
   const logged = await req('POST', `/api/recurring/${r.body.id}/log`, {});
   assert.equal(logged.status, 200);
-  assert.equal(await bal('Axis Bank'), 75_000_00);
+  assert.equal(await bal('SBI'), 75_000_00);
   home = (await req('GET', '/api/home')).body;
   assert.equal(home.safeToSpend.upcomingBills, 0, 'next rent is next month');
   // Re-logging the same occurrence (e.g. two devices) must not double-book.
   await sql`update recurring_rule set next_due = ${today} where id = ${r.body.id}`;
   await req('POST', `/api/recurring/${r.body.id}/log`, {});
-  assert.equal(await bal('Axis Bank'), 75_000_00);
+  assert.equal(await bal('SBI'), 75_000_00);
 });
 
 test('recurring: auto-post rules log themselves when due, and transfers (SIPs) are set aside', async () => {
   const inv = await req('POST', '/api/accounts', { name: 'Groww', kind: 'investment' });
   await req('POST', '/api/recurring', {
-    name: 'Netflix', kind: 'expense', amount: 649_00, accountId: A['HDFC Bank'].id, categoryId: C['Subscriptions'],
+    name: 'Netflix', kind: 'expense', amount: 649_00, accountId: A['ICICI Bank'].id, categoryId: C['Subscriptions'],
     cadence: 'monthly', day: 1, firstDue: addDays(today, -1), autoPost: true,
   });
-  await req('PATCH', `/api/accounts/${A['HDFC Bank'].id}`, { openingBalance: 10_000_00, openingDate: '2025-12-01' });
+  await req('PATCH', `/api/accounts/${A['ICICI Bank'].id}`, { openingBalance: 10_000_00, openingDate: '2025-12-01' });
   await req('GET', '/api/home'); // triggers auto-post
-  assert.equal(await bal('HDFC Bank'), 10_000_00 - 649_00);
+  assert.equal(await bal('ICICI Bank'), 10_000_00 - 649_00);
   const monthEnd = (await req('GET', '/api/home')).body.month.to;
   const sipDue = addDays(today, 1) < monthEnd ? addDays(today, 1) : today;
   const sip = await req('POST', '/api/recurring', {
-    name: 'SIP', kind: 'transfer', amount: 5_000_00, accountId: A['Axis Bank'].id, toAccountId: inv.body.id, cadence: 'monthly',
+    name: 'SIP', kind: 'transfer', amount: 5_000_00, accountId: A['SBI'].id, toAccountId: inv.body.id, cadence: 'monthly',
     day: Number(sipDue.slice(8)), firstDue: sipDue,
   });
   assert.equal(sip.status, 200);
@@ -144,17 +144,17 @@ test('recurring: auto-post rules log themselves when due, and transfers (SIPs) a
 });
 
 test('statement import: dedupes against itself and hand-entered entries, then reconciles', async () => {
-  const manual = await req('POST', '/api/txns', { kind: 'expense', amount: 450_00, accountId: A['HDFC Bank'].id, categoryId: C['Delivery'], date: today, merchant: 'Swiggy' });
+  const manual = await req('POST', '/api/txns', { kind: 'expense', amount: 450_00, accountId: A['ICICI Bank'].id, categoryId: C['Delivery'], date: today, merchant: 'Swiggy' });
   assert.equal(manual.status, 201);
   const rows = [
     { date: today, amount: -450_00, description: 'UPI-SWIGGY-swiggy@icici-412345678901', merchant: 'Swiggy', ref: '412345678901', balance: 8_451_00 },
     { date: today, amount: -1_200_00, description: 'UPI-DMART-dmart@ybl-412345678902', merchant: 'Dmart', ref: '412345678902', balance: 7_251_00 },
   ];
-  const pv = await req('POST', '/api/import/preview', { accountId: A['HDFC Bank'].id, rows });
+  const pv = await req('POST', '/api/import/preview', { accountId: A['ICICI Bank'].id, rows });
   assert.equal(pv.status, 200, JSON.stringify(pv.body));
   assert.equal(pv.body.rows[0].status, 'possible', 'matches the hand-entered Swiggy');
   assert.equal(pv.body.rows[1].status, 'new');
-  const commit = { accountId: A['HDFC Bank'].id, fileName: 'hdfc.csv', closing: { balance: 7_251_00, date: today },
+  const commit = { accountId: A['ICICI Bank'].id, fileName: 'hdfc.csv', closing: { balance: 7_251_00, date: today },
     rows: [{ ...rows[1], kind: 'expense', categoryId: C['Groceries'] }] };
   let c = await req('POST', '/api/import/commit', commit);
   assert.equal(c.status, 200, JSON.stringify(c.body));
@@ -164,12 +164,12 @@ test('statement import: dedupes against itself and hand-entered entries, then re
   c = await req('POST', '/api/import/commit', commit);
   assert.equal(c.body.imported, 0);
   assert.equal(c.body.skipped, 1, 'same file twice adds nothing');
-  const pv2 = await req('POST', '/api/import/preview', { accountId: A['HDFC Bank'].id, rows });
+  const pv2 = await req('POST', '/api/import/preview', { accountId: A['ICICI Bank'].id, rows });
   assert.equal(pv2.body.rows[1].status, 'duplicate');
   // Fix the difference with a reconciliation adjustment.
-  const adj = await req('POST', `/api/accounts/${A['HDFC Bank'].id}/reconcile`, { date: today, balance: 7_251_00 });
+  const adj = await req('POST', `/api/accounts/${A['ICICI Bank'].id}/reconcile`, { date: today, balance: 7_251_00 });
   assert.equal(adj.body.adjusted, c.body.reconciliation.difference);
-  assert.equal(await bal('HDFC Bank'), 7_251_00);
+  assert.equal(await bal('ICICI Bank'), 7_251_00);
   // Undo the import: its transactions are voided.
   const batches = (await req('GET', '/api/import/batches')).body;
   const undo = await req('POST', `/api/import/batches/${batches.find((b: any) => b.rows_imported === 1).id}/undo`);
@@ -191,9 +191,9 @@ test('CAS import adds funds once, skipping ones Zerodha already reports', async 
 });
 
 test('Splitwise: link, preview, import with matching balances, and re-sync adds nothing', async () => {
-  let r = await req('POST', '/api/splitwise/link', { apiKey: 'sw_test_key_123', defaultAccountId: A['Axis Bank'].id });
+  let r = await req('POST', '/api/splitwise/link', { apiKey: 'sw_test_key_123', defaultAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  const axisBefore = await bal('Axis Bank');
+  const axisBefore = await bal('SBI');
   r = await req('GET', '/api/splitwise/preview?since=2026-02-01');
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.expenses.length, 2, 'dinner is before the start date; deleted and USD are left out');
@@ -207,7 +207,7 @@ test('Splitwise: link, preview, import with matching balances, and re-sync adds 
   assert.equal(r.body.peopleCreated, 2);
   assert.equal(await bal('Rohan'), -400_00, 'matches Splitwise: you owe Rohan ₹400');
   assert.equal(await bal('Aditi'), 400_00, 'Aditi owes you ₹400');
-  assert.equal(await bal('Axis Bank'), axisBefore - 1_200_00 + 300_00);
+  assert.equal(await bal('SBI'), axisBefore - 1_200_00 + 300_00);
 
   r = await req('POST', '/api/splitwise/import', { since: '2026-02-01' });
   assert.equal(r.body.imported, 0);
@@ -222,7 +222,7 @@ test('insights: spots a steady monthly charge and offers to track it', async () 
   const [y, m] = today.split('-').map(Number);
   for (const back of [1, 2, 3]) {
     const d = new Date(Date.UTC(y, m - 1 - back, 5)).toISOString().slice(0, 10);
-    await req('POST', '/api/txns', { kind: 'expense', amount: 119_00, accountId: A['Axis Bank'].id, categoryId: C['Subscriptions'], date: d, merchant: 'Spotify' });
+    await req('POST', '/api/txns', { kind: 'expense', amount: 119_00, accountId: A['SBI'].id, categoryId: C['Subscriptions'], date: d, merchant: 'Spotify' });
   }
   const r = await req('GET', '/api/insights');
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -238,15 +238,15 @@ test('insights: spots a steady monthly charge and offers to track it', async () 
 test('Splitwise spreadsheet import (free accounts): balances, overlap between exports, sign detection', async () => {
   const K = 'Kabir M', M = 'Meera P', ME_ = 'Sam R';
   const group = { name: 'Flat.csv', rows: [
-    { date: '2026-01-05', description: 'Dinner at Toit', category: 'Dining out', cost: 1000_00, currency: 'INR', nets: { [ME_]: -500_00, [K]: 500_00, [M]: 0 } },
+    { date: '2026-01-05', description: 'Dinner at Barbeque Nation', category: 'Dining out', cost: 1000_00, currency: 'INR', nets: { [ME_]: -500_00, [K]: 500_00, [M]: 0 } },
     { date: '2026-02-10', description: 'BigBasket order', category: 'Groceries', cost: 1200_00, currency: 'INR', nets: { [ME_]: 800_00, [K]: -400_00, [M]: -400_00 } },
     { date: '2026-03-01', description: 'Kabir M. paid Sam R.', category: 'Payment', cost: 300_00, currency: 'INR', nets: { [ME_]: -300_00, [K]: 300_00, [M]: 0 } },
   ] };
   const friend = { name: 'Kabir.csv', rows: [
-    { date: '2026-01-05', description: 'Dinner at Toit', category: 'Dining out', cost: 1000_00, currency: 'INR', nets: { [ME_]: -500_00, [K]: 500_00 } }, // repeat of the group row
+    { date: '2026-01-05', description: 'Dinner at Barbeque Nation', category: 'Dining out', cost: 1000_00, currency: 'INR', nets: { [ME_]: -500_00, [K]: 500_00 } }, // repeat of the group row
     { date: '2026-02-20', description: 'Movie', category: 'Movies', cost: 600_00, currency: 'INR', nets: { [ME_]: 300_00, [K]: -300_00 } },
   ] };
-  const base = { me: ME_, since: '2026-02-01', defaultAccountId: A['HDFC Bank'].id, files: [friend, group] };
+  const base = { me: ME_, since: '2026-02-01', defaultAccountId: A['ICICI Bank'].id, files: [friend, group] };
   // Same data in the opposite sign convention must give the same answer.
   const negate = (f: any) => ({ ...f, rows: f.rows.map((r: any) => ({ ...r, nets: Object.fromEntries(Object.entries(r.nets).map(([k, v]) => [k, -(v as number)])) })) });
   const pvNeg = await req('POST', '/api/splitwise/csv/preview', { ...base, files: [negate(friend), negate(group)] });
@@ -265,13 +265,13 @@ test('Splitwise spreadsheet import (free accounts): balances, overlap between ex
   assert.equal(groceries.yourShare, 400_00);
   assert.equal(groceries.bank, -1200_00);
 
-  const hdfcBefore = await bal('HDFC Bank');
+  const hdfcBefore = await bal('ICICI Bank');
   let r = await req('POST', '/api/splitwise/csv/import', base);
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.imported, 3);
   assert.equal(await bal(K), -100_00, 'you owe Kabir ₹100, as in Splitwise');
   assert.equal(await bal(M), 400_00, 'Meera owes you ₹400');
-  assert.equal(await bal('HDFC Bank'), hdfcBefore - 1200_00 + 300_00 - 600_00);
+  assert.equal(await bal('ICICI Bank'), hdfcBefore - 1200_00 + 300_00 - 600_00);
   r = await req('POST', '/api/splitwise/csv/import', base);
   assert.equal(r.body.imported, 0, 're-uploading the same exports adds nothing');
   assert.equal(r.body.alreadyImported, 3);
@@ -280,7 +280,7 @@ test('Splitwise spreadsheet import (free accounts): balances, overlap between ex
 
 test('goals: earmarked and account-linked goals, boost, projected finish date', async () => {
   // Earmark goal with a starting amount.
-  let r = await req('POST', '/api/goals', { name: 'MacBook', icon: '💻', target: 1_00_000_00, startingAmount: 40_000_00, targetDate: addDays(today, 180) });
+  let r = await req('POST', '/api/goals', { name: 'Laptop', icon: '💻', target: 1_00_000_00, startingAmount: 40_000_00, targetDate: addDays(today, 180) });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   const mac = r.body.id;
   r = await req('POST', `/api/goals/${mac}/boost`, { amount: 20_000_00 });
@@ -296,12 +296,12 @@ test('goals: earmarked and account-linked goals, boost, projected finish date', 
   const fd = await req('POST', '/api/accounts', { name: 'Goal FD', kind: 'fd' });
   r = await req('POST', '/api/goals', { name: 'Emergency fund', target: 50_000_00, accountId: fd.body.id });
   const ef = r.body.id;
-  const axisBefore = await bal('Axis Bank');
+  const axisBefore = await bal('SBI');
   r = await req('POST', `/api/goals/${ef}/boost`, { amount: 10_000_00 });
   assert.equal(r.status, 422, 'linked goals need a source account');
-  r = await req('POST', `/api/goals/${ef}/boost`, { amount: 10_000_00, fromAccountId: A['Axis Bank'].id });
+  r = await req('POST', `/api/goals/${ef}/boost`, { amount: 10_000_00, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(await bal('Axis Bank'), axisBefore - 10_000_00);
+  assert.equal(await bal('SBI'), axisBefore - 10_000_00);
   g = (await req('GET', '/api/goals')).body.find((x: any) => x.id === ef);
   assert.equal(g.saved, 10_000_00);
   const spentBefore = (await req('GET', '/api/home')).body.monthSummary.spent;
@@ -392,6 +392,7 @@ test('app lock: locks after idle and on every new open; Face ID or password unlo
   assert.equal((await req('GET', '/api/accounts', undefined, '')).status, 200, 'no lock when it is off');
 });
 
+// <personal> Uses the owner's own data; removed from exports.
 // Clean exports of the app (for another owner) leave the personal sheet snapshot out.
 const HAS_SNAPSHOT = fs.existsSync(new URL('../data/stuff-sheet.json', import.meta.url));
 test('stuff: sheet import, purchase moves Want→Own by product code, sell moves Own→Sold', { skip: !HAS_SNAPSHOT && 'no sheet snapshot in this copy' }, async () => {
@@ -412,7 +413,7 @@ test('stuff: sheet import, purchase moves Want→Own by product code, sell moves
   ];
   const spentBefore = (await req('GET', '/api/home')).body.monthSummary.spent;
   r = await req('POST', '/api/stuff/purchase', {
-    accountId: A['Axis Bank'].id, categoryId: C['Apparel'], store: 'H&M', total: 1167520,
+    accountId: A['SBI'].id, categoryId: C['Apparel'], store: 'H&M', total: 1167520,
     items: lines.map(([name, artNo, colour, size, paid]) => ({ name, artNo, colour, size, paid, brand: 'H&M', category: 'Clothes' })),
   });
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -426,21 +427,22 @@ test('stuff: sheet import, purchase moves Want→Own by product code, sell moves
   // Logging the same order again doesn't duplicate anything in Own.
   const ownCount = (await req('GET', '/api/stuff?list=own')).body.length;
   r = await req('POST', '/api/stuff/purchase', {
-    accountId: A['Axis Bank'].id, categoryId: C['Apparel'], store: 'H&M', total: 1167520,
+    accountId: A['SBI'].id, categoryId: C['Apparel'], store: 'H&M', total: 1167520,
     items: lines.map(([name, artNo, colour, size, paid]) => ({ name, artNo, colour, size, paid, brand: 'H&M' })),
   });
   assert.equal(r.body.alreadyOwned.length, 6);
   assert.equal((await req('GET', '/api/stuff?list=own')).body.length, ownCount);
   // A brand-new item (not on Want) is added to Own.
-  r = await req('POST', '/api/stuff/purchase', { accountId: A['Axis Bank'].id, categoryId: C['Electronics'], total: 249900, items: [{ name: 'Anker 65W charger', category: 'Tech' }] });
+  r = await req('POST', '/api/stuff/purchase', { accountId: A['SBI'].id, categoryId: C['Electronics'], total: 249900, items: [{ name: 'Anker 65W charger', category: 'Tech' }] });
   assert.deepEqual(r.body.addedToOwn, ['Anker 65W charger']);
   // Sell the PS5.
   const ps5 = own.find((i: any) => i.name === 'PlayStation 5');
-  r = await req('POST', '/api/stuff/sell', { itemId: ps5.id, price: 3000000, accountId: A['Axis Bank'].id, categoryId: C['Other income'], buyer: 'OLX buyer' });
+  r = await req('POST', '/api/stuff/sell', { itemId: ps5.id, price: 3000000, accountId: A['SBI'].id, categoryId: C['Other income'], buyer: 'OLX buyer' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.ok(!(await req('GET', '/api/stuff?list=own')).body.some((i: any) => i.id === ps5.id), 'sold items leave Own');
   assert.equal((await req('GET', '/api/stuff?list=sold')).body[0].sold_price, 3000000);
 });
+// </personal>
 
 test('people balances from a Splitwise screenshot set each balance exactly', async () => {
   let r = await req('POST', '/api/people/balances', { balances: [{ name: 'Rohan', amount: -400_00 }, { name: 'Priya Shah', amount: 1250_00 }] });
@@ -452,35 +454,35 @@ test('people balances from a Splitwise screenshot set each balance exactly', asy
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
 
-test('loans: Bajaj Finance numbers, principal vs total, EMI split into interest + principal', async () => {
+test('loans: principal vs total, EMI split into interest + principal', async () => {
   const { loanMath, principalFromTotal } = await import('../src/debts.js');
-  // ₹24,32,149 at 12.99% with a ₹25,487 EMI can't be the principal: monthly interest would exceed the EMI.
-  assert.equal(loanMath(2432149_00, 12.99, 25487_00).emiTooSmall, true);
-  let r = await req('POST', '/api/loans', { lender: 'Bajaj Finance', mode: 'principal', amount: 2432149_00, rate: 12.99, emi: 25487_00, emiDay: 5, fromAccountId: A['Axis Bank'].id });
+  // ₹20,00,000 at 12% with a ₹19,000 EMI can't be the principal: monthly interest (₹20,000) would exceed the EMI.
+  assert.equal(loanMath(20_00_000_00, 12, 19_000_00).emiTooSmall, true);
+  let r = await req('POST', '/api/loans', { lender: 'Acme Finance', mode: 'principal', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 422);
   assert.match(r.body.message, /total of your remaining EMIs/);
-  // As the total of remaining EMIs: ~95.4 EMIs, principal ≈ ₹15.1 lakh.
-  const p = principalFromTotal(2432149_00, 12.99, 25487_00);
-  assert.ok(p > 1500000_00 && p < 1525000_00, `principal ${p}`);
-  r = await req('POST', '/api/loans', { lender: 'Bajaj Finance', mode: 'total', amount: 2432149_00, rate: 12.99, emi: 25487_00, emiDay: 5, fromAccountId: A['Axis Bank'].id });
+  // As the total of remaining EMIs: ~105.3 EMIs, principal ≈ ₹12.3 lakh.
+  const p = principalFromTotal(20_00_000_00, 12, 19_000_00);
+  assert.ok(p > 12_20_000_00 && p < 12_45_000_00, `principal ${p}`);
+  r = await req('POST', '/api/loans', { lender: 'Acme Finance', mode: 'total', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.principal, p);
-  assert.equal(r.body.monthsLeft, 96);
-  const loanBal = await bal('Bajaj Finance loan');
+  assert.equal(r.body.monthsLeft, 106);
+  const loanBal = await bal('Acme Finance loan');
   assert.equal(loanBal, p, 'outstanding = principal');
   const d = (await req('GET', '/api/debts')).body;
-  const loan = d.loans.find((l: any) => l.name === 'Bajaj Finance loan');
-  assert.equal(loan.emi, 25487_00);
+  const loan = d.loans.find((l: any) => l.name === 'Acme Finance loan');
+  assert.equal(loan.emi, 19_000_00);
   assert.ok(loan.nextEmi, 'EMI is a recurring bill');
-  // Log one EMI: interest = outstanding × 12.99%/12 is spending; the rest reduces the loan.
+  // Log one EMI: interest = outstanding × 12%/12 is spending; the rest reduces the loan.
   const spentBefore = (await req('GET', `/api/trans/month?anchor=${loan.nextEmi}`)).body.expense;
-  const axisBefore = await bal('Axis Bank');
+  const axisBefore = await bal('SBI');
   await sql`update recurring_rule set next_due = ${today} where id = ${loan.ruleId}`;
   r = await req('POST', `/api/recurring/${loan.ruleId}/log`, {});
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  const interest = Math.round(p * 0.1299 / 12);
-  assert.equal(await bal('Axis Bank'), axisBefore - 25487_00);
-  assert.equal(await bal('Bajaj Finance loan'), p - (25487_00 - interest));
+  const interest = Math.round(p * 0.12 / 12);
+  assert.equal(await bal('SBI'), axisBefore - 19_000_00);
+  assert.equal(await bal('Acme Finance loan'), p - (19_000_00 - interest));
   const spentAfter = (await req('GET', `/api/trans/month?anchor=${today}`)).body.expense;
   assert.ok(spentAfter >= interest, 'interest counts as spending');
   void spentBefore;
@@ -512,21 +514,21 @@ test('FDs: grouped by bank, maturity value, maturing pays principal + interest i
   assert.equal(r.status, 200, JSON.stringify(r.body));
   r = await req('POST', '/api/fds', { bank: 'SBI', principal: 50_000_00, rate: 6.5, start, maturity: '2026-06-01' });
   assert.equal(r.body.name, 'SBI FD 2', 'second FD at the same bank gets a new name');
-  const axisBefore = await bal('Axis Bank');
-  r = await req('POST', '/api/fds', { bank: 'HDFC Bank', principal: 20_000_00, rate: 7.25, start: today, maturity: '2028-01-01', fromAccountId: A['Axis Bank'].id });
-  assert.equal(await bal('Axis Bank'), axisBefore - 20_000_00, 'paid from Axis');
+  const axisBefore = await bal('SBI');
+  r = await req('POST', '/api/fds', { bank: 'ICICI Bank', principal: 20_000_00, rate: 7.25, start: today, maturity: '2028-01-01', fromAccountId: A['SBI'].id });
+  assert.equal(await bal('SBI'), axisBefore - 20_000_00, 'paid from Axis');
   let f = (await req('GET', '/api/fds')).body;
   const sbi = f.banks.find((b: any) => b.bank === 'SBI');
   assert.equal(sbi.items.length, 2);
   assert.equal(sbi.principal, 1_50_000_00);
-  assert.ok(f.banks.some((b: any) => b.bank === 'HDFC Bank'));
+  assert.ok(f.banks.some((b: any) => b.bank === 'ICICI Bank'));
   // Mature the June one into Axis: interest is income.
   const june = sbi.items.find((x: any) => x.maturity === '2026-06-01');
   assert.equal(june.matured, true);
-  const before = await bal('Axis Bank');
-  r = await req('POST', `/api/fds/${june.id}/mature`, { toAccountId: A['Axis Bank'].id });
+  const before = await bal('SBI');
+  r = await req('POST', `/api/fds/${june.id}/mature`, { toAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(await bal('Axis Bank'), before + june.atMaturity);
+  assert.equal(await bal('SBI'), before + june.atMaturity);
   assert.ok(r.body.interest > 0);
   f = (await req('GET', '/api/fds')).body;
   assert.equal(f.banks.find((b: any) => b.bank === 'SBI').items.length, 1, 'matured FD is closed');
@@ -534,27 +536,27 @@ test('FDs: grouped by bank, maturity value, maturing pays principal + interest i
 });
 
 test('interest-only loan: payment is all interest, principal stays; a loan can be corrected', async () => {
-  let r = await req('POST', '/api/loans', { lender: 'Bajaj Flexi', type: 'interest_only', amount: 2432149_00, rate: 12.99, emi: 25487_00, emiDay: 5, fromAccountId: A['Axis Bank'].id });
+  let r = await req('POST', '/api/loans', { lender: 'Acme Flexi', type: 'interest_only', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.principal, 2432149_00, 'no "EMI too small" for interest-only');
-  let loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Bajaj Flexi loan');
+  assert.equal(r.body.principal, 20_00_000_00, 'no "EMI too small" for interest-only');
+  let loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Acme Flexi loan');
   assert.equal(loan.type, 'interest_only');
-  assert.equal(loan.interestNow, 25487_00);
+  assert.equal(loan.interestNow, 19_000_00);
   assert.equal(loan.monthsLeft, null);
   // Log one payment: whole amount is spending, principal unchanged.
-  const axis = await bal('Axis Bank');
+  const axis = await bal('SBI');
   await sql`update recurring_rule set next_due = ${today} where id = ${loan.ruleId}`;
   r = await req('POST', `/api/recurring/${loan.ruleId}/log`, {});
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(await bal('Bajaj Flexi loan'), 2432149_00, 'principal unchanged');
-  assert.equal(await bal('Axis Bank'), axis - 25487_00);
+  assert.equal(await bal('Acme Flexi loan'), 20_00_000_00, 'principal unchanged');
+  assert.equal(await bal('SBI'), axis - 19_000_00);
   const [t] = await sql<{ kind: string }[]>`select kind from txn where recurring_id = ${loan.ruleId}`;
   assert.equal(t.kind, 'expense');
   // Correct it: say it is really an EMI loan with a different principal; the rule follows.
-  r = await req('PUT', `/api/loans/${loan.id}`, { lender: 'Bajaj Flexi', type: 'emi', mode: 'principal', amount: 10_00_000_00, rate: 12, emi: 25_000_00, emiDay: 7, fromAccountId: A['Axis Bank'].id });
+  r = await req('PUT', `/api/loans/${loan.id}`, { lender: 'Acme Flexi', type: 'emi', mode: 'principal', amount: 10_00_000_00, rate: 12, emi: 25_000_00, emiDay: 7, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(await bal('Bajaj Flexi loan'), 10_00_000_00);
-  loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Bajaj Flexi loan');
+  assert.equal(await bal('Acme Flexi loan'), 10_00_000_00);
+  loan = (await req('GET', '/api/debts')).body.loans.find((l: any) => l.name === 'Acme Flexi loan');
   assert.equal(loan.type, 'emi');
   assert.equal(loan.emi, 25_000_00);
   assert.ok(loan.monthsLeft > 0);
@@ -620,7 +622,7 @@ test('Kite callback works as a plain page load while the app lock is on (no tab 
 test('salary: structure → monthly credit on the last day; payslips; only salary counts as income', async () => {
   const L = (name: string, rupees: number, kind?: string) => ({ name, monthly: rupees * 100, ...(kind ? { kind } : {}) });
   let r = await req('PUT', '/api/salary', {
-    employer: 'Acme', accountId: A['Axis Bank'].id, payDay: 31,
+    employer: 'Acme', accountId: A['SBI'].id, payDay: 31,
     earnings: [L('Basic', 60000), L('HRA', 30000), L('Special allowance', 35000)],
     deductions: [L('Employee PF', 7200, 'pf'), L('Professional tax', 200, 'pt'), L('Income tax (TDS)', 12000, 'tds')],
     employerContrib: [L('Employer PF', 7200, 'pf')], annualBonus: 0, autoPost: false,
@@ -634,7 +636,7 @@ test('salary: structure → monthly credit on the last day; payslips; only salar
   const [y, m] = due.split('-').map(Number);
   assert.equal(Number(due.slice(8)), new Date(Date.UTC(y, m, 0)).getUTCDate(), 'due on the last day of the month');
   // Saving again updates the same rule.
-  r = await req('PUT', '/api/salary', { ...{ employer: 'Acme', accountId: A['Axis Bank'].id, payDay: 31, earnings: [L('Basic', 60000), L('HRA', 30000), L('Special allowance', 40000)], deductions: [L('Income tax (TDS)', 12000, 'tds')], employerContrib: [], autoPost: false } });
+  r = await req('PUT', '/api/salary', { ...{ employer: 'Acme', accountId: A['SBI'].id, payDay: 31, earnings: [L('Basic', 60000), L('HRA', 30000), L('Special allowance', 40000)], deductions: [L('Income tax (TDS)', 12000, 'tds')], employerContrib: [], autoPost: false } });
   assert.equal((await req('GET', '/api/salary')).body.rule.id, s.rule.id);
   // Payslip with TDS.
   r = await req('PUT', `/api/salary/slips/${today.slice(0, 7)}`, { earnings: [L('Basic', 60000), L('HRA', 30000)], deductions: [L('Income tax (TDS)', 9000, 'tds'), L('Employee PF', 7200, 'pf')] });
@@ -652,8 +654,8 @@ test('salary: structure → monthly credit on the last day; payslips; only salar
   assert.equal(cats.find((c: any) => c.name === 'Refunds & cashback').not_income, true);
   assert.equal(otherIncome.not_income, false);
   const before = (await req('GET', `/api/trans/month?anchor=${today}`)).body.income;
-  const axis = await bal('Axis Bank');
-  r = await req('POST', '/api/txns', { kind: 'income', amount: 5000_00, accountId: A['Axis Bank'].id, categoryId: otherIncome.id, date: today, merchant: 'Rahul UPI' });
+  const axis = await bal('SBI');
+  r = await req('POST', '/api/txns', { kind: 'income', amount: 5000_00, accountId: A['SBI'].id, categoryId: otherIncome.id, date: today, merchant: 'Rahul UPI' });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   const txnId = r.body.id;
   assert.equal((await req('GET', `/api/trans/month?anchor=${today}`)).body.income, before + 5000_00);
@@ -662,7 +664,7 @@ test('salary: structure → monthly credit on the last day; payslips; only salar
   r = await req('POST', '/api/money-in/reclassify', { txnIds: [txnId], categoryId: repay.id });
   assert.equal(r.body.moved, 1);
   assert.equal((await req('GET', `/api/trans/month?anchor=${today}`)).body.income, before, 'no longer income');
-  assert.equal(await bal('Axis Bank'), axis + 5000_00, 'the money is still in the bank');
+  assert.equal(await bal('SBI'), axis + 5000_00, 'the money is still in the bank');
   const st = (await req('GET', `/api/stats?period=month&anchor=${today}`)).body;
   assert.ok(st.summary.moneyIn >= 5000_00, 'shown as money in');
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
