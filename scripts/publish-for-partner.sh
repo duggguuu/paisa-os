@@ -17,6 +17,8 @@ if [ ! -d "$CLEAN_DIR/.git" ]; then
   git -c credential.helper='!gh auth git-credential' clone -q "$CLEAN_REPO" "$CLEAN_DIR"
 fi
 git -C "$CLEAN_DIR" -c credential.helper='!gh auth git-credential' pull -q --ff-only origin main
+BEFORE="$(git -C "$CLEAN_DIR" rev-parse HEAD)"
 "$ROOT/scripts/export-for-new-owner.sh" "$CLEAN_DIR" "$MESSAGE"
+if [ "$(git -C "$CLEAN_DIR" rev-parse HEAD)" = "$BEFORE" ]; then echo "Nothing new to publish."; exit 0; fi
 git -C "$CLEAN_DIR" -c credential.helper='!gh auth git-credential' push -q origin main
 echo "Published. Your partner will see \"1 commit behind\" on her fork and can tap Sync fork."
