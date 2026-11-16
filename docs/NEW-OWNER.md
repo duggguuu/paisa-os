@@ -224,7 +224,9 @@ The key only lets the alarm ask your app to send your reminders. It can't read a
 
 **Hide amounts:** tap the **eye** button (on Home, in the laptop sidebar, or the small floating button on your phone) to hide every amount, for example when someone is looking at your screen. Tap again to show them. On a laptop, **Shift + H** does the same. It stays the way you left it on that device.
 
-**Themes:** tap the palette icon on Home to choose a look, light or dark.
+**Themes:** the app starts in **Monotone, light**. Tap the palette icon on Home to choose another look, light or dark; your choice is remembered on that device.
+
+**Renaming or moving a subcategory:** **More → Categories**, tap ✎ on the subcategory. You can rename it, move it under a different category, change its icon, or hide it. Past transactions move with it. While adding a transaction you can also tap **✎ Edit** next to the subcategories to rename one in place.
 
 **Swipe on a transaction** (Home or Trans.): left to delete (with Undo), right to edit.
 

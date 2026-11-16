@@ -1,6 +1,6 @@
 /** Appearance preferences (per device): theme, light/dark/auto, contrast. */
 export type Mode = 'auto' | 'light' | 'dark';
-export interface Prefs { theme: string; mode: Mode; contrast: 'normal' | 'high' }
+export interface Prefs { theme: string; mode: Mode; contrast: 'normal' | 'high'; v?: number }
 
 export const THEMES: { id: string; name: string; swatch: string }[] = [
   { id: 'monotone', name: 'Monotone', swatch: 'linear-gradient(135deg,#f2f2f2,#8a8a8a 55%,#2b2b2b)' },
@@ -18,10 +18,16 @@ export const THEMES: { id: string; name: string; swatch: string }[] = [
 ];
 
 const KEY = 'paisa.appearance';
-const DEFAULTS: Prefs = { theme: 'glass', mode: 'auto', contrast: 'normal' };
+/** Monotone, light by default. PREFS_VERSION 2 moved every device to it once; choices made after that stick. */
+const PREFS_VERSION = 2;
+const DEFAULTS: Prefs = { theme: 'monotone', mode: 'light', contrast: 'normal', v: PREFS_VERSION };
 
 export function getPrefs(): Prefs {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }; } catch { return DEFAULTS; }
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    if (saved.v !== PREFS_VERSION) return { ...DEFAULTS, contrast: saved.contrast === 'high' ? 'high' : 'normal' };
+    return { ...DEFAULTS, ...saved };
+  } catch { return DEFAULTS; }
 }
 
 const systemDark = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches;
@@ -29,7 +35,7 @@ const systemDark = () => typeof matchMedia !== 'undefined' && matchMedia('(prefe
 export function apply(p: Prefs = getPrefs()) {
   const root = document.documentElement;
   const dark = p.mode === 'dark' || (p.mode === 'auto' && systemDark());
-  root.dataset.theme = THEMES.some((t) => t.id === p.theme) ? p.theme : 'glass';
+  root.dataset.theme = THEMES.some((t) => t.id === p.theme) ? p.theme : 'monotone';
   root.dataset.mode = dark ? 'dark' : 'light';
   root.dataset.contrast = p.contrast;
   root.style.colorScheme = dark ? 'dark' : 'light';
@@ -42,7 +48,7 @@ export function apply(p: Prefs = getPrefs()) {
 }
 
 export function setPrefs(patch: Partial<Prefs>) {
-  const next = { ...getPrefs(), ...patch };
+  const next = { ...getPrefs(), ...patch, v: PREFS_VERSION };
   try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* storage unavailable: still applies for this visit */ }
   apply(next);
   window.dispatchEvent(new Event('paisa:appearance'));
@@ -51,6 +57,8 @@ export function setPrefs(patch: Partial<Prefs>) {
 
 /** Call once at startup: applies prefs and follows the system setting while in Auto. */
 export function initTheme() {
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY) ?? '{}'); } catch { return {}; } })();
+  if (saved.v !== PREFS_VERSION) { try { localStorage.setItem(KEY, JSON.stringify(getPrefs())); } catch { /* storage unavailable */ } }
   apply();
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (getPrefs().mode === 'auto') apply(); }); } catch { /* old Safari */ }
 }

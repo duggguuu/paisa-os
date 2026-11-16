@@ -733,3 +733,54 @@ body::before {
   body::before, .hero::before, .rv { animation: none !important; transition: none !important; }
   .rv { opacity: 1; transform: none; }
 }
+
+/* Subcategory edit affordance */
+.cat-chip-edit { margin-left: 6px; font-size: 11px; color: var(--ink-3); }
+.cat-chip:hover .cat-chip-edit, .chip.editing .cat-chip-edit { color: var(--accent); }
+.chip.editing { border-style: dashed; }
+.cp-label.spread { display: flex; }
+
+/* =====================================================================
+   Comfortable spacing: one rhythm (8-point steps) across every page.
+   Comes last so it wins over the older "density" block above.
+   ===================================================================== */
+.grow { flex: 1 1 auto; min-width: 0; }
+.main { padding-left: 18px; padding-right: 18px; }
+/* Every block on a page gets breathing room from the one above it (margins collapse, so blocks
+   that already set their own larger gap keep it). */
+.page-anim > * + * { margin-top: 14px; }
+.page-anim > .section, .page-anim > * + .section { margin-top: 28px; }
+.page-head { margin-bottom: 18px; gap: 12px; flex-wrap: wrap; row-gap: 10px; }
+.page-head .page-title { margin: 0; }
+.page-head + * { margin-top: 0; }
+.page-title { margin: 4px 0 18px; }
+.banner { margin-bottom: 18px; padding: 12px 16px; }
+.section-title { margin: 0 4px 12px; }
+.card { padding: 18px; }
+.card + .card, .list + .card, .card + .list, .list + .list { margin-top: 12px; }
+.hero { padding: 20px 20px 18px; }
+.hero .hero-num { margin: 6px 0 8px; }
+.hero .meta { margin-top: 12px; }
+.item { min-height: 58px; padding: 12px 16px; gap: 12px; }
+.item .sub { margin-top: 2px; }
+.trow { padding: 11px 14px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; margin-bottom: 6px; }
+.chips { gap: 8px; }
+.seg { margin-bottom: 4px; }
+.row { gap: 12px; }
+.spread { gap: 14px; }
+.kpi-card { padding: 14px; gap: 8px; }
+.grid2 { gap: 12px; }
+p.tiny, .tiny.faint { line-height: 1.5; }
+/* Categories */
+.cat-head { padding: 14px 16px 8px; gap: 14px; }
+.cat-chips { gap: 8px; padding: 6px 16px 16px 66px; }
+@media (max-width: 520px) { .cat-chips { padding-left: 16px; } }
+/* Sheets (Add, edit forms) */
+.sheet .field:last-of-type { margin-bottom: 18px; }
+.sheet .btn.block + .btn.block { margin-top: 10px; }
+@media (min-width: 900px) {
+  .main { padding-left: 28px; padding-right: 28px; }
+  .page-anim > .section, .page-anim > * + .section { margin-top: 32px; }
+}

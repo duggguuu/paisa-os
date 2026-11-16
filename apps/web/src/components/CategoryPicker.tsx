@@ -21,6 +21,8 @@ export function CategoryPicker({ cats, cls, value, onChange }: {
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
 
   const path = (c: Cat) => (c.parent_id ? `${byId.get(c.parent_id)?.name ?? ''} › ${c.name}` : c.name);
   const icon = (c: Cat) => c.icon ?? (c.parent_id ? byId.get(c.parent_id)?.icon : null) ?? '';
@@ -42,6 +44,16 @@ export function CategoryPicker({ cats, cls, value, onChange }: {
   }
 
   const pick = (c: Cat) => { onChange(c.id); setQ(''); };
+
+  async function rename() {
+    if (!renaming || !renaming.name.trim()) return;
+    setErr(null);
+    try {
+      await api(`/api/categories/${renaming.id}`, { method: 'PATCH', body: { name: renaming.name.trim() } });
+      await qc.invalidateQueries({ queryKey: ['categories'] });
+      setRenaming(null);
+    } catch (e: any) { setErr(e.message); }
+  }
 
   return (
     <div className="cat-picker">
@@ -70,7 +82,7 @@ export function CategoryPicker({ cats, cls, value, onChange }: {
           <div className="chips">
             {parents.map((p) => (
               <button type="button" key={p.id} className={`chip ${openId === p.id ? 'open' : ''} ${selected && (selected.id === p.id || selected.parent_id === p.id) ? 'on' : ''}`}
-                onClick={() => setOpenId(openId === p.id ? null : p.id)} aria-expanded={openId === p.id}>{p.icon ?? ''} {p.name}{childrenOf(p.id).length ? ' ›' : ''}</button>
+                onClick={() => { setOpenId(openId === p.id ? null : p.id); setEditMode(false); setRenaming(null); }} aria-expanded={openId === p.id}>{p.icon ?? ''} {p.name}{childrenOf(p.id).length ? ' ›' : ''}</button>
             ))}
           </div>
           {openId && byId.get(openId) && (() => {
@@ -78,16 +90,31 @@ export function CategoryPicker({ cats, cls, value, onChange }: {
             const subs = childrenOf(p.id);
             return (
               <div className="cp-subs">
-                <div className="cp-label">{p.icon} {p.name}: subcategories</div>
-                <div className="chips">
-                  {subs.map((c) => <button type="button" key={c.id} className={`chip ${value === c.id ? 'on' : ''}`} onClick={() => pick(c)}>{c.name}</button>)}
-                  <button type="button" className={`chip ${value === p.id ? 'on' : ''}`} onClick={() => pick(p)}>{subs.length ? `Just ${p.name}` : p.name}</button>
+                <div className="cp-label spread">
+                  <span>{p.icon} {p.name}: subcategories</span>
+                  {subs.length > 0 && <button type="button" className="linkish" onClick={() => { setEditMode(!editMode); setRenaming(null); }}>{editMode ? 'Done' : '✎ Edit'}</button>}
                 </div>
-                <div className="cp-add">
+                {editMode && !renaming && <p className="tiny faint" style={{ margin: '0 0 6px' }}>Tap a subcategory to rename it. To move or hide one, use More → Categories.</p>}
+                {renaming ? (
+                  <div className="cp-add">
+                    <input className="input" value={renaming.name} autoFocus maxLength={60} aria-label="New name"
+                      onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); rename(); } if (e.key === 'Escape') setRenaming(null); }} />
+                    <button type="button" className="btn small accent" disabled={!renaming.name.trim()} onClick={rename}>Save</button>
+                    <button type="button" className="btn small" onClick={() => setRenaming(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className="chips">
+                    {subs.map((c) => <button type="button" key={c.id} className={`chip ${value === c.id && !editMode ? 'on' : ''} ${editMode ? 'editing' : ''}`}
+                      onClick={() => (editMode ? setRenaming({ id: c.id, name: c.name }) : pick(c))}>{c.name}{editMode && <span className="cat-chip-edit" aria-hidden>✎</span>}</button>)}
+                    {!editMode && <button type="button" className={`chip ${value === p.id ? 'on' : ''}`} onClick={() => pick(p)}>{subs.length ? `Just ${p.name}` : p.name}</button>}
+                  </div>
+                )}
+                {!editMode && <div className="cp-add">
                   <input className="input" placeholder={`New subcategory in ${p.name}`} value={adding} onChange={(e) => setAdding(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSub(p); } }} />
                   <button type="button" className="btn small" disabled={!adding.trim()} onClick={() => addSub(p)}>Add</button>
-                </div>
+                </div>}
                 {err && <p className="error">{err}</p>}
               </div>
             );

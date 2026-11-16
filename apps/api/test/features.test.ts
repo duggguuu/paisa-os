@@ -894,3 +894,35 @@ test('copilot tools: search, breakdown, drafts never save', async () => {
   assert.equal(drafts[0].accountName, 'SBI');
   assert.equal(await nTxns(), n0, 'a draft is never saved');
 });
+
+test('subcategories can be renamed and moved; a move follows the new parent income status', async () => {
+  const all = (await req('GET', '/api/categories?all=1')).body as any[];
+  const food = all.find((c) => c.name === 'Food' && !c.parent_id && c.class === 'expense');
+  const home = all.find((c) => !c.parent_id && c.class === 'expense' && c.id !== food.id);
+  let r = await req('POST', '/api/categories', { name: 'Tiffin', class: 'expense', parentId: food.id });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const id = r.body.id;
+  r = await req('PATCH', `/api/categories/${id}`, { name: 'Tiffin service' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  r = await req('PATCH', `/api/categories/${id}`, { parentId: home.id });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  let moved = ((await req('GET', '/api/categories?all=1')).body as any[]).find((c) => c.id === id);
+  assert.equal(moved.name, 'Tiffin service');
+  assert.equal(moved.parent_id, home.id);
+  // Can't move a top-level category, under a subcategory, or across expense/income.
+  assert.equal((await req('PATCH', `/api/categories/${food.id}`, { parentId: home.id })).status, 400);
+  assert.equal((await req('PATCH', `/api/categories/${id}`, { parentId: all.find((c) => c.parent_id && c.class === 'expense').id })).status, 400);
+  const incomeParent = all.find((c) => !c.parent_id && c.class === 'income');
+  assert.equal((await req('PATCH', `/api/categories/${id}`, { parentId: incomeParent.id })).status, 400);
+  // Income: moving into "Money in (not income)" stops it counting as income, and back again.
+  const salaryParent = all.find((c) => !c.parent_id && c.class === 'income' && !c.not_income);
+  const notIncome = all.find((c) => !c.parent_id && c.class === 'income' && c.not_income);
+  r = await req('POST', '/api/categories', { name: 'Side gig', class: 'income', parentId: salaryParent.id });
+  const gig = r.body.id;
+  const counts = async () => (await sql<{ c: boolean }[]>`select counts_as_income(a) as c from account a where id = ${gig}`)[0].c;
+  assert.equal(await counts(), true);
+  await req('PATCH', `/api/categories/${gig}`, { parentId: notIncome.id });
+  assert.equal(await counts(), false);
+  await req('PATCH', `/api/categories/${gig}`, { parentId: salaryParent.id });
+  assert.equal(await counts(), true);
+});

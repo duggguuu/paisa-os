@@ -65,7 +65,7 @@ export function Categories() {
           <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} style={{ marginRight: 6 }} />Show hidden
         </label>
       </div>
-      <div className="tiny faint" style={{ margin: '0 2px 8px' }}>{counts.parents} categories · {counts.subs} subcategories · tap a subcategory to rename or hide it</div>
+      <div className="tiny faint" style={{ margin: '0 2px 8px' }}>{counts.parents} categories · {counts.subs} subcategories · tap ✎ on any subcategory to rename it, move it, or hide it</div>
       {cls === 'income' && <p className="tiny faint" style={{ margin: '0 2px 10px' }}>Categories marked <b>not income</b> are money coming in that isn't earnings (repayments, refunds, gifts). They stay out of your income totals.</p>}
 
       {!cats.data ? <div className="card"><div className="skeleton" /></div> : (
@@ -82,8 +82,8 @@ export function Categories() {
               </div>
               <div className="cat-chips">
                 {subs.map((s) => (
-                  <button key={s.id} className={`cat-chip ${s.is_archived ? 'hidden' : ''}`} onClick={() => setEditing({ mode: 'edit', cat: s })} title="Rename, change icon or hide">
-                    {s.icon ? `${s.icon} ` : ''}{highlight(s.name, q)}
+                  <button key={s.id} className={`cat-chip ${s.is_archived ? 'hidden' : ''}`} onClick={() => setEditing({ mode: 'edit', cat: s })} title="Rename, move, change icon or hide" aria-label={`Edit ${s.name}`}>
+                    {s.icon ? `${s.icon} ` : ''}{highlight(s.name, q)}<span className="cat-chip-edit" aria-hidden>✎</span>
                   </button>
                 ))}
                 <button className="cat-chip add" onClick={() => setEditing({ mode: 'new-sub', parent: p })}>+ Subcategory</button>
@@ -95,27 +95,28 @@ export function Categories() {
         </div>
       )}
       <p className="tiny faint" style={{ margin: '12px 2px' }}>Hiding a category keeps its past transactions and totals; it just stops showing when you add new ones. Salary, Interest and the "Other" categories are used by the app itself, so they can be renamed but not hidden.</p>
-      {editing && <CategorySheet editing={editing} cls={cls} onClose={() => setEditing(null)} onHide={setHidden} />}
+      {editing && <CategorySheet editing={editing} cls={cls} parents={(cats.data ?? []).filter((c) => !c.parent_id && c.class === (editing.mode === 'edit' ? editing.cat.class : cls) && !c.is_archived)} onClose={() => setEditing(null)} onHide={setHidden} />}
     </>
   );
 }
 
-function CategorySheet({ editing, cls, onClose, onHide }: { editing: Editing; cls: 'expense' | 'income'; onClose: () => void; onHide: (c: Cat, hidden: boolean) => Promise<void> }) {
+function CategorySheet({ editing, cls, parents, onClose, onHide }: { editing: Editing; cls: 'expense' | 'income'; parents: Cat[]; onClose: () => void; onHide: (c: Cat, hidden: boolean) => Promise<void> }) {
   const qc = useQueryClient();
   const { toast } = useUi();
   const cat = editing.mode === 'edit' ? editing.cat : null;
   const [name, setName] = useState(cat?.name ?? '');
   const [icon, setIcon] = useState<string | null>(cat?.icon ?? (editing.mode === 'new-parent' ? '•' : null));
   const [notIncome, setNotIncome] = useState(false);
+  const [parentId, setParentId] = useState<string | null>(cat?.parent_id ?? null);
   const [err, setErr] = useState<string | null>(null);
   const isParent = editing.mode === 'new-parent' || (cat && !cat.parent_id);
-  const title = editing.mode === 'new-parent' ? `New ${cls === 'income' ? 'income' : 'expense'} category` : editing.mode === 'new-sub' ? `New subcategory in ${editing.parent.name}` : `Edit ${cat!.name}`;
+  const title = editing.mode === 'new-parent' ? `New ${cls === 'income' ? 'income' : 'expense'} category` : editing.mode === 'new-sub' ? `New subcategory in ${editing.parent.name}` : `Edit ${cat!.parent_id ? 'subcategory' : 'category'}`;
 
   async function save() {
     setErr(null);
     if (!name.trim()) return setErr('Give it a name');
     try {
-      if (editing.mode === 'edit') await api(`/api/categories/${cat!.id}`, { method: 'PATCH', body: { name: name.trim(), icon } });
+      if (editing.mode === 'edit') await api(`/api/categories/${cat!.id}`, { method: 'PATCH', body: { name: name.trim(), icon, ...(cat!.parent_id && parentId && parentId !== cat!.parent_id ? { parentId } : {}) } });
       else await api('/api/categories', { method: 'POST', body: {
         name: name.trim(), class: editing.mode === 'new-sub' ? editing.parent.class : cls,
         parentId: editing.mode === 'new-sub' ? editing.parent.id : null, icon, notIncome: editing.mode === 'new-parent' && cls === 'income' ? notIncome : undefined,
@@ -132,6 +133,14 @@ function CategorySheet({ editing, cls, onClose, onHide }: { editing: Editing; cl
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus
           placeholder={editing.mode === 'new-sub' ? 'e.g. Cook' : cls === 'income' ? 'e.g. Freelance' : 'e.g. Household help'}
           onKeyDown={(e) => { if (e.key === 'Enter') save(); }} /></div>
+      {cat?.parent_id && (
+        <div className="field"><label>Belongs to</label>
+          <select className="input" value={parentId ?? ''} onChange={(e) => setParentId(e.target.value)}>
+            {parents.map((p) => <option key={p.id} value={p.id}>{p.icon ? `${p.icon} ` : ''}{p.name}</option>)}
+          </select>
+          <span className="tiny faint">Past transactions move with it, so totals stay right.</span>
+        </div>
+      )}
       <div className="field"><label>Icon {isParent ? '' : '(optional)'}</label>
         <div className="icon-grid">
           {!isParent && <button type="button" className={`ic none ${icon === null ? 'on' : ''}`} onClick={() => setIcon(null)}>none</button>}

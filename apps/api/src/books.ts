@@ -197,6 +197,8 @@ export const CategoryPatch = z.object({
   name: z.string().trim().min(1).max(60).optional(),
   icon: z.string().max(16).optional().nullable(),
   isArchived: z.boolean().optional(),
+  /** Move a subcategory under another top-level category of the same type. */
+  parentId: z.string().uuid().optional(),
 });
 
 export async function updateCategory(sql: Sql, bookId: string, id: string, p: z.infer<typeof CategoryPatch>) {
@@ -205,6 +207,16 @@ export async function updateCategory(sql: Sql, bookId: string, id: string, p: z.
     if (!before) throw new LedgerError('not_found', 'category not found', 404);
     if (p.isArchived && SYSTEM_CATEGORIES.has(String(before.name).toLowerCase()))
       throw new LedgerError('system_category', `${before.name} is used by the app itself, so it can't be hidden. You can rename it.`, 400);
+    if (p.parentId && p.parentId !== before.parent_id) {
+      if (!before.parent_id) throw new LedgerError('not_subcategory', 'Only subcategories can be moved to another category', 400);
+      const [np] = await tx<any[]>`select id, class, parent_id, coalesce((meta->>'not_income')::boolean, false) as not_income from account where id = ${p.parentId} and book_id = ${bookId} and kind = 'category'`;
+      if (!np) throw new LedgerError('parent_not_found', 'That category was not found', 404);
+      if (np.parent_id) throw new LedgerError('bad_parent', 'Pick a main category, not a subcategory', 400);
+      if (np.class !== before.class) throw new LedgerError('bad_parent', 'Pick a category of the same type (expense or income)', 400);
+      // A moved subcategory takes on its new parent's income / not-income status.
+      try { await tx`update account set parent_id = ${np.id}, meta = case when ${np.not_income}::boolean then coalesce(meta, '{}'::jsonb) || '{"not_income": true}'::jsonb else coalesce(meta, '{}'::jsonb) - 'not_income' end where id = ${id}`; }
+      catch (e: any) { if (e?.code === '23505') throw new LedgerError('duplicate_name', `${p.name ?? before.name} already exists there`, 409); throw e; }
+    }
     try {
       await tx`update account set name = coalesce(${p.name ?? null}, name), icon = ${p.icon === undefined ? before.icon : p.icon},
                  is_archived = coalesce(${p.isArchived ?? null}, is_archived) where id = ${id}`;

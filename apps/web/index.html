@@ -1,16 +1,18 @@
 <!doctype html>
-<html lang="en-IN" data-theme="glass" data-mode="light">
+<html lang="en-IN" data-theme="monotone" data-mode="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f1f3f7" />
+    <meta name="theme-color" content="#f4f4f4" />
     <meta name="description" content="Paisa OS: your private money ledger." />
     <!-- Apply the saved theme before first paint (no flash of the wrong theme). -->
     <script>
       try {
+        // Default look: Monotone, light. (v2: every device moves to it once; later choices stick.)
         var p = JSON.parse(localStorage.getItem('paisa.appearance') || '{}');
-        var d = p.mode === 'dark' || ((!p.mode || p.mode === 'auto') && matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.dataset.theme = p.theme || 'glass';
+        if (p.v !== 2) p = { theme: 'monotone', mode: 'light', contrast: p.contrast };
+        var d = p.mode === 'dark' || (p.mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = p.theme || 'monotone';
         document.documentElement.dataset.mode = d ? 'dark' : 'light';
         document.documentElement.dataset.contrast = p.contrast || 'normal';
       } catch (e) {}
