@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Route, Routes, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -189,8 +190,13 @@ function Shell() {
   );
 }
 
+/**
+ * Bottom sheet. Rendered into <body> through a portal: page sections carry a transform from their
+ * entrance animation, and a fixed-position sheet nested inside one would be placed against that
+ * section instead of the screen (it ran off the top and bottom of the Home widgets editor).
+ */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  return (
+  return createPortal(
     <>
       <div className="scrim" onClick={onClose} />
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title}
@@ -199,6 +205,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         <div className="spread"><h2>{title}</h2><button className="btn small" onClick={onClose} aria-label="Close">Close</button></div>
         {children}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
