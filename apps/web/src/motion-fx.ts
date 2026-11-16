@@ -1,7 +1,7 @@
 /**
- * Motion effects with no library: confetti, the "saved" check, scroll reveals and page-morph
- * transitions (View Transitions API). Each one does nothing when the device asks for reduced
- * motion, and nothing breaks where a browser lacks the API.
+ * Motion effects with no library: confetti, the "saved" check and scroll reveals.
+ * Each one does nothing when the device asks for reduced motion. (Page-morph View Transitions
+ * were removed: they froze tab switches for seconds on phones.)
  */
 import { reducedMotion } from './motion';
 
@@ -104,54 +104,4 @@ export function installScrollReveal() {
   });
   mo.observe(document.body, { childList: true, subtree: true });
   scan(document);
-}
-
-/** Run `go`, then resolve once the page has re-rendered (or after 350 ms at most). */
-function rendered(go: () => void) {
-  return new Promise<void>((resolve) => {
-    const main = document.querySelector('.main') ?? document.body;
-    let done = false;
-    const finish = () => { if (done) return; done = true; mo.disconnect(); requestAnimationFrame(() => resolve()); };
-    const mo = new MutationObserver(finish);
-    mo.observe(main, { childList: true, subtree: true });
-    go();
-    setTimeout(finish, 350);
-  });
-}
-
-/**
- * Page morph: when an in-app link is tapped, the page changes inside a View Transition. If the
- * link is a card or tile, it morphs into the new page's title. Navigation bars just cross-fade.
- */
-export function installViewTransitions(navigate: (to: string) => void) {
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
-  if (!doc.startViewTransition || reducedMotion()) return () => {};
-  const onClick = (e: MouseEvent) => {
-    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    const a = (e.target as Element)?.closest?.('a[href]') as HTMLAnchorElement | null;
-    if (!a || a.target || a.hasAttribute('download') || a.origin !== location.origin) return;
-    const to = a.pathname + a.search + a.hash;
-    if (to === location.pathname + location.search + location.hash || a.pathname.startsWith('/api/')) return;
-    e.preventDefault();
-    const inNav = !!a.closest('nav, .tabbar, .bottom-nav, .sidebar, .side');
-    const morph = !inNav && !!a.closest('.card, .tile, .item, .kpi-card, .goal-card, .more-grid a, .quick a');
-    const source = morph ? (a.closest('.card, .tile, .item, .kpi-card, .goal-card') as HTMLElement | null) ?? a : null;
-    if (source) source.style.viewTransitionName = 'morph';
-    document.documentElement.dataset.vt = morph ? 'morph' : 'page';
-    const t = doc.startViewTransition!(async () => {
-      if (source) source.style.viewTransitionName = '';
-      await rendered(() => navigate(to));
-      if (morph) {
-        const title = document.querySelector<HTMLElement>('.main .page-title');
-        if (title) title.style.viewTransitionName = 'morph';
-      }
-    });
-    t.finished.finally(() => {
-      const title = document.querySelector<HTMLElement>('.main .page-title');
-      if (title) title.style.viewTransitionName = '';
-      delete document.documentElement.dataset.vt;
-    });
-  };
-  document.addEventListener('click', onClick, true);
-  return () => document.removeEventListener('click', onClick, true);
 }

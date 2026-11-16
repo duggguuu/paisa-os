@@ -700,17 +700,6 @@ body::before {
 .rv { opacity: 0; transform: translateY(18px) scale(0.985); animation: none !important; }
 .rv.rv-in { opacity: 1; transform: none; transition: opacity 520ms var(--ease), transform 640ms var(--spring-soft); }
 
-/* Page morph (View Transitions): nav switches cross-fade; a tapped card morphs into the next page's title. */
-.tabbar { view-transition-name: tabbar; }
-.sidebar { view-transition-name: sidebar; }
-html[data-vt]::view-transition-old(root) { animation: vt-out 200ms var(--ease) both; }
-html[data-vt]::view-transition-new(root) { animation: vt-in 320ms var(--ease) both; }
-@keyframes vt-out { to { opacity: 0; transform: translateY(-4px); } }
-@keyframes vt-in { from { opacity: 0; transform: translateY(8px); } }
-::view-transition-group(morph) { animation-duration: 440ms; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
-::view-transition-old(morph), ::view-transition-new(morph) { height: 100%; object-fit: cover; }
-html[data-vt] .page-anim > * { animation: none; }
-
 /* Swipe rows: drag left to delete, right to edit. */
 .swipe-row { position: relative; overflow: hidden; }
 .swipe-row + .swipe-row { border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
@@ -743,5 +732,4 @@ html[data-vt] .page-anim > * { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   body::before, .hero::before, .rv { animation: none !important; transition: none !important; }
   .rv { opacity: 1; transform: none; }
-  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
