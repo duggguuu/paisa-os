@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { HomeTiles } from '../components/HomeTiles';
 import { celebrateGoals } from '../motion-fx';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
@@ -97,6 +98,8 @@ export function Home() {
         <div><span>Exp.</span><b className="num exp">{compact(m.spent)}</b></div>
         <div><span>Total</span><b className="num">{compact(m.earned - m.spent)}</b></div>
       </Link>
+
+      <HomeTiles />
 
       {warn && (
         <Link to="/insights" className="note-line"><span aria-hidden>{warn.icon}</span><span className="grow">{maskText(warn.title)}</span><Icon name="chevron" /></Link>

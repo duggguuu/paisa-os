@@ -8,6 +8,7 @@ import { z, ZodError } from 'zod';
 import type { Sql } from './db.js';
 import { hashPassword, verifyPassword, newToken, sha256, makeCipher } from './crypto.js';
 import { TxnInput, createTxn, updateTxn, voidTxn, restoreTxn, getTxn, accountBalances, bookIntegrity, LedgerError } from './ledger.js';
+import * as widgets from './widgets.js';
 import { AccountInput, AccountPatch, CategoryInput, CategoryPatch, createAccount, updateAccount, createCategory, updateCategory, createBook, seedRealBookAccounts, accountDeletePreview, deleteAccount } from './books.js';
 import * as stats from './stats.js';
 import { home, netWorth, safeToSpend } from './dashboard.js';
@@ -319,6 +320,42 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     return backup.makeBackup(sql, cipher, owners[0].user_id, owners[0].book_id);
   });
 
+  /** Confirm a risky action with the app PIN, or the login password when there's no PIN (or it's locked). */
+  const confirmPinOrPassword = async (userId: string, body: unknown, what: string) => {
+      const b = z.object({ pin: z.string().regex(/^\d{4,6}$/).optional(), password: z.string().min(1).max(200).optional() }).parse(body ?? {});
+      const [u] = await sql<{ pin_hash: string | null; pin_failures: number; password_hash: string }[]>`select pin_hash, pin_failures, password_hash from app_user where id = ${userId}`;
+      if (u.pin_hash && u.pin_failures < PIN_TRIES) {
+        if (!b.pin) throw new LedgerError('pin_required', `Enter your app PIN to ${what}.`, 400);
+        if (!(await verifyPassword(b.pin, u.pin_hash))) {
+          const [{ pin_failures: n }] = await sql<{ pin_failures: number }[]>`update app_user set pin_failures = pin_failures + 1 where id = ${userId} returning pin_failures`;
+          throw new LedgerError(n >= PIN_TRIES ? 'pin_locked' : 'bad_pin', n >= PIN_TRIES ? 'Too many wrong PINs. Use your login password instead.' : `Wrong PIN. ${PIN_TRIES - n} ${PIN_TRIES - n === 1 ? 'try' : 'tries'} left.`, 401);
+        }
+        await sql`update app_user set pin_failures = 0 where id = ${userId}`;
+      } else {
+        if (!b.password) throw new LedgerError('password_required', `Enter your login password to ${what}.`, 400);
+        const k = `delete:${userId}`;
+        const att = loginAttempts.get(k);
+        if (att && att.n >= 5 && att.until > Date.now()) throw new LedgerError('rate_limited', 'Too many attempts. Try again in 15 minutes.', 429);
+        if (!(await verifyPassword(b.password, u.password_hash))) {
+          loginAttempts.set(k, { n: (att && att.until > Date.now() ? att.n : 0) + 1, until: Date.now() + 15 * 60_000 });
+          throw new LedgerError('bad_credentials', 'Wrong password', 401);
+        }
+        loginAttempts.delete(k);
+        await sql`update app_user set pin_failures = 0 where id = ${userId}`;
+      }
+  };
+
+  // Home-screen widgets (Scriptable on iPhone): a view-only summary for whoever holds the widget link.
+  app.get('/api/widget/data', async (req, reply) => {
+    const t = String((req.query as any)?.t ?? '');
+    const who = await widgets.userForToken(sql, t);
+    reply.header('Cache-Control', 'no-store');
+    if (!who) return reply.status(401).send({ error: 'bad_link', message: 'This widget link was turned off. Make a new one in Paisa → Settings → Widgets.' });
+    const [book] = await sql<{ id: string; month_start_day: number }[]>`select id, month_start_day from book where user_id = ${who.userId} and not is_demo limit 1`;
+    if (!book) return reply.status(404).send({ error: 'no_book' });
+    return { ...(await widgets.widgetData(sql, book.id, book.month_start_day)), hideAmounts: who.hideAmounts, appUrl: cfg.publicUrl };
+  });
+
   // ---------- everything below needs a session ----------
   await app.register(async (api) => {
     api.addHook('preHandler', async (req) => requireAuth(req));
@@ -459,29 +496,28 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
       return { ...preview, confirmWith: usePin ? 'pin' : 'password', pinLength: usePin ? u.pin_length : null, pinBlocked: u.has_pin && !usePin };
     });
     api.post('/api/accounts/:id/delete', async (req) => {
-      const b = z.object({ pin: z.string().regex(/^\d{4,6}$/).optional(), password: z.string().min(1).max(200).optional() }).parse(req.body);
-      const [u] = await sql<{ pin_hash: string | null; pin_failures: number; password_hash: string }[]>`select pin_hash, pin_failures, password_hash from app_user where id = ${req.userId!}`;
-      if (u.pin_hash && u.pin_failures < PIN_TRIES) {
-        if (!b.pin) throw new LedgerError('pin_required', 'Enter your app PIN to delete this account.', 400);
-        if (!(await verifyPassword(b.pin, u.pin_hash))) {
-          const [{ pin_failures: n }] = await sql<{ pin_failures: number }[]>`update app_user set pin_failures = pin_failures + 1 where id = ${req.userId!} returning pin_failures`;
-          throw new LedgerError(n >= PIN_TRIES ? 'pin_locked' : 'bad_pin', n >= PIN_TRIES ? 'Too many wrong PINs. Use your login password instead.' : `Wrong PIN. ${PIN_TRIES - n} ${PIN_TRIES - n === 1 ? 'try' : 'tries'} left.`, 401);
-        }
-        await sql`update app_user set pin_failures = 0 where id = ${req.userId!}`;
-      } else {
-        if (!b.password) throw new LedgerError('password_required', 'Enter your login password to delete this account.', 400);
-        const k = `delete:${req.userId}`;
-        const att = loginAttempts.get(k);
-        if (att && att.n >= 5 && att.until > Date.now()) throw new LedgerError('rate_limited', 'Too many attempts. Try again in 15 minutes.', 429);
-        if (!(await verifyPassword(b.password, u.password_hash))) {
-          loginAttempts.set(k, { n: (att && att.until > Date.now() ? att.n : 0) + 1, until: Date.now() + 15 * 60_000 });
-          throw new LedgerError('bad_credentials', 'Wrong password', 401);
-        }
-        loginAttempts.delete(k);
-        await sql`update app_user set pin_failures = 0 where id = ${req.userId!}`;
-      }
+      await confirmPinOrPassword(req.userId!, req.body, 'delete this account');
       return deleteAccount(sql, B(req), (req.params as any).id);
     });
+    // Widgets: Home tiles + the view-only link for home-screen widgets
+    api.get('/api/widgets', async (req) => ({ link: await widgets.linkStatus(sql, req.userId!), tiles: await widgets.getTiles(sql, req.userId!), appUrl: cfg.publicUrl }));
+    api.get('/api/widgets/data', async (req) => widgets.widgetData(sql, B(req), req.book!.month_start_day));
+    api.put('/api/widgets/tiles', async (req) => {
+      const tiles = z.array(z.object({ id: z.enum(widgets.TILE_IDS), size: z.enum(['s', 'm', 'l']) })).max(16).parse((req.body as any)?.tiles);
+      await widgets.saveTiles(sql, req.userId!, tiles);
+      return { ok: true };
+    });
+    api.post('/api/widgets/link', async (req) => {
+      await confirmPinOrPassword(req.userId!, req.body, 'make a widget link');
+      const token = await widgets.newLink(sql, req.userId!);
+      return { token, dataUrl: `${cfg.publicUrl.replace(/\/$/, '')}/api/widget/data?t=${token}`, appUrl: cfg.publicUrl };
+    });
+    api.delete('/api/widgets/link', async (req) => { await widgets.revokeLink(sql, req.userId!); return { ok: true }; });
+    api.put('/api/widgets/hide', async (req) => {
+      await widgets.setHideAmounts(sql, req.userId!, z.object({ hide: z.boolean() }).parse(req.body).hide);
+      return { ok: true };
+    });
+
     api.get('/api/categories', async (req) => {
       return sql<any[]>`
         select a.id, a.name, a.class, a.parent_id, a.icon, a.sort, a.is_archived, (a.class = 'income' and not counts_as_income(a)) as not_income,

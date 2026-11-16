@@ -651,6 +651,43 @@ test('deleting an account needs the PIN (or the password without one) and remove
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
 
+test('widgets: Home tiles saved per user; view-only link for iPhone widgets', async () => {
+  let w = (await req('GET', '/api/widgets')).body;
+  assert.ok(w.tiles.length > 0, 'default tiles');
+  assert.equal(w.link.enabled, false);
+  let r = await req('PUT', '/api/widgets/tiles', { tiles: [{ id: 'bills', size: 'l' }, { id: 'networth', size: 's' }] });
+  assert.equal(r.status, 200);
+  assert.deepEqual((await req('GET', '/api/widgets')).body.tiles, [{ id: 'bills', size: 'l' }, { id: 'networth', size: 's' }]);
+  r = await req('PUT', '/api/widgets/tiles', { tiles: [{ id: 'nope', size: 's' }] });
+  assert.equal(r.status, 400);
+  const d = (await req('GET', '/api/widgets/data')).body;
+  for (const k of ['safeToSpend', 'thisMonth', 'netWorth', 'budget', 'bills', 'fds', 'goals', 'topSpending', 'month']) assert.ok(k in d, k);
+  // Link: needs the password (no PIN set here); the token reads the summary without a session.
+  r = await req('POST', '/api/widgets/link', { password: 'wrong' });
+  assert.equal(r.status, 401);
+  r = await req('POST', '/api/widgets/link', { password: 'correct horse battery' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const token = r.body.token;
+  assert.ok(r.body.dataUrl.includes(token));
+  const pub = await app.inject({ method: 'GET', url: `/api/widget/data?t=${token}` });
+  assert.equal(pub.statusCode, 200, pub.body);
+  const pd = JSON.parse(pub.body);
+  assert.equal(pd.netWorth.total, d.netWorth.total);
+  assert.equal(pd.hideAmounts, false);
+  assert.equal(pub.headers['cache-control'], 'no-store');
+  assert.equal((await app.inject({ method: 'GET', url: '/api/widget/data?t=' + 'x'.repeat(43) })).statusCode, 401);
+  await req('PUT', '/api/widgets/hide', { hide: true });
+  assert.equal(JSON.parse((await app.inject({ method: 'GET', url: `/api/widget/data?t=${token}` })).body).hideAmounts, true);
+  assert.ok((await req('GET', '/api/widgets')).body.link.lastUsedAt);
+  // A new link turns the old one off; turning off stops it.
+  const t2 = (await req('POST', '/api/widgets/link', { password: 'correct horse battery' })).body.token;
+  assert.equal((await app.inject({ method: 'GET', url: `/api/widget/data?t=${token}` })).statusCode, 401);
+  assert.equal((await app.inject({ method: 'GET', url: `/api/widget/data?t=${t2}` })).statusCode, 200);
+  await req('DELETE', '/api/widgets/link');
+  assert.equal((await app.inject({ method: 'GET', url: `/api/widget/data?t=${t2}` })).statusCode, 401);
+  assert.equal((await req('GET', '/api/widgets')).body.link.hideAmounts, true, 'setting kept');
+});
+
 test('FD rate page parser reads bank rows and the as-of date', async () => {
   const { parseRates } = await import('../src/fd-rates.js');
   const row = (n: string, a: string, b: string, c: string, d: string) => `<tr><td><a href="x">${n}</a></td><td>${a}</td><td>${b}</td><td>${c}</td><td>${d}</td></tr>`;

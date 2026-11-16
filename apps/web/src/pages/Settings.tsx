@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SecuritySettings } from '../components/Security';
+import { WidgetsSettings } from '../components/WidgetsSettings';
 import { NotificationSettings } from '../components/Notifications';
 import { BackupSettings } from '../components/Backup';
 import { ModeSeg, ThemeList } from '../components/Appearance';
@@ -99,6 +100,10 @@ export function Settings() {
         </div>
       </div>
 
+      <div className="section">
+        <div className="section-title">Widgets</div>
+        <WidgetsSettings />
+      </div>
       <div className="section">
         <div className="section-title">Security</div>
         <SecuritySettings />
