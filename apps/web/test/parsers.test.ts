@@ -170,3 +170,16 @@ Q Friends Groups Activity Account`;
     { name: 'Rohan Sharma', amount: 120000 }, { name: 'Aditi', amount: -45000 }, { name: 'Kabir M', amount: 160000 }, { name: 'Meera', amount: 0 },
   ]);
 });
+
+test('signed amounts for the ± key', async () => {
+  const { parseSignedRupees, cleanSignedAmount, flipSign } = await import('../src/lib.ts');
+  assert.equal(parseSignedRupees('-1,250.50'), -125050);
+  assert.equal(parseSignedRupees('−80'), -8000);
+  assert.equal(parseSignedRupees('80'), 8000);
+  assert.equal(parseSignedRupees('-'), null);
+  assert.equal(cleanSignedAmount('-12-3a'), '-123');
+  assert.equal(cleanSignedAmount('12-3'), '123');
+  assert.equal(flipSign('45'), '-45');
+  assert.equal(flipSign('-45'), '45');
+  assert.equal(flipSign(''), '-');
+});

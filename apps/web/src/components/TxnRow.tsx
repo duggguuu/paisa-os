@@ -10,11 +10,15 @@ export function TxnRow({ t }: { t: any }) {
   const moneyOut = ps.find((p) => p.kind !== 'category' && p.amount < 0);
   const moneyIn = ps.find((p) => p.kind !== 'category' && p.amount > 0);
   const icon = cats[0]?.icon ?? (t.kind === 'transfer' ? '⇄' : '•');
+  // Direction comes from the money account when we have it, so a negative expense (money back)
+  // shows as incoming and a negative income (taken back) as outgoing.
+  const known = (t.kind === 'expense' || t.kind === 'income') && (moneyIn || moneyOut);
+  const incoming = known ? !!moneyIn : t.kind === 'income' || t.kind === 'refund';
+  const reversed = known && (t.kind === 'expense') === incoming;
   let sub = '';
   if (t.kind === 'transfer') sub = `${moneyOut?.name ?? '?'} → ${moneyIn?.name ?? '?'}`;
   else if (t.kind === 'split') sub = `Split · ${moneyOut?.name ?? ''}`;
-  else sub = [cats.map((c) => c.name).join(', '), (t.kind === 'income' || t.kind === 'refund' ? moneyIn : moneyOut)?.name].filter(Boolean).join(' · ');
-  const incoming = t.kind === 'income' || t.kind === 'refund';
+  else sub = [cats.map((c) => c.name).join(', '), (incoming ? moneyIn : moneyOut)?.name].filter(Boolean).join(' · ');
   const title = t.merchant ?? t.description ?? (t.kind === 'transfer' ? 'Transfer' : cats[0]?.name ?? 'Transaction');
   return (
     <button className={`item ${t.status === 'void' ? 'void' : ''}`} onClick={() => openTxn(t.id)}>
@@ -24,7 +28,7 @@ export function TxnRow({ t }: { t: any }) {
         <div className="sub">{sub}{t.source !== 'manual' ? ` · ${t.source}` : ''}</div>
       </div>
       <div className={`amt num ${incoming ? 'pos' : ''}`}>
-        {incoming ? '+' : ''}{money(t.amount)}
+        {incoming ? '+' : reversed ? '−' : ''}{money(t.amount)}
       </div>
     </button>
   );

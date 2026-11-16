@@ -712,3 +712,10 @@ body { letter-spacing: 0.005em; font-size: 15.5px; }
 .cat-row.edit .cv { grid-column: 2 / 4; text-align: left; display: flex; align-items: center; gap: 8px; }
 .cat-row.edit .cv .budget-input { margin-left: auto; }
 .cat-row .ci { --h: 210; background: hsl(var(--h) var(--tint-s) var(--tint-l)); }
+
+/* ± key beside amounts: phone number pads have no minus */
+.sign-toggle { flex: none; align-self: center; min-width: 40px; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2, transparent); color: var(--ink-2, inherit); font-size: 20px; font-weight: 650; line-height: 1; cursor: pointer; }
+.sign-toggle.on { background: var(--up); border-color: var(--up); color: #fff; }
+.input-with-sign { display: flex; gap: 8px; align-items: center; }
+.input-with-sign .input { flex: 1; min-width: 0; }
+.amount-wrap.negative .amount-input, .amount-wrap.negative .cur { color: var(--up); }

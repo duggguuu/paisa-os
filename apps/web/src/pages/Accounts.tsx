@@ -2,7 +2,8 @@ import { tint } from '../components/Icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { api, money, compact, parseRupees, KIND_LABEL, KIND_ICON, todayIST, dayLabel, maskNum, maskText } from '../lib';
+import { SignToggle } from '../components/SignToggle';
+import { api, money, compact, parseSignedRupees, cleanSignedAmount, KIND_LABEL, KIND_ICON, todayIST, dayLabel, maskNum, maskText } from '../lib';
 import { Sheet, useUi } from '../App';
 import { RollingMoney } from '../components/Rolling';
 
@@ -175,7 +176,7 @@ function AccountSheet({ account, kind, onClose }: { account?: any; kind?: string
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    const ob = opening.trim() === '' ? undefined : parseRupees(opening);
+    const ob = opening.trim() === '' ? undefined : parseSignedRupees(opening);
     if (opening.trim() !== '' && ob === null) return setErr('Enter the balance as a number, like 45210.50');
     setBusy(true);
     try {
@@ -228,7 +229,11 @@ function AccountSheet({ account, kind, onClose }: { account?: any; kind?: string
           <>
             <div className="field">
               <label>{isNew ? (liability ? 'Amount you owe today' : k === 'receivable' ? 'Amount they owe you today' : 'Balance today') : 'Opening balance'}</label>
-              <input className="input num" inputMode="decimal" placeholder={isNew ? '0' : 'Leave blank to keep it'} value={opening} onChange={(e) => setOpening(e.target.value)} />
+              <div className="input-with-sign">
+                <input className="input num" inputMode="decimal" placeholder={isNew ? '0' : 'Leave blank to keep it'} value={opening} onChange={(e) => setOpening(cleanSignedAmount(e.target.value))} />
+                <SignToggle value={opening} onChange={setOpening} />
+              </div>
+              {/^\s*-/.test(opening) && <span className="tiny faint">{liability ? 'Negative: the card or loan owes you (for example, you overpaid).' : k === 'receivable' ? 'Negative: you owe them instead.' : 'Negative: the account is overdrawn.'}</span>}
               {!isNew && <span className="tiny faint">The balance before your first transaction here. Changing it replaces the old opening balance; it never counts as income.</span>}
             </div>
             <div className="field"><label>As of</label>

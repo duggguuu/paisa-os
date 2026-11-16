@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { api, money, shortDate, parseRupees } from '../lib';
+import { api, money, shortDate, parseRupees, cleanSignedAmount } from '../lib';
+import { SignToggle } from '../components/SignToggle';
 import { useUi } from '../App';
 import { parseStatement, parseStatementGrid, isStatementHeader, guessBooking, type ParsedStatement, type StatementRow } from '../statement';
 import { UPLOAD_ACCEPT, kindOf, pdfRows, pdfTableGrid, excelRows, rowsToGrid, promptPassword, Cancelled } from '../files';
@@ -185,7 +186,10 @@ function StatementImport() {
           <div className="card" style={{ marginTop: 12 }}>
             <div className="field" style={{ marginBottom: 8 }}>
               <label>Closing balance on the statement{parsed?.closing ? ` (${shortDate(parsed.closing.date)})` : ''}</label>
-              <input className="input num" inputMode="decimal" value={closing} onChange={(e) => setClosing(e.target.value)} placeholder="Optional, used to check everything adds up" />
+              <div className="input-with-sign">
+                <input className="input num" inputMode="decimal" value={closing} onChange={(e) => setClosing(cleanSignedAmount(e.target.value))} placeholder="Optional, used to check everything adds up" />
+                <SignToggle value={closing} onChange={setClosing} />
+              </div>
             </div>
             <div className="small muted" style={{ marginBottom: 10 }}>{chosen.length} selected · {money(totals.out, { whole: true })} out · {money(totals.in, { whole: true })} in</div>
             <button className="btn accent block" disabled={busy || chosen.length === 0} onClick={commit}>{busy ? 'Importing…' : `Import ${chosen.length} transactions`}</button>

@@ -104,7 +104,7 @@ export const AccountInput = z.object({
   icon: z.string().max(8).optional().nullable(),
   color: z.string().max(20).optional().nullable(),
   // For assets: money you have. For liabilities: money you owe. Paise, may be 0.
-  openingBalance: z.number().int().min(0).max(1e13).default(0),
+  openingBalance: z.number().int().min(-1e13).max(1e13).default(0),
   openingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   meta: z.record(z.string(), z.unknown()).optional(),
 });
@@ -152,7 +152,7 @@ export const AccountPatch = z.object({
   icon: z.string().max(8).optional().nullable(),
   color: z.string().max(20).optional().nullable(),
   isArchived: z.boolean().optional(),
-  openingBalance: z.number().int().min(0).max(1e13).optional(),
+  openingBalance: z.number().int().min(-1e13).max(1e13).optional(),
   openingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   meta: z.record(z.string(), z.unknown()).optional(),
 });

@@ -12,6 +12,8 @@ export class LedgerError extends Error {
 }
 
 const paise = z.number().int().positive().max(1e13);
+/** Expense/income may be negative: a negative expense is money back (it reduces spending), a negative income reverses income. */
+const signedPaise = z.number().int().min(-1e13).max(1e13).refine((n) => n !== 0, 'amount can\'t be zero');
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const id = z.string().uuid();
 
@@ -27,8 +29,8 @@ const common = {
 };
 
 export const TxnInput = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('expense'), amount: paise, accountId: id, categoryId: id, ...common }),
-  z.object({ kind: z.literal('income'), amount: paise, accountId: id, categoryId: id, ...common }),
+  z.object({ kind: z.literal('expense'), amount: signedPaise, accountId: id, categoryId: id, ...common }),
+  z.object({ kind: z.literal('income'), amount: signedPaise, accountId: id, categoryId: id, ...common }),
   z.object({ kind: z.literal('transfer'), amount: paise, fromAccountId: id, toAccountId: id, ...common }),
   z.object({
     kind: z.literal('split'),

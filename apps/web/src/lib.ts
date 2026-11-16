@@ -103,6 +103,23 @@ export function parseRupees(s: string): number | null {
   return Number(w) * 100 + Number((f + '00').slice(0, 2));
 }
 
+/** Like parseRupees, but a leading minus (- or −) makes it negative. */
+export function parseSignedRupees(s: string): number | null {
+  const t = s.trim();
+  const neg = /^[-−]/.test(t);
+  const v = parseRupees(neg ? t.slice(1) : t);
+  return v === null ? null : neg ? -v : v;
+}
+/** Keep digits, separators and one leading minus while typing. */
+export function cleanSignedAmount(s: string): string {
+  const neg = /^\s*[-−]/.test(s);
+  return (neg ? '-' : '') + s.replace(/[^\d.,]/g, '');
+}
+/** Flip the sign of a typed amount (for the ± key; phone number pads have no minus). */
+export function flipSign(s: string): string {
+  return /^\s*[-−]/.test(s) ? s.replace(/^\s*[-−]/, '') : `-${s}`;
+}
+
 export function todayIST(): string {
   return new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
 }

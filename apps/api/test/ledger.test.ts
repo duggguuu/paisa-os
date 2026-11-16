@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { makeSql, migrate, type Sql } from '../src/db.js';
 import { createBook } from '../src/books.js';
 import { createAccount, updateAccount } from '../src/books.js';
-import { createTxn, updateTxn, voidTxn, restoreTxn, accountBalances, bookIntegrity, LedgerError } from '../src/ledger.js';
+import { TxnInput, createTxn, updateTxn, voidTxn, restoreTxn, accountBalances, bookIntegrity, LedgerError } from '../src/ledger.js';
 import * as stats from '../src/stats.js';
 import { netWorth, safeToSpend } from '../src/dashboard.js';
 import { toPaise, periodContaining, shiftPeriod } from '../src/money.js';
@@ -275,4 +275,23 @@ test('migrations: re-running is a no-op, and an edited applied migration stops s
   } finally {
     await sql`update schema_migrations set checksum = ${row.checksum} where name = '001_init.sql'`;
   }
+});
+
+test('negative amounts: money back on an expense, income taken back, overdrawn and overpaid openings', async () => {
+  const bank = await createAccount(sql, book, { name: 'Overdraft', kind: 'bank', openingBalance: -2_000_00, openingDate: '2026-01-01' });
+  const card = await createAccount(sql, book, { name: 'Overpaid card', kind: 'credit_card', openingBalance: -300_00, openingDate: '2026-01-01' });
+  assert.equal(await bal(bank), -2_000_00, 'a bank can open overdrawn');
+  assert.equal(await bal(card), -300_00, 'a card can open in credit');
+  await createTxn(sql, book, { kind: 'expense', date: '2026-03-02', amount: -250_00, accountId: bank, categoryId: cat('Food/Groceries'), idempotencyKey: key() });
+  assert.equal(await bal(bank), -1_750_00, 'a negative expense puts money back');
+  await createTxn(sql, book, { kind: 'income', date: '2026-03-02', amount: -100_00, accountId: bank, categoryId: cat('Salary'), idempotencyKey: key() });
+  assert.equal(await bal(bank), -1_850_00, 'a negative income takes money out');
+  const base = { date: '2026-03-02', accountId: bank, categoryId: cat('Food/Groceries') };
+  assert.equal(TxnInput.safeParse({ kind: 'expense', amount: -250_00, ...base }).success, true);
+  assert.equal(TxnInput.safeParse({ kind: 'expense', amount: 0, ...base }).success, false, 'zero is not an amount');
+  assert.equal(TxnInput.safeParse({ kind: 'transfer', date: '2026-03-02', amount: -1_00, fromAccountId: bank, toAccountId: card }).success, false, 'transfers stay positive');
+  await updateAccount(sql, book, bank, { openingBalance: -500_00 });
+  assert.equal(await bal(bank), -500_00 + 250_00 - 100_00, 'editing to another negative opening works');
+  const integrity = await bookIntegrity(sql, book);
+  assert.equal(Number(integrity.total), 0);
 });

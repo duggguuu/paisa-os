@@ -89,7 +89,7 @@ test('quick-add flow: create expense, see it in stats, void it', async () => {
 });
 
 test('bad input gets a readable 400, not a crash', async () => {
-  const r = await req('POST', '/api/txns', { kind: 'expense', amount: -5 });
+  const r = await req('POST', '/api/txns', { kind: 'expense', amount: 0 });
   assert.equal(r.status, 400);
   assert.match(r.body.message, /amount/);
 });

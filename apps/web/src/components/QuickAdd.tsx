@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, money, parseRupees, todayIST, addDays, uuid, shortDate, maskText } from '../lib';
+import { api, money, parseRupees, parseSignedRupees, cleanSignedAmount, todayIST, addDays, uuid, shortDate, maskText } from '../lib';
+import { SignToggle } from './SignToggle';
 import { Sheet, useUi } from '../App';
 import { Icon } from './Icons';
 import { CategoryPicker } from './CategoryPicker';
@@ -35,7 +36,8 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
     const money = ps.filter((p) => p.kind !== 'category');
     return {
       kind: edit.kind as Kind,
-      amount: String(Math.abs(cat?.amount ?? money.find((p) => p.amount > 0)?.amount ?? 0) / 100),
+      // Expense/income keep their sign (a negative expense is money back); transfers are always positive.
+      amount: String((edit.kind === 'expense' ? cat?.amount ?? 0 : edit.kind === 'income' ? -(cat?.amount ?? 0) : Math.abs(cat?.amount ?? money.find((p) => p.amount > 0)?.amount ?? 0)) / 100),
       categoryId: cat?.account_id ?? null,
       accountId: edit.kind === 'transfer' ? money.find((p) => p.amount < 0)?.account_id : money[0]?.account_id,
       toAccountId: edit.kind === 'transfer' ? money.find((p) => p.amount > 0)?.account_id : null,
@@ -161,19 +163,20 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const cats = (categories.data ?? []).filter((c) => c.class === (kind === 'income' ? 'income' : 'expense'));
   const byId = new Map(cats.map((c) => [c.id, c]));
   const label = (c: any) => (c.parent_id ? `${byId.get(c.parent_id)?.name ?? ''} › ${c.name}` : `${c.icon ?? ''} ${c.name ?? ''}`).trim();
-  const paise = parseRupees(amount);
-  const canSplit = kind === 'expense' && !edit && people.length > 0;
+  const paise = kind === 'transfer' ? parseRupees(amount) : parseSignedRupees(amount);
+  const negative = kind !== 'transfer' && !!paise && paise < 0;
+  const canSplit = kind === 'expense' && !edit && people.length > 0 && !negative;
 
   async function save() {
     setError(null);
-    if (!paise || paise <= 0) return setError('Enter an amount');
+    if (!paise) return setError('Enter an amount');
     if (kind !== 'transfer' && !categoryId) return setError('Pick a category');
     if (!accountId) return setError('Pick an account');
     if (kind === 'transfer' && (!toAccountId || toAccountId === accountId)) return setError('Pick a different account to move money into');
     let body: any;
     const common = { date, merchant: merchant.trim() || null, note: note.trim() || null, idempotencyKey: edit ? undefined : idemKey, source: edit ? undefined : source };
     if (kind === 'transfer') body = { kind, amount: paise, fromAccountId: accountId, toAccountId, ...common };
-    else if (splitWith.length) {
+    else if (splitWith.length && canSplit) {
       const n = splitWith.length + 1;
       const each = Math.floor(paise / n);
       const mine = paise - each * splitWith.length;
@@ -241,18 +244,24 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
         {!edit || edit.kind !== 'split' ? (
           <div className="seg full" role="tablist" style={{ marginBottom: 12 }}>
             {(['expense', 'income', 'transfer'] as Kind[]).map((k) => (
-              <button type="button" key={k} className={kind === k ? 'on' : ''} onClick={() => { setKind(k); setCategoryId(null); setTouched((t) => ({ ...t, category: false })); }}>
+              <button type="button" key={k} className={kind === k ? 'on' : ''} onClick={() => { setKind(k); if (k === 'transfer') setAmount((a) => a.replace(/^\s*[-−]/, '')); setCategoryId(null); setTouched((t) => ({ ...t, category: false })); }}>
                 {k === 'expense' ? 'Expense' : k === 'income' ? 'Income' : 'Transfer'}
               </button>
             ))}
           </div>
         ) : null}
 
-        <div className="amount-wrap">
+        <div className={`amount-wrap ${negative ? 'negative' : ''}`}>
           <span className="cur">₹</span>
           <input ref={amountRef} className="amount-input" inputMode="decimal" placeholder="0" value={amount} aria-label="Amount"
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ''))} />
+            onChange={(e) => setAmount(kind === 'transfer' ? e.target.value.replace(/[^\d.,]/g, '') : cleanSignedAmount(e.target.value))} />
+          {kind !== 'transfer' && <SignToggle value={amount} onChange={setAmount} />}
         </div>
+        {negative && (
+          <p className="tiny faint" style={{ margin: '-8px 2px 12px' }}>
+            {kind === 'expense' ? 'Negative expense: money back into the account. It lowers your spending in this category.' : 'Negative income: money taken back out of the account. It lowers your income in this category.'}
+          </p>
+        )}
 
         {kind !== 'transfer' && (
           <div className="field">
