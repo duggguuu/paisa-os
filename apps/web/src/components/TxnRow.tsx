@@ -1,6 +1,7 @@
 import { money } from '../lib';
 import { useUi } from '../App';
 import { tint } from './Icons';
+import { SwipeTxn } from './Swipe';
 
 /** One transaction in a list. Expenses show plain; income and incoming money show green with +. */
 export function TxnRow({ t }: { t: any }) {
@@ -21,6 +22,7 @@ export function TxnRow({ t }: { t: any }) {
   else sub = [cats.map((c) => c.name).join(', '), (incoming ? moneyIn : moneyOut)?.name].filter(Boolean).join(' · ');
   const title = t.merchant ?? t.description ?? (t.kind === 'transfer' ? 'Transfer' : cats[0]?.name ?? 'Transaction');
   return (
+    <SwipeTxn t={t}>
     <button className={`item ${t.status === 'void' ? 'void' : ''}`} onClick={() => openTxn(t.id)}>
       <div className="avatar" style={tint(icon)} aria-hidden>{icon}</div>
       <div className="grow">
@@ -31,5 +33,6 @@ export function TxnRow({ t }: { t: any }) {
         {incoming ? '+' : reversed ? '−' : ''}{money(t.amount)}
       </div>
     </button>
+    </SwipeTxn>
   );
 }

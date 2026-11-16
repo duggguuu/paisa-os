@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Route, Routes, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { installViewTransitions } from './motion-fx';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, getBook, setBook } from './lib';
 import { Login } from './pages/Login';
@@ -78,6 +79,8 @@ function Shell() {
   }, []);
   const qc = useQueryClient();
   const navigate = useNavigate();
+  // Page morph: in-app links change pages inside a View Transition (cards morph into the new title).
+  useEffect(() => installViewTransitions((to) => navigate(to)), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [add, setAdd] = useState<QuickAddPreset | null>(null);
   // A daily reminder opens the app with ?add=1: go straight to "Add transaction".
   useEffect(() => {

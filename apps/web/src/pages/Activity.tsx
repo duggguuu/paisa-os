@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, money, parseRupees, shortDate, addDays, todayIST, periodLabel, maskNum } from '../lib';
 import { Icon } from '../components/Icons';
 import { useUi } from '../App';
+import { SwipeTxn } from '../components/Swipe';
 
 type Tab = 'daily' | 'calendar' | 'monthly' | 'summary' | 'description';
 const TABS: [Tab, string][] = [['daily', 'Daily'], ['calendar', 'Calendar'], ['monthly', 'Monthly'], ['summary', 'Summary'], ['description', 'Description']];
@@ -27,18 +28,21 @@ export function TransRow({ t }: { t: any }) {
   const cat = ps.find((p) => p.kind === 'category');
   const out = ps.find((p) => p.kind !== 'category' && p.amount < 0 && p.class !== 'equity');
   const into = ps.find((p) => p.kind !== 'category' && p.amount > 0 && p.class !== 'equity');
-  const kind = t.kind === 'income' || t.kind === 'refund' ? 'inc' : t.kind === 'transfer' ? 'trf' : 'exp';
+  // Direction from the money account, so a negative expense (money back) shows as money in.
+  const kind = t.kind === 'transfer' ? 'trf' : (t.kind === 'expense' || t.kind === 'income') && (into || out) ? (into && !out ? 'inc' : 'exp') : t.kind === 'income' || t.kind === 'refund' ? 'inc' : 'exp';
   const top = cat ? (cat.parent ?? cat.name) : t.kind === 'transfer' ? 'Transfer' : t.kind;
   const sub = cat?.parent ? cat.name : null;
   const icon = cat?.icon ?? (t.kind === 'transfer' ? '⇄' : '•');
   const note = t.merchant ?? t.description ?? '';
   const acct = t.kind === 'transfer' ? `${out?.name ?? '?'} → ${into?.name ?? '?'}` : (kind === 'inc' ? into : out)?.name ?? '';
   return (
-    <button className={`trow ${t.status === 'void' ? 'void' : ''}`} onClick={() => openTxn(t.id)}>
-      <span className="tc"><span className="ticon" aria-hidden>{icon}</span><span className="tcat"><span>{top}</span>{sub && <small>{sub}</small>}</span></span>
-      <span className="tm">{note ? <><span className="tt">{note}</span><small>{acct}</small></> : <span className="tacct">{acct}</span>}</span>
-      <span className={`ta num ${kind}`}>{n2(t.amount)}</span>
-    </button>
+    <SwipeTxn t={t}>
+      <button className={`trow ${t.status === 'void' ? 'void' : ''}`} onClick={() => openTxn(t.id)}>
+        <span className="tc"><span className="ticon" aria-hidden>{icon}</span><span className="tcat"><span>{top}</span>{sub && <small>{sub}</small>}</span></span>
+        <span className="tm">{note ? <><span className="tt">{note}</span><small>{acct}</small></> : <span className="tacct">{acct}</span>}</span>
+        <span className={`ta num ${kind}`}>{n2(t.amount)}</span>
+      </button>
+    </SwipeTxn>
   );
 }
 

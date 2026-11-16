@@ -1,0 +1,69 @@
+# Daily encrypted backup of Paisa, kept as this repository's newest workflow artifact.
+#
+# Every night at 02:00 IST it asks the app for an encrypted backup (POST /api/cron/backup with
+# the same PAISA_URL and PAISA_CRON_KEY secrets the reminders use), saves it as the artifact
+# "paisa-backup", then deletes the older ones, so only the latest backup is ever kept.
+# The file can only be opened with the backup passphrase set in Settings → Backup.
+# Download: Actions → Daily backup → newest run → Artifacts → paisa-backup.
+name: Daily backup
+
+on:
+  schedule:
+    - cron: '30 20 * * *' # 20:30 UTC = 02:00 IST
+  workflow_dispatch: {}
+
+permissions:
+  actions: write # to delete the previous day's backup artifact
+
+concurrency:
+  group: paisa-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Get the encrypted backup from the app
+        id: get
+        env:
+          PAISA_URL: ${{ secrets.PAISA_URL }}
+          PAISA_CRON_KEY: ${{ secrets.PAISA_CRON_KEY }}
+        run: |
+          if [ -z "$PAISA_URL" ] || [ -z "$PAISA_CRON_KEY" ]; then
+            echo "PAISA_URL / PAISA_CRON_KEY secrets aren't set yet; skipping."; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # The free server may be asleep: the first try wakes it up.
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS -o paisa-backup.json -w '%{http_code}' --max-time 240 -X POST \
+              -H "x-cron-key: $PAISA_CRON_KEY" "${PAISA_URL%/}/api/cron/backup" || echo 000)
+            echo "Attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then break; fi
+            if [ "$code" = "204" ]; then echo "No backup passphrase set in the app yet; skipping."; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+            if [ "$code" = "401" ]; then echo "PAISA_CRON_KEY doesn't match the app. Copy it again from Settings → Backup."; exit 1; fi
+            sleep 30
+          done
+          [ "$code" = "200" ] || { echo "The app didn't answer."; exit 1; }
+          grep -q '"format":"paisa-backup"' paisa-backup.json || { echo "Unexpected response"; exit 1; }
+          echo "Backup size: $(wc -c < paisa-backup.json) bytes"
+
+      - name: Save it
+        if: steps.get.outputs.skip != '1'
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: paisa-backup
+          path: paisa-backup.json
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Delete older backups (keep only this one)
+        if: steps.get.outputs.skip != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ${{ steps.upload.outputs.artifact-id }}
+        run: |
+          gh api --paginate "repos/${{ github.repository }}/actions/artifacts?name=paisa-backup&per_page=100" \
+            --jq ".artifacts[] | select(.id != ${KEEP}) | .id" | while read -r id; do
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" && echo "Deleted older backup $id"
+          done

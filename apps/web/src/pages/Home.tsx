@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { celebrateGoals } from '../motion-fx';
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, money, compact, periodLabel, todayIST, dayLabel, shortDate, maskText } from '../lib';
 import { PrivacyToggle } from '../components/PrivacyToggle';
 import { Icon, tint } from '../components/Icons';
@@ -17,6 +18,7 @@ export function Home() {
   const home = useQuery({ queryKey: ['home'], queryFn: () => api<any>('/api/home') });
   const recent = useQuery({ queryKey: ['txns', 'recent'], queryFn: () => api<any[]>('/api/txns?limit=6') });
   const goals = useQuery({ queryKey: ['goals'], queryFn: () => api<Goal[]>('/api/goals') });
+  useEffect(() => celebrateGoals(goals.data), [goals.data]);
   const ins = useQuery({ queryKey: ['insights'], queryFn: () => api<Insight[]>('/api/insights'), staleTime: 5 * 60_000 });
   const [showWhy, setShowWhy] = useState(false);
   const [boost, setBoost] = useState<Goal | null>(null);
@@ -44,6 +46,10 @@ export function Home() {
   const warn = ins.data?.find((i) => i.tone === 'warn');
   const goal = [...(goals.data ?? [])].filter((g) => !g.done).sort((a, b) => b.progress - a.progress)[0];
   const m = h.monthSummary;
+  // Ambient glow: green when on track, amber when spending is running hot, red when over plan.
+  const elapsed = Math.max(1, total - daysLeft + 1);
+  const projectedRest = (Number(m?.spent ?? 0) / elapsed) * daysLeft;
+  const mood = sts.amount < 0 ? 'hot' : Number(m?.spent ?? 0) > 0 && projectedRest > sts.amount * 1.1 ? 'warm' : 'good';
 
   return (
     <>
@@ -66,7 +72,7 @@ export function Home() {
         </div>
       )}
 
-      <div className="hero">
+      <div className={`hero mood-${mood}`} title={mood === 'good' ? 'On track this month' : mood === 'warm' ? 'Spending is running faster than your safe-to-spend allows' : 'Over plan this month'}>
         <div className="spread">
           <span className="hero-label">Safe to spend</span>
           <button className="glass" onClick={() => setShowWhy((s) => !s)} aria-expanded={showWhy}>{showWhy ? 'Hide' : 'How?'}</button>

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SecuritySettings } from '../components/Security';
 import { NotificationSettings } from '../components/Notifications';
+import { BackupSettings } from '../components/Backup';
 import { ModeSeg, ThemeList } from '../components/Appearance';
 import { api, authHeaders, forgetUnlockKey } from '../lib';
 import { useUi } from '../App';
@@ -61,6 +62,11 @@ export function Settings() {
       <div className="section">
         <div className="section-title">Notifications</div>
         <NotificationSettings />
+      </div>
+
+      <div className="section">
+        <div className="section-title">Backup</div>
+        <BackupSettings />
       </div>
 
       <div className="section">

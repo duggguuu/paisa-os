@@ -719,3 +719,20 @@ body { letter-spacing: 0.005em; font-size: 15.5px; }
 .input-with-sign { display: flex; gap: 8px; align-items: center; }
 .input-with-sign .input { flex: 1; min-width: 0; }
 .amount-wrap.negative .amount-input, .amount-wrap.negative .cur { color: var(--up); }
+
+/* Copilot draft cards */
+.draft-card { display: flex; gap: 10px; align-items: center; margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); border: 1px dashed var(--border-strong); white-space: normal; }
+.draft-card .title { font-weight: 600; display: flex; gap: 8px; justify-content: space-between; }
+.draft-card .sub { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.draft-card .pos { color: var(--inc, var(--green)); }
+
+/* Settings → Backup */
+.backup-form { display: grid; gap: 8px; margin-top: 12px; }
+.backup-summary { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13px; }
+.backup-summary span { color: var(--ink-2); }
+.row.wrap { flex-wrap: wrap; }
+
+/* Holdings filter & sort */
+.holdings-tools { display: grid; gap: 8px; margin-top: 10px; }
+.holdings-sort { width: auto; flex: 1 1 170px; min-width: 0; padding-top: 8px; padding-bottom: 8px; }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }

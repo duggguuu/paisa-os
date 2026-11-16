@@ -822,3 +822,75 @@ test('transactions search also matches category and subcategory names', async ()
     assert.ok(items.some((t: any) => t.id === r.body.id), `search "${q}" finds it`);
   }
 });
+
+test('backup: passphrase, nightly cron file, check, restore replaces data exactly, wrong passphrase refused', async () => {
+  const { cronKey: ck } = await import('../src/notify.js');
+  const key = ck('y'.repeat(40));
+  // Nobody has a passphrase yet: the nightly job skips quietly.
+  let res = await app.inject({ method: 'POST', url: '/api/cron/backup', headers: { 'x-cron-key': key } });
+  assert.equal(res.statusCode, 204);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/cron/backup' })).statusCode, 401);
+  let r = await req('PUT', '/api/backup/passphrase', { passphrase: 'short', password: 'correct horse battery' });
+  assert.equal(r.status, 400);
+  r = await req('PUT', '/api/backup/passphrase', { passphrase: 'a long backup sentence', password: 'wrong' });
+  assert.equal(r.status, 401);
+  r = await req('PUT', '/api/backup/passphrase', { passphrase: 'a long backup sentence', hint: 'the sentence', password: 'correct horse battery' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+
+  const before = (await req('GET', '/api/accounts')).body.filter((a: any) => a.class === 'asset').map((a: any) => [a.name, a.balance]);
+  const nTxns = async () => (await sql<{ n: number }[]>`select count(*)::int as n from txn t join book b on b.id = t.book_id where not b.is_demo`)[0].n;
+  const txnsBefore = await nTxns();
+  res = await app.inject({ method: 'POST', url: '/api/cron/backup', headers: { 'x-cron-key': key } });
+  assert.equal(res.statusCode, 200, res.body);
+  const file = JSON.parse(res.body);
+  assert.equal(file.format, 'paisa-backup');
+  assert.ok(!res.body.includes('Groceries') && !res.body.includes('ICICI Bank'), 'the file is encrypted');
+  assert.ok((await req('GET', '/api/backup')).body.lastBackupAt);
+
+  // Something happens after the backup...
+  const groceries = (await req('GET', '/api/categories')).body.find((c: any) => c.name === 'Groceries');
+  r = await req('POST', '/api/txns', { kind: 'expense', amount: 999_00, accountId: A['SBI'].id, categoryId: groceries.id, date: todayIST(), merchant: 'After backup' });
+  assert.equal(r.status, 201);
+  assert.equal(await nTxns(), txnsBefore + 1);
+
+  r = await req('POST', '/api/backup/check', { file, passphrase: 'not it at all' });
+  assert.equal(r.status, 422);
+  r = await req('POST', '/api/backup/check', { file, passphrase: 'a long backup sentence' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.transactions, txnsBefore);
+  r = await req('POST', '/api/backup/restore', { file, passphrase: 'a long backup sentence', password: 'nope' });
+  assert.equal(r.status, 401);
+  r = await req('POST', '/api/backup/restore', { file, passphrase: 'a long backup sentence', password: 'correct horse battery' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.safetyCopy, true);
+
+  assert.equal(await nTxns(), txnsBefore, 'the post-backup entry is gone');
+  const after = (await req('GET', '/api/accounts')).body.filter((a: any) => a.class === 'asset').map((a: any) => [a.name, a.balance]);
+  assert.deepEqual(after, before, 'balances match the backup exactly');
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+  assert.equal((await req('GET', '/api/backup/before-restore')).status, 200, 'safety copy kept');
+});
+
+test('copilot tools: search, breakdown, drafts never save', async () => {
+  const { runTool } = await import('../src/copilot-tools.js');
+  const [book] = await sql<{ id: string }[]>`select b.id from book b where not b.is_demo limit 1`;
+  const drafts: any[] = [];
+  const nTxns = async () => (await sql<{ n: number }[]>`select count(*)::int as n from txn where book_id = ${book.id}`)[0].n;
+  const n0 = await nTxns();
+  const found: any = await runTool(sql, book.id, 'find_transactions', { text: 'Cook', from: null, to: null, kind: null, min_rupees: null, max_rupees: null, sort: 'largest', limit: 5 }, drafts);
+  assert.ok(found.matches >= 1 && found.rows[0].category.includes('Cook'));
+  const br: any = await runTool(sql, book.id, 'spending_breakdown', { from: addDays(todayIST(), -400), to: todayIST(), group_by: 'category', kind: 'expense', category: null }, drafts);
+  assert.ok(br.total_rupees > 0 && br.groups.length > 0);
+  for (const t of ['accounts', 'investments', 'debts_and_loans', 'bills_and_subscriptions', 'salary_and_tax', 'goals']) {
+    const out = await runTool(sql, book.id, t, {}, drafts);
+    assert.ok(out && !(out as any).error, `${t} works`);
+  }
+  const bad: any = await runTool(sql, book.id, 'draft_transaction', { kind: 'expense', amount_rupees: 450, category: 'Zzz unknown', account: null, date: null, merchant: null, note: null }, drafts);
+  assert.equal(bad.error, 'no_such_category');
+  const ok: any = await runTool(sql, book.id, 'draft_transaction', { kind: 'expense', amount_rupees: 450, category: 'Groceries', account: 'SBI', date: '2026-11-10', merchant: 'BigBasket', note: null }, drafts);
+  assert.equal(ok.drafted, true, JSON.stringify(ok));
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].amount, 45000);
+  assert.equal(drafts[0].accountName, 'SBI');
+  assert.equal(await nTxns(), n0, 'a draft is never saved');
+});

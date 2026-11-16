@@ -226,6 +226,27 @@ The key only lets the alarm ask your app to send your reminders. It can't read a
 
 **Themes:** tap the palette icon on Home to choose a look, light or dark.
 
+**Swipe on a transaction** (Home or Trans.): left to delete (with Undo), right to edit.
+
+**Holdings:** under Accounts → Holdings you can search, filter (Stocks / Funds, Gainers / Losers) and sort (value, gain ₹, gain %, invested, name). Your choice is remembered on each device.
+
+### The AI Copilot (optional)
+
+**More → AI Copilot** answers questions about your money. Out of the box it runs entirely on your server and understands common questions (can I afford X, how to save more, budgets, bills, goals).
+
+For the **smarter Copilot**, add an Anthropic API key. It can then:
+- look up any transaction or compare any months;
+- check your investments, FDs, loans, subscriptions and salary;
+- work out what-ifs ("if I prepay ₹1 lakh on my loan…");
+- draft entries for you ("add ₹450 groceries yesterday"). It never saves anything itself: you tap **Review & add**.
+
+To set it up:
+
+1. Create an account at **console.anthropic.com**, add a little credit (**Billing**), then **API keys → Create key** and copy it.
+2. In **Render → paisa-os → Environment → Add environment variable**: name `ANTHROPIC_API_KEY`, value the key. Save; Render restarts the app.
+
+Each question costs a small amount on that Anthropic account. With the key set, a summary of your numbers, plus whatever the Copilot looks up to answer, is sent to Anthropic. To go back to fully private mode, delete the variable.
+
 ---
 
 ## 10. Getting updates
@@ -250,8 +271,26 @@ That's it. Your data in Neon is never touched by an update.
 
 ## 11. Backups
 
-- **Inside the app:** **Settings → Export everything** downloads all your data as a file. Do it monthly and keep it somewhere private, such as a password-protected folder.
+**Automatic daily backup (set it up once):**
+
+1. In the app: **Settings → Backup → Set backup passphrase**. Choose something you'll remember, at least 10 characters; a short sentence works well. **Write it down somewhere safe.** Without it, nobody (not even you) can open a backup.
+2. That's it if your reminders are already set up (Settings → Notifications shows green). The same GitHub alarm (the `PAISA_URL` and `PAISA_CRON_KEY` secrets from section 9) runs the backup every night at 2 AM.
+3. To check it right away: on GitHub, open your `paisa-os-app` → **Actions → Daily backup → Run workflow**. Settings → Backup turns green with the time of the last backup.
+
+Each night's backup **replaces the previous one**, so there is always exactly one: the newest. It's encrypted with your passphrase and kept inside your own private GitHub repository.
+
+**To get the backup file:** GitHub → your `paisa-os-app` → **Actions → Daily backup** → the newest run → **Artifacts → paisa-backup**. It downloads as a zip; unzip it to get `paisa-backup.json`. You can also tap **Settings → Backup → Download a backup now** at any time.
+
+**To restore:** **Settings → Backup → Restore from a backup** → choose `paisa-backup.json` → type the passphrase. Paisa first shows what's inside (how many transactions, from which dates). Only after you enter your login password does it replace your data. It also keeps a safety copy of what was there before. This works on a brand-new copy of the app too, for example if you ever move to a new database.
+
+Not included: your Zerodha and Splitwise links (they hold secret keys). Link them again after a restore.
+
+**Also available:**
+
+- **Settings → Export everything** downloads your data as plain, unencrypted JSON. Keep that file private.
 - **Neon:** **Branches → Restore** can roll the database back to an earlier moment (within the free plan's history window).
+
+GitHub pauses scheduled jobs in a repository that has had no activity for 60 days. If that happens, GitHub emails you; open **Actions** and click **Enable workflow**. Tapping **Sync fork** when updates arrive also counts as activity.
 
 ---
 

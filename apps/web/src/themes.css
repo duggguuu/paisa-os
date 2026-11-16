@@ -638,3 +638,110 @@ html[data-privacy] .hero-num, html[data-privacy] .tax-big { letter-spacing: 0.05
 .notif-setup { margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
 .notif-setup ol { padding-left: 18px; margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
 .notif-setup code { font-family: var(--mono); font-size: 12px; background: var(--surface); padding: 1px 5px; border-radius: 5px; word-break: break-all; }
+
+/* =====================================================================
+   Living motion (all of it switches off with the device's Reduce Motion)
+   ===================================================================== */
+:root { --spring: cubic-bezier(.34, 1.56, .64, 1); --spring-soft: cubic-bezier(.34, 1.3, .64, 1); }
+
+/* Floating gradients: the background glow drifts slowly; the hero card's colours flow. */
+body { background: var(--bg); }
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--bg-glow); background-repeat: no-repeat;
+  animation: glow-drift 28s ease-in-out infinite alternate; will-change: transform;
+}
+@keyframes glow-drift {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-3vw, 2.5vh, 0) scale(1.07); }
+  100% { transform: translate3d(2.5vw, 4vh, 0) scale(1.03) rotate(1.5deg); }
+}
+.hero { background-size: 170% 170%; animation: pop-in 520ms var(--ease) both, hero-float 16s ease-in-out 520ms infinite alternate; }
+@keyframes hero-float { 0% { background-position: 0% 0%; } 50% { background-position: 60% 40%; } 100% { background-position: 100% 100%; } }
+.hero::before { animation: ring-turn 60s linear infinite; }
+@keyframes ring-turn { to { transform: rotate(360deg); } }
+.bubble-msg.me { background-size: 180% 180%; animation: hero-float 9s ease-in-out infinite alternate; }
+
+/* Icons breathe: a very slight expand-and-contract, staggered so they don't pulse in unison. */
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+.avatar, .cat-icon, .ticon, .head-actions svg, .tabbar a:not(.active) svg, .sidebar a svg, .ai-card .orb {
+  animation: breathe 5s ease-in-out infinite; transform-origin: 50% 50%;
+}
+.ticon { display: inline-block; }
+.item:nth-child(3n+2) .avatar, .swipe-row:nth-child(3n+2) .ticon, .cat-group:nth-child(3n+2) .cat-icon, .tabbar a:nth-child(3n+2) svg, .sidebar a:nth-child(3n+2) svg { animation-delay: -1.7s; }
+.item:nth-child(3n+3) .avatar, .swipe-row:nth-child(3n+3) .ticon, .cat-group:nth-child(3n+3) .cat-icon, .tabbar a:nth-child(3n+3) svg, .sidebar a:nth-child(3n+3) svg { animation-delay: -3.4s; }
+
+/* Springy press & lift. */
+.btn, .chip, .seg button, .icon-btn, .icon-plain, .fab-float, .tabbar a, .item, .trow, .kpi-card, .goal-card, .draft-card {
+  transition: transform 320ms var(--spring), background 160ms, color 160ms, box-shadow 220ms, opacity 160ms;
+}
+.btn:active:not(:disabled), .chip:active, .icon-btn:active, .icon-plain:active, .fab-float:active, .seg button:active { transform: scale(0.93); transition-duration: 90ms; }
+.item:active, .trow:active { transform: scale(0.985); transition-duration: 90ms; }
+.main .card:not(.hero):active:has(> a, > button:only-child) { transform: scale(0.985); }
+@media (hover: hover) {
+  .main .card:not(.hero), .main .list, .hero { transition: transform 360ms var(--spring-soft), box-shadow 300ms; }
+  .main .card:not(.hero):hover, .hero:hover, .kpi-card:hover, .goal-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg, 0 14px 30px -14px rgba(0,0,0,0.28)); }
+  .btn:hover:not(:disabled), .chip:hover, .icon-plain:hover { transform: translateY(-1px); }
+  .sheet .card:hover { transform: none; }
+}
+
+/* Success moments. */
+.fx-confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9999; }
+.fx-check { position: fixed; left: 50%; top: 42%; width: 92px; height: 92px; margin: -46px 0 0 -46px; z-index: 9998; pointer-events: none;
+  border-radius: 50%; background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: var(--shadow-lg, 0 20px 40px -16px rgba(0,0,0,0.35));
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: check-pop 950ms var(--spring) both; }
+.fx-check svg { width: 100%; height: 100%; fill: none; stroke: var(--green, #1fb37a); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.fx-check circle { stroke-dasharray: 1 1; animation: draw 420ms ease-out both; opacity: 0.35; }
+.fx-check path { stroke-dasharray: 1 1; animation: draw 360ms 260ms ease-out both; }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes check-pop { 0% { opacity: 0; transform: scale(0.6); } 18% { opacity: 1; transform: scale(1); } 78% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.92) translateY(-8px); } }
+
+/* Scroll reveals (motion-fx.ts adds .rv to things below the fold, .rv-in as they scroll in). */
+.rv { opacity: 0; transform: translateY(18px) scale(0.985); animation: none !important; }
+.rv.rv-in { opacity: 1; transform: none; transition: opacity 520ms var(--ease), transform 640ms var(--spring-soft); }
+
+/* Page morph (View Transitions): nav switches cross-fade; a tapped card morphs into the next page's title. */
+.tabbar { view-transition-name: tabbar; }
+.sidebar { view-transition-name: sidebar; }
+html[data-vt]::view-transition-old(root) { animation: vt-out 200ms var(--ease) both; }
+html[data-vt]::view-transition-new(root) { animation: vt-in 320ms var(--ease) both; }
+@keyframes vt-out { to { opacity: 0; transform: translateY(-4px); } }
+@keyframes vt-in { from { opacity: 0; transform: translateY(8px); } }
+::view-transition-group(morph) { animation-duration: 440ms; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-old(morph), ::view-transition-new(morph) { height: 100%; object-fit: cover; }
+html[data-vt] .page-anim > * { animation: none; }
+
+/* Swipe rows: drag left to delete, right to edit. */
+.swipe-row { position: relative; overflow: hidden; }
+.swipe-row + .swipe-row { border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.list > .swipe-row + .swipe-row { border-top-color: var(--border); }
+.swipe-bg { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; font-size: 13px; font-weight: 700;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 16%, var(--surface)) 0 50%, color-mix(in srgb, var(--up) 16%, var(--surface)) 50% 100%); }
+.swipe-edit { color: var(--accent); } .swipe-del { color: var(--up); }
+.swipe-fg { position: relative; background: var(--surface); touch-action: pan-y; }
+.swipe-fg > .trow, .swipe-fg > .item { background: var(--surface); }
+
+/* Living charts: bars bounce in (and again when you switch period), the donut sweeps, the gauge draws. */
+.trend .tb { transition: transform 820ms cubic-bezier(.34, 1.45, .64, 1), opacity 160ms; }
+.dn-slice { transition: stroke-dasharray 1000ms cubic-bezier(.2, .8, .2, 1); }
+.gauge path { stroke-dasharray: 1 1; animation: draw 760ms var(--ease) both; }
+.gauge path:nth-child(2) { animation-delay: 90ms; } .gauge path:nth-child(3) { animation-delay: 180ms; }
+.gauge path:nth-child(4) { animation-delay: 270ms; } .gauge path:nth-child(5) { animation-delay: 360ms; }
+
+/* Ambient balance glow on the Home card: green on track, amber running hot, red over plan. */
+.hero.mood-good { --mood: 52, 211, 153; }
+.hero.mood-warm { --mood: 245, 166, 35; }
+.hero.mood-hot { --mood: 239, 79, 79; }
+.hero[class*="mood-"] {
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(var(--mood), 0.35), 0 12px 44px -10px rgba(var(--mood), 0.55);
+  animation: pop-in 520ms var(--ease) both, hero-float 16s ease-in-out 520ms infinite alternate, mood-glow 5s ease-in-out infinite;
+}
+@keyframes mood-glow {
+  50% { box-shadow: var(--shadow-lg), 0 0 0 1.5px rgba(var(--mood), 0.55), 0 16px 64px -6px rgba(var(--mood), 0.8); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before, .hero::before, .rv { animation: none !important; transition: none !important; }
+  .rv { opacity: 1; transform: none; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}

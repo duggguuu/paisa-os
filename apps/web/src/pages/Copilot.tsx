@@ -1,17 +1,27 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, maskText } from '../lib';
+import { api, maskText, money, shortDate } from '../lib';
+import { useUi } from '../App';
 import { Icon } from '../components/Icons';
 import { listen, speechSupported } from '../voice';
 
-interface Msg { role: 'user' | 'assistant'; content: string; engine?: 'claude' | 'local' }
+interface Draft { kind: 'expense' | 'income'; amount: number; categoryId: string; categoryName: string; accountId: string; accountName: string; date: string; merchant: string | null; note: string | null }
+interface Msg { role: 'user' | 'assistant'; content: string; engine?: 'claude' | 'local'; drafts?: Draft[]; looked?: string[] }
+
+const LOOKED: Record<string, string> = {
+  find_transactions: 'transactions', spending_breakdown: 'spending', accounts: 'balances', investments: 'investments & FDs',
+  debts_and_loans: 'loans & debts', bills_and_subscriptions: 'bills & subscriptions', salary_and_tax: 'salary', goals: 'goals', draft_transaction: 'a draft',
+};
 
 const SUGGESTIONS = [
   'Can I afford a ₹60,000 laptop?',
-  'How can I save more each month?',
-  'Why did my spending increase?',
-  'When will I reach my savings goal?',
+  'Compare my spending this month with the last 3 months',
+  'Which subscriptions renew in the next 2 weeks?',
+  'How are my investments and FDs doing?',
+  'If I prepay ₹1 lakh on my loan, what do I save?',
+  'Add ₹450 for groceries yesterday',
 ];
+const SUGGESTIONS_LOCAL = SUGGESTIONS.slice(0, 1).concat(['How can I save more each month?', 'Why did my spending increase?', 'When will I reach my savings goal?']);
 const KEY = 'paisa.copilot';
 
 /** Render the small subset of formatting the copilot uses: **bold** and "• " lists. */
@@ -25,6 +35,7 @@ function Rich({ text }: { text: string }) {
 }
 
 export function Copilot() {
+  const { openAdd } = useUi();
   const info = useQuery({ queryKey: ['copilot'], queryFn: () => api<{ engine: 'claude' | 'local' }>('/api/copilot') });
   const [msgs, setMsgs] = useState<Msg[]>(() => {
     try { return JSON.parse(sessionStorage.getItem(KEY) ?? '[]'); } catch { return []; }
@@ -48,8 +59,8 @@ export function Copilot() {
     setMsgs((m) => [...m, { role: 'user', content: question }]);
     setBusy(true);
     try {
-      const r = await api<{ answer: string; engine: 'claude' | 'local' }>('/api/copilot', { method: 'POST', body: { question, history } });
-      setMsgs((m) => [...m, { role: 'assistant', content: r.answer, engine: r.engine }]);
+      const r = await api<{ answer: string; engine: 'claude' | 'local'; drafts?: Draft[]; looked?: string[] }>('/api/copilot', { method: 'POST', body: { question, history } });
+      setMsgs((m) => [...m, { role: 'assistant', content: r.answer, engine: r.engine, drafts: r.drafts, looked: [...new Set(r.looked ?? [])] }]);
     } catch (e: any) {
       setMsgs((m) => [...m, { role: 'assistant', content: `Sorry, I couldn't answer that: ${e.message}` }]);
     } finally { setBusy(false); }
@@ -81,7 +92,7 @@ export function Copilot() {
             <h2>Ask Anything About Your Money</h2>
             <p>Get instant answers, personalised advice and smart recommendations from your own numbers.</p>
           </div>
-          <div className="suggest">{SUGGESTIONS.map((s) => <button key={s} onClick={() => ask(s)}>{s}</button>)}</div>
+          <div className="suggest">{(info.data?.engine === 'local' ? SUGGESTIONS_LOCAL : SUGGESTIONS).map((s) => <button key={s} onClick={() => ask(s)}>{s}</button>)}</div>
         </>
       )}
 
@@ -89,7 +100,16 @@ export function Copilot() {
         {msgs.map((m, i) => (
           <div key={i} className={`bubble-msg ${m.role === 'user' ? 'me' : 'ai'}`}>
             <Rich text={m.role === 'assistant' ? maskText(m.content) : m.content} />
-            {m.role === 'assistant' && m.engine && <span className="eng">{m.engine === 'claude' ? 'Answered by Claude' : 'Worked out from your data on your server'}</span>}
+            {m.drafts?.map((d, k) => (
+              <div key={k} className="draft-card">
+                <div className="grow">
+                  <div className="title">{d.merchant ?? d.categoryName} <span className={`num ${d.kind === 'income' ? 'pos' : ''}`}>{d.kind === 'income' ? '+' : ''}{money(d.amount)}</span></div>
+                  <div className="sub">{d.categoryName} · {d.accountName} · {shortDate(d.date)}{d.note ? ` · ${d.note}` : ''}</div>
+                </div>
+                <button className="btn small accent" onClick={() => openAdd({ draft: d })}>Review &amp; add</button>
+              </div>
+            ))}
+            {m.role === 'assistant' && m.engine && <span className="eng">{m.engine === 'claude' ? `Answered by Claude${m.looked?.length ? ` · checked ${m.looked.map((l) => LOOKED[l] ?? l).join(', ')}` : ''}` : 'Worked out from your data on your server'}</span>}
           </div>
         ))}
         {busy && <div className="bubble-msg ai"><span className="faint">Thinking…</span></div>}
@@ -104,8 +124,8 @@ export function Copilot() {
       {info.data && msgs.length === 0 && (
         <p className="tiny faint" style={{ textAlign: 'center', margin: '10px 0 0' }}>
           {info.data.engine === 'claude'
-            ? 'Uses Claude: a summary of your numbers (totals, categories, goals) is sent to Anthropic to answer.'
-            : 'Private mode: answers are worked out on your server and nothing is sent to an AI service.'}
+            ? 'Uses Claude: a summary of your numbers, plus whatever it looks up to answer (transactions, balances, holdings…), is sent to Anthropic. Nothing is saved without you.'
+            : 'Private mode: answers are worked out on your server and nothing is sent to an AI service. Add an Anthropic API key on the server for the smarter Copilot.'}
         </p>
       )}
     </div>

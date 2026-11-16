@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, money, parseRupees, parseSignedRupees, cleanSignedAmount, todayIST, addDays, uuid, shortDate, maskText } from '../lib';
 import { SignToggle } from './SignToggle';
+import { savedCheck } from '../motion-fx';
 import { Sheet, useUi } from '../App';
 import { Icon } from './Icons';
 import { CategoryPicker } from './CategoryPicker';
@@ -12,6 +13,8 @@ export interface QuickAddPreset {
   kind?: 'expense' | 'income' | 'transfer';
   edit?: any; // full txn from /api/txns/:id
   voice?: boolean; // start listening as soon as the sheet opens
+  /** Pre-filled values (e.g. drafted by the copilot); nothing is saved until the owner taps Save. */
+  draft?: { kind: 'expense' | 'income'; amount: number; categoryId: string; accountId: string; date: string; merchant: string | null; note: string | null };
 }
 
 type Kind = 'expense' | 'income' | 'transfer';
@@ -29,7 +32,9 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const idemKey = useMemo(() => uuid(), []);
   const edit = preset.edit;
 
+  const draft = preset.draft;
   const initial = useMemo(() => {
+    if (!edit && draft) return { kind: draft.kind as Kind, amount: String(draft.amount / 100), categoryId: draft.categoryId, accountId: draft.accountId, toAccountId: null };
     if (!edit) return null;
     const ps = edit.postings as any[];
     const cat = ps.find((p) => p.kind === 'category');
@@ -46,12 +51,12 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
 
   const [kind, setKind] = useState<Kind>(initial?.kind ?? preset.kind ?? 'expense');
   const [amount, setAmount] = useState(initial?.amount ?? '');
-  const [merchant, setMerchant] = useState(edit?.merchant ?? '');
+  const [merchant, setMerchant] = useState(edit?.merchant ?? draft?.merchant ?? '');
   const [categoryId, setCategoryId] = useState<string | null>(initial?.categoryId ?? null);
   const [accountId, setAccountId] = useState<string | null>(initial?.accountId ?? null);
   const [toAccountId, setToAccountId] = useState<string | null>(initial?.toAccountId ?? null);
-  const [date, setDate] = useState<string>(edit?.date ?? todayIST());
-  const [note, setNote] = useState(edit?.note ?? '');
+  const [date, setDate] = useState<string>(edit?.date ?? draft?.date ?? todayIST());
+  const [note, setNote] = useState(edit?.note ?? draft?.note ?? '');
   const [splitWith, setSplitWith] = useState<string[]>([]);
   const [touched, setTouched] = useState({ category: !!initial, account: !!initial });
   const [error, setError] = useState<string | null>(null);
@@ -192,6 +197,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
       try { localStorage.setItem('paisa.lastAccount', accountId); } catch { /* ignore */ }
       await qc.invalidateQueries();
       onClose();
+      savedCheck();
       const what = kind === 'transfer' ? 'transfer' : label(byId.get(categoryId!) ?? {});
       toast(`${edit ? 'Updated' : 'Saved'} ${money(paise)} · ${what}`, edit ? undefined : {
         label: 'Undo',

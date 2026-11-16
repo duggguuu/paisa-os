@@ -5,9 +5,10 @@
  *  - local (default, free, nothing leaves the server): recognises the common questions
  *    (afford X, save more, why spending rose, goals, budgets, bills, net worth, health,
  *    "how much on X") and answers from the numbers.
- *  - Claude (only when ANTHROPIC_API_KEY is set on the server): answers free-form questions
- *    from a compact summary of the book (totals, categories, goals, bills: no account
- *    numbers, no individual transactions). Falls back to the local engine on any error.
+ *  - Claude (only when ANTHROPIC_API_KEY is set on the server): starts from a compact summary of
+ *    the book and calls read-only tools (copilot-tools.ts) to look up transactions, any period,
+ *    investments, loans, bills, salary and goals; it can draft entries for the owner to confirm.
+ *    Falls back to the local engine on any error.
  */
 import Anthropic from '@anthropic-ai/sdk';
 import type { Sql } from './db.js';
@@ -18,6 +19,7 @@ import { listGoals } from './goals.js';
 import { healthScore } from './planner.js';
 import { insights } from './insights.js';
 import { addDays, daysIn, todayIST } from './money.js';
+import { TOOLS, runTool, type Draft } from './copilot-tools.js';
 
 const r = (p: number) => `₹${Math.round(Math.abs(p) / 100).toLocaleString('en-IN')}`;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -179,35 +181,69 @@ export function localAnswer(question: string, c: Ctx): string {
 }
 
 // ---------- Claude engine ----------
-const INSTRUCTIONS = `You are the money copilot inside Paisa OS, a personal finance app for someone in India. Answer the user's question using only the financial snapshot provided (amounts in Indian rupees). Be concrete: name the numbers, compare with their usual month, and give one or two practical next steps. Use Indian number formatting (₹1,23,456) and keep answers under about 150 words. Use **bold** for the key figure and "• " for lists. Don't invent transactions or balances that aren't in the snapshot; if the data can't answer the question, say what's missing. This is general guidance, not regulated financial advice; for tax or investment product choices, suggest checking with a qualified advisor.`;
+const INSTRUCTIONS = `You are the money copilot inside Paisa OS, a personal finance app for one person in India. You have a snapshot of their month below and tools that read their full records: every transaction, spending for any period, account balances, investments and FDs, loans and debts, bills/subscriptions/mandates, salary and goals.
+
+How to work:
+- Look things up rather than guess. If the snapshot doesn't answer the question, call the tools (several in one turn when they're independent). For comparisons, fetch each period. Dates are inclusive and in IST; "this month" follows the snapshot's month range.
+- Do the arithmetic yourself from tool results: averages, projections, what-ifs ("if I cut food by 20%", "if I prepay ₹1L on the loan", "can I afford X by June"). State assumptions briefly.
+- When asked to add, log or record something, call draft_transaction. It only prepares a card the owner reviews; say "I've drafted it below, tap Review & add". Never claim something was saved.
+- Answer in plain language: lead with the answer and the key figure in **bold**, then a few "• " bullets with supporting numbers and one or two concrete next steps. Use Indian number formatting (₹1,23,456). Usually under 180 words; longer only for a requested plan or breakdown. No tables, no headings, no markdown other than **bold** and "• ".
+- Only state numbers that come from the snapshot or tools. If data is missing (e.g. no holdings synced), say what to add.
+- This is general guidance, not regulated financial or tax advice; for specific product or tax filings, suggest a qualified advisor.`;
 
 export const copilotMode = () => (process.env.ANTHROPIC_API_KEY ? 'claude' : 'local') as 'claude' | 'local';
+const MAX_STEPS = 8;
 
 export async function answer(sql: Sql, bookId: string, monthStartDay: number, question: string, history: { role: 'user' | 'assistant'; content: string }[]) {
   const ctx = await buildContext(sql, bookId, monthStartDay);
-  if (copilotMode() === 'local') return { answer: localAnswer(question, ctx), engine: 'local' as const };
+  const local = () => ({ answer: localAnswer(question, ctx), engine: 'local' as const, drafts: [] as Draft[], looked: [] as string[] });
+  if (copilotMode() === 'local') return local();
+  const drafts: Draft[] = [];
+  const looked: string[] = [];
   try {
     const client = new Anthropic();
-    const response = await client.beta.messages.create({
-      model: process.env.COPILOT_MODEL || 'claude-opus-5-5',
-      max_tokens: 4000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'low' },
-      system: [
-        { type: 'text', text: INSTRUCTIONS, cache_control: { type: 'ephemeral' } },
-        { type: 'text', text: `Financial snapshot (JSON):\n${JSON.stringify(contextForModel(ctx))}` },
-      ],
-      messages: [...history.slice(-8), { role: 'user', content: question }],
-    });
-    if (response.stop_reason === 'refusal') return { answer: localAnswer(question, ctx), engine: 'local' as const };
-    const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n').trim();
-    return { answer: text || localAnswer(question, ctx), engine: text ? ('claude' as const) : ('local' as const) };
+    const messages: Anthropic.Beta.BetaMessageParam[] = [...history.slice(-8), { role: 'user', content: question }];
+    const system: Anthropic.Beta.BetaTextBlockParam[] = [
+      { type: 'text', text: INSTRUCTIONS, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: `Today: ${ctx.today}. Financial snapshot (JSON, rupees):\n${JSON.stringify(contextForModel(ctx))}` },
+    ];
+    for (let step = 0; step < MAX_STEPS; step++) {
+      const response = await client.beta.messages.create({
+        model: process.env.COPILOT_MODEL || 'claude-opus-5-5',
+        max_tokens: 16000,
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        output_config: { effort: 'medium' },
+        tools: TOOLS,
+        system,
+        messages,
+      });
+      if (response.stop_reason === 'refusal') return local();
+      if (response.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: response.content }); continue; }
+      const uses = response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use');
+      if (response.stop_reason !== 'tool_use' || !uses.length) {
+        const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n').trim();
+        return text ? { answer: text, engine: 'claude' as const, drafts, looked } : local();
+      }
+      messages.push({ role: 'assistant', content: response.content });
+      const results = await Promise.all(uses.map(async (u): Promise<Anthropic.Beta.BetaToolResultBlockParam> => {
+        looked.push(u.name);
+        try {
+          const out = await runTool(sql, bookId, u.name, u.input, drafts);
+          return { type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out) };
+        } catch (e: any) {
+          console.error(`Copilot tool ${u.name} failed`, e);
+          return { type: 'tool_result', tool_use_id: u.id, content: 'That lookup failed on the server.', is_error: true };
+        }
+      }));
+      messages.push({ role: 'user', content: results });
+    }
+    return { answer: "That needed more lookups than I'm allowed in one go. Try asking a narrower question (one period or one category at a time).", engine: 'claude' as const, drafts, looked };
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) console.error('Copilot: ANTHROPIC_API_KEY was rejected; using the local engine.');
     else if (e instanceof Anthropic.RateLimitError) console.error('Copilot: rate limited; using the local engine.');
     else if (e instanceof Anthropic.APIError) console.error(`Copilot: API error ${e.status}; using the local engine.`);
     else console.error('Copilot: unexpected error; using the local engine.', e);
-    return { answer: localAnswer(question, ctx), engine: 'local' as const };
+    return local();
   }
 }

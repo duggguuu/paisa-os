@@ -148,6 +148,7 @@ export function toSlices<T extends Slice>(rows: T[]): { slices: (Slice & { color
 /** Donut of where the money went, with the total in the middle and a tappable legend. */
 export function Donut({ rows, total, label, onPick }: { rows: Slice[]; total: number; label: string; onPick?: (key: string) => void }) {
   const { slices } = toSlices(rows);
+  const appear = useAppear(slices.map((x) => x.key + x.amount).join());
   if (!slices.length) return null;
   const R = 70, SW = 22, C = 2 * Math.PI * R, GAP = slices.length > 1 ? 2.5 : 0;
   let offset = 0;
@@ -159,8 +160,8 @@ export function Donut({ rows, total, label, onPick }: { rows: Slice[]; total: nu
           {slices.map((s) => {
             const len = Math.max(s.share * C - GAP, 0.001);
             const el = (
-              <circle key={s.key} cx="90" cy="90" r={R} fill="none" stroke={s.color} strokeWidth={SW}
-                strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-offset} transform="rotate(-90 90 90)"
+              <circle key={s.key} className="dn-slice" cx="90" cy="90" r={R} fill="none" stroke={s.color} strokeWidth={SW}
+                strokeDasharray={appear ? `${len} ${C - len}` : `0 ${C}`} strokeDashoffset={-offset} transform="rotate(-90 90 90)"
                 style={{ cursor: onPick && !s.rest ? 'pointer' : 'default' }} onClick={() => !s.rest && onPick?.(s.key)}>
                 <title>{s.name}: {money(s.amount, { whole: true })} ({pct(s.share)})</title>
               </circle>
@@ -218,7 +219,7 @@ export function Gauge({ score, label }: { score: number; label: string }) {
     <div className="gauge" role="img" aria-label={`Financial health ${score} out of 100, ${label}`}>
       <svg viewBox="0 0 150 80">
         {Array.from({ length: segs }, (_, i) => (
-          <path key={i} d={arc(i / segs + (i ? gapT : 0), (i + 1) / segs - (i < segs - 1 ? gapT : 0))} fill="none"
+          <path key={i} pathLength={1} d={arc(i / segs + (i ? gapT : 0), (i + 1) / segs - (i < segs - 1 ? gapT : 0))} fill="none"
             stroke={colors[i]} strokeOpacity={(i + 1) / segs <= t + 0.001 || i / segs < t ? 1 : 0.22} strokeWidth="13" strokeLinecap="round" />
         ))}
         <circle cx={mx} cy={my} r="9" fill="var(--surface)" stroke="var(--ink)" strokeWidth="3" />

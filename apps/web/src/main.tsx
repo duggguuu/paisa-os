@@ -6,8 +6,10 @@ import './styles.css';
 import './themes.css';
 import { initTheme } from './theme';
 import { App } from './App';
+import { installScrollReveal } from './motion-fx';
 
 initTheme();
+installScrollReveal();
 
 // Service worker: only for notifications (no caching). Registering it is harmless where push isn't supported.
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { /* not available (e.g. private mode) */ });

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { celebrateGoals } from '../motion-fx';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, money, compact, parseRupees, dayLabel, todayIST } from '../lib';
 import { Sheet, useUi } from '../App';
@@ -38,6 +39,7 @@ export function ReachPill({ g }: { g: Goal }) {
 
 export function Goals() {
   const q = useQuery({ queryKey: ['goals'], queryFn: () => api<Goal[]>('/api/goals') });
+  useEffect(() => celebrateGoals(q.data), [q.data]);
   const [edit, setEdit] = useState<Partial<Goal> | null>(null);
   const [boost, setBoost] = useState<Goal | null>(null);
   const goals = q.data ?? [];

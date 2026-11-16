@@ -18,6 +18,7 @@ import { registerExtras } from './routes-extra.js';
 import * as passkeys from './passkeys.js';
 import { postAutoDue } from './recurring.js';
 import * as notify from './notify.js';
+import * as backup from './backup.js';
 
 export interface AppConfig {
   sql: Sql;
@@ -306,6 +307,18 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     return notify.tick(sql, cfg.publicUrl, new Date(), cfg.pushSend as any);
   });
 
+  // Daily backup (GitHub Actions): the encrypted file of the first owner who set a backup passphrase.
+  // 204 = nobody has set one yet (the workflow then skips quietly).
+  app.post('/api/cron/backup', async (req, reply) => {
+    if (!notify.cronKeyOk(cfg.appSecret, req.headers['x-cron-key'])) return reply.status(401).send({ error: 'bad_key' });
+    const owners = await sql<{ user_id: string; book_id: string }[]>`
+      select b.user_id, b.id as book_id from book b join app_setting s on s.key = 'backup:' || b.user_id
+      where not b.is_demo order by b.created_at limit 1`;
+    if (!owners.length) return reply.status(204).send();
+    reply.header('Content-Disposition', 'attachment; filename="paisa-backup.json"');
+    return backup.makeBackup(sql, cipher, owners[0].user_id, owners[0].book_id);
+  });
+
   // ---------- everything below needs a session ----------
   await app.register(async (api) => {
     api.addHook('preHandler', async (req) => requireAuth(req));
@@ -346,6 +359,54 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     api.delete('/api/security/pin', async (req) => {
       await sql`update app_user set pin_hash = null, pin_length = null, pin_failures = 0 where id = ${req.userId!}`;
       return { ok: true };
+    });
+
+    // Backup: passphrase, download now, check a file, restore
+    const realBook = async (userId: string) => (await sql<{ id: string }[]>`select id from book where user_id = ${userId} and not is_demo`)[0]?.id;
+    const needPassword = async (userId: string, password: unknown) => {
+      const [u] = await sql<{ password_hash: string }[]>`select password_hash from app_user where id = ${userId}`;
+      if (typeof password !== 'string' || !(await verifyPassword(password, u.password_hash))) throw new LedgerError('bad_credentials', 'Wrong password', 401);
+    };
+    api.get('/api/backup', async (req) => ({ ...(await backup.status(sql, req.userId!)), cronKey: notify.cronKey(cfg.appSecret), appUrl: cfg.publicUrl }));
+    api.put('/api/backup/passphrase', async (req) => {
+      const b = z.object({ passphrase: z.string().min(10, 'Use at least 10 characters').max(200), hint: z.string().trim().max(80).optional().nullable(), password: z.string().min(1).max(200) }).parse(req.body);
+      await needPassword(req.userId!, b.password);
+      await backup.setPassphrase(sql, cipher, req.userId!, b.passphrase, b.hint ?? null);
+      return { ok: true };
+    });
+    api.get('/api/backup/download', async (req, reply) => {
+      const book = await realBook(req.userId!);
+      if (!book) throw new LedgerError('no_book', 'No book to back up', 404);
+      reply.header('Content-Disposition', `attachment; filename="paisa-backup-${todayIST()}.json"`);
+      return backup.makeBackup(sql, cipher, req.userId!, book);
+    });
+    const RestoreBody = z.object({ file: z.any(), passphrase: z.string().min(1).max(200), password: z.string().max(200).optional() });
+    api.post('/api/backup/check', { bodyLimit: 60_000_000 }, async (req) => {
+      const b = RestoreBody.parse(req.body);
+      const s = await backup.openBackup(b.file, b.passphrase);
+      return backup.describe(s, b.file.createdAt);
+    });
+    api.post('/api/backup/restore', { bodyLimit: 60_000_000 }, async (req) => {
+      const b = RestoreBody.parse(req.body);
+      await needPassword(req.userId!, b.password);
+      const s = await backup.openBackup(b.file, b.passphrase);
+      const book = await realBook(req.userId!);
+      if (!book) throw new LedgerError('no_book', 'No book to restore into', 404);
+      // Safety copy of what's there now, so a mistaken restore can be undone with the same passphrase.
+      const st = await backup.status(sql, req.userId!);
+      if (st.configured) {
+        const before = await backup.makeBackup(sql, cipher, req.userId!, book);
+        await sql`insert into app_setting (key, value, updated_at) values (${'backup-before-restore:' + req.userId!}, ${sql.json(before as any)}, now())
+                  on conflict (key) do update set value = excluded.value, updated_at = now()`;
+      }
+      await backup.restore(sql, book, s);
+      return { ok: true, restored: backup.describe(s, b.file.createdAt), safetyCopy: st.configured };
+    });
+    api.get('/api/backup/before-restore', async (req, reply) => {
+      const [r] = await sql<{ value: any }[]>`select value from app_setting where key = ${'backup-before-restore:' + req.userId!}`;
+      if (!r) throw new LedgerError('none', 'No safety copy yet', 404);
+      reply.header('Content-Disposition', 'attachment; filename="paisa-before-restore.json"');
+      return r.value;
     });
 
     // Notifications: devices, daily reminders, delivery setup

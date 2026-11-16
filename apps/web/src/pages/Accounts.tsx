@@ -85,15 +85,44 @@ export function Accounts() {
   );
 }
 
+type HSort = 'value' | 'value-asc' | 'gain' | 'gain-pct' | 'loss-pct' | 'invested' | 'name';
+const H_SORTS: [HSort, string][] = [['value', 'Value: high to low'], ['value-asc', 'Value: low to high'], ['gain', 'Gain (₹): high to low'], ['gain-pct', 'Gain %: best first'], ['loss-pct', 'Gain %: worst first'], ['invested', 'Invested: high to low'], ['name', 'Name: A to Z']];
+const H_PREF = 'paisa.holdingsView';
+const gainPct = (h: any) => (h.cost_paise ? (h.value_paise - h.cost_paise) / h.cost_paise : 0);
+
 function Investments({ k }: { k: any }) {
   const qc = useQueryClient();
   const { toast } = useUi();
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<{ type: 'all' | 'equity' | 'mf'; perf: 'all' | 'up' | 'down'; sort: HSort }>(() => {
+    try { return { type: 'all', perf: 'all', sort: 'value', ...JSON.parse(localStorage.getItem(H_PREF) ?? '{}') }; } catch { return { type: 'all', perf: 'all', sort: 'value' }; }
+  });
+  const [hq, setHq] = useState('');
+  const setV = (p: Partial<typeof view>) => setView((v) => { const n = { ...v, ...p }; try { localStorage.setItem(H_PREF, JSON.stringify(n)); } catch { /* ignore */ } return n; });
   if (!k) return null;
   const holdings: any[] = k.holdings ?? [];
   const value = holdings.reduce((s, h) => s + h.value_paise, 0);
   const cost = holdings.reduce((s, h) => s + h.cost_paise, 0);
   const takenAt = holdings[0]?.taken_at;
+  const needle = hq.trim().toLowerCase();
+  const shown = holdings
+    .filter((h) => view.type === 'all' || (view.type === 'mf' ? h.asset_type === 'mf' : h.asset_type !== 'mf'))
+    .filter((h) => view.perf === 'all' || (view.perf === 'up' ? h.value_paise >= h.cost_paise : h.value_paise < h.cost_paise))
+    .filter((h) => !needle || String(h.instrument).toLowerCase().includes(needle) || String(h.isin ?? '').toLowerCase().includes(needle))
+    .sort((a, b) => {
+      switch (view.sort) {
+        case 'value-asc': return a.value_paise - b.value_paise;
+        case 'gain': return (b.value_paise - b.cost_paise) - (a.value_paise - a.cost_paise);
+        case 'gain-pct': return gainPct(b) - gainPct(a);
+        case 'loss-pct': return gainPct(a) - gainPct(b);
+        case 'invested': return b.cost_paise - a.cost_paise;
+        case 'name': return String(a.instrument).localeCompare(String(b.instrument));
+        default: return b.value_paise - a.value_paise;
+      }
+    });
+  const filtered = shown.length !== holdings.length;
+  const shownValue = shown.reduce((s, h) => s + h.value_paise, 0), shownCost = shown.reduce((s, h) => s + h.cost_paise, 0);
+  const nMf = holdings.filter((h) => h.asset_type === 'mf').length;
 
   async function sync() {
     setBusy(true);
@@ -138,9 +167,35 @@ function Investments({ k }: { k: any }) {
           </>
         )}
       </div>
+      {holdings.length > 1 && (
+        <div className="holdings-tools">
+          <input className="input" placeholder="Search holdings" value={hq} onChange={(e) => setHq(e.target.value)} aria-label="Search holdings" />
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            {nMf > 0 && nMf < holdings.length && (
+              <div className="seg">
+                {([['all', 'All'], ['equity', 'Stocks'], ['mf', 'Funds']] as const).map(([v, l]) => <button key={v} className={view.type === v ? 'on' : ''} onClick={() => setV({ type: v })}>{l}</button>)}
+              </div>
+            )}
+            <div className="seg">
+              {([['all', 'All'], ['up', 'Gainers'], ['down', 'Losers']] as const).map(([v, l]) => <button key={v} className={view.perf === v ? 'on' : ''} onClick={() => setV({ perf: v })}>{l}</button>)}
+            </div>
+            <select className="input holdings-sort" value={view.sort} onChange={(e) => setV({ sort: e.target.value as HSort })} aria-label="Sort holdings">
+              {H_SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          {filtered && (
+            <div className="tiny faint">
+              Showing {shown.length} of {holdings.length} · {money(shownValue, { whole: true })} ·{' '}
+              <span style={{ color: shownValue < shownCost ? 'var(--up)' : 'var(--down)' }}>{money(shownValue - shownCost, { whole: true, sign: true })}</span>{' '}
+              <button className="linkish" onClick={() => { setHq(''); setV({ type: 'all', perf: 'all' }); }}>Clear filters</button>
+            </div>
+          )}
+        </div>
+      )}
       {holdings.length > 0 && (
         <div className="list" style={{ marginTop: 10 }}>
-          {holdings.map((h) => (
+          {shown.length === 0 && <div className="empty">No holdings match.</div>}
+          {shown.map((h) => (
             <div className="item" key={`${h.instrument}-${h.isin}`} style={{ cursor: 'default' }}>
               <div className="avatar" aria-hidden>{h.asset_type === 'mf' ? '🧺' : '📈'}</div>
               <div className="grow">
@@ -149,7 +204,7 @@ function Investments({ k }: { k: any }) {
               </div>
               <div className="amt">
                 <div className="num">{money(h.value_paise, { whole: true })}</div>
-                <div className={`tiny num ${h.value_paise >= h.cost_paise ? 'pos' : ''}`} style={{ color: h.value_paise < h.cost_paise ? 'var(--up)' : undefined }}>{money(h.value_paise - h.cost_paise, { whole: true, sign: true })}</div>
+                <div className={`tiny num ${h.value_paise >= h.cost_paise ? 'pos' : ''}`} style={{ color: h.value_paise < h.cost_paise ? 'var(--up)' : undefined }}>{money(h.value_paise - h.cost_paise, { whole: true, sign: true })} · {maskNum(`${(gainPct(h) * 100).toFixed(1)}%`)}</div>
               </div>
             </div>
           ))}
