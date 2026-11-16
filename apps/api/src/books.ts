@@ -258,3 +258,50 @@ export async function createCategory(sql: Sql, bookId: string, input: z.infer<ty
     }
   });
 }
+
+/**
+ * What deleting an account would remove: every transaction that touches it (opening balance included),
+ * and which other accounts those transactions also moved money in. Shown before the user confirms.
+ */
+export async function accountDeletePreview(sql: Sql, bookId: string, accountId: string) {
+  const [acc] = await sql<{ id: string; name: string; kind: string }[]>`select id, name, kind from account where id = ${accountId} and book_id = ${bookId}`;
+  if (!acc) throw new LedgerError('account_not_found', 'account not found', 404);
+  if (acc.kind === 'category' || acc.kind === 'equity') throw new LedgerError('not_deletable', 'This can\'t be deleted here', 400);
+  const [c] = await sql<{ n: number; real: number }[]>`
+    select count(*)::int as n, count(*) filter (where t.kind <> 'opening')::int as real
+    from txn t where t.book_id = ${bookId} and exists (select 1 from posting p where p.txn_id = t.id and p.account_id = ${accountId})`;
+  const others = await sql<{ name: string; n: number }[]>`
+    select a.name, count(distinct t.id)::int as n
+    from txn t join posting p on p.txn_id = t.id join account a on a.id = p.account_id
+    where t.book_id = ${bookId} and t.status = 'posted' and a.kind not in ('category', 'equity') and a.id <> ${accountId}
+      and exists (select 1 from posting q where q.txn_id = t.id and q.account_id = ${accountId})
+    group by a.name order by n desc`;
+  const [r] = await sql<{ n: number }[]>`select count(*)::int as n from recurring_rule where book_id = ${bookId} and (account_id = ${accountId} or to_account_id = ${accountId})`;
+  return { id: acc.id, name: acc.name, transactions: c.real, hasOpening: c.n > c.real, otherAccounts: others, recurring: r.n };
+}
+
+/** Permanently delete an account and every transaction that touches it. The caller checks the PIN. */
+export async function deleteAccount(sql: Sql, bookId: string, accountId: string) {
+  const preview = await accountDeletePreview(sql, bookId, accountId);
+  await sql.begin(async (tx) => {
+    const ids = (await tx<{ id: string }[]>`
+      select distinct p.txn_id as id from posting p join txn t on t.id = p.txn_id
+      where p.account_id = ${accountId} and t.book_id = ${bookId}`).map((x) => x.id);
+    if (ids.length) {
+      await tx`update txn set refund_of = null where refund_of in ${tx(ids)}`;
+      await tx`update stuff_item set txn_id = null where txn_id in ${tx(ids)}`;
+      await tx`update stuff_item set sale_txn_id = null where sale_txn_id in ${tx(ids)}`;
+      await tx`update goal_contribution set txn_id = null where txn_id in ${tx(ids)}`;
+      await tx`delete from txn where id in ${tx(ids)}`;
+    }
+    await tx`delete from recurring_rule where book_id = ${bookId} and (account_id = ${accountId} or to_account_id = ${accountId})`;
+    await tx`delete from holding_snapshot where account_id = ${accountId}`;
+    await tx`update goal set account_id = null where account_id = ${accountId}`;
+    await tx`update import_batch set account_id = null where account_id = ${accountId}`;
+    await tx`update splitwise_link set default_account_id = null where default_account_id = ${accountId}`;
+    await tx`update account set parent_id = null where parent_id = ${accountId}`;
+    await tx`delete from account where id = ${accountId} and book_id = ${bookId}`;
+    await audit(tx, bookId, 'account', accountId, 'delete', { name: preview.name, transactions: preview.transactions }, null, 'user');
+  });
+  return { name: preview.name, transactions: preview.transactions };
+}

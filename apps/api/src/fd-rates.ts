@@ -8,13 +8,32 @@
  */
 
 export type BankRate = { bank: string; highest: number; y1: number; y3: number; y5: number; y2?: number };
-export type RateTable = { asOf: string; source: string; sourceUrl: string; live: boolean; banks: BankRate[] };
+export type Scheme = { id: string; institution: string; name: string; short: string; rate: number; months: number; compounding: 'quarterly' | 'yearly' | 'simple' | 'yearly_payout'; note: string };
+export type RateTable = { asOf: string; source: string; sourceUrl: string; live: boolean; banks: BankRate[]; schemes: Scheme[]; schemesAsOf: string; schemesSource: string; schemesUrl: string };
+
+/**
+ * Post Office deposit schemes (one-time deposits), India Post rates for October–December 2026.
+ * The government resets these every quarter: update the rates and SCHEMES_AS_OF when a new quarter's
+ * rates are announced. "simple" = interest is paid out (monthly/quarterly), so it doesn't compound.
+ */
+export const SCHEMES_AS_OF = '2026-10-01';
+export const SCHEMES: Scheme[] = [
+  { id: 'po-td-1', institution: 'Post Office', name: 'Time Deposit (1 yr)', short: 'TD 1 yr', rate: 6.9, months: 12, compounding: 'quarterly', note: 'Interest worked out quarterly, paid at the end of the year.' },
+  { id: 'po-td-2', institution: 'Post Office', name: 'Time Deposit (2 yr)', short: 'TD 2 yr', rate: 7.0, months: 24, compounding: 'yearly_payout', note: 'Interest worked out quarterly, paid into your savings account every year.' },
+  { id: 'po-td-3', institution: 'Post Office', name: 'Time Deposit (3 yr)', short: 'TD 3 yr', rate: 7.1, months: 36, compounding: 'yearly_payout', note: 'Interest worked out quarterly, paid into your savings account every year.' },
+  { id: 'po-td-5', institution: 'Post Office', name: 'Time Deposit (5 yr)', short: 'TD 5 yr', rate: 7.5, months: 60, compounding: 'yearly_payout', note: 'Paid into your savings account every year. Counts for Section 80C.' },
+  { id: 'po-nsc', institution: 'Post Office', name: 'National Savings Certificate (NSC)', short: 'NSC', rate: 7.7, months: 60, compounding: 'yearly', note: 'Compounded yearly, all paid at maturity. Counts for Section 80C.' },
+  { id: 'po-kvp', institution: 'Post Office', name: 'Kisan Vikas Patra (KVP)', short: 'KVP', rate: 7.5, months: 115, compounding: 'yearly', note: 'Doubles your money in 115 months.' },
+  { id: 'po-mis', institution: 'Post Office', name: 'Monthly Income Scheme (MIS)', short: 'MIS', rate: 7.4, months: 60, compounding: 'simple', note: 'Interest paid every month; the deposit comes back after 5 years.' },
+  { id: 'po-scss', institution: 'Post Office', name: 'Senior Citizens Savings Scheme (SCSS)', short: 'SCSS', rate: 8.2, months: 60, compounding: 'simple', note: 'For 60+. Interest paid every quarter, up to ₹30 lakh. Counts for Section 80C.' },
+];
+const SCHEME_FIELDS = { schemes: SCHEMES, schemesAsOf: SCHEMES_AS_OF, schemesSource: 'India Post', schemesUrl: 'https://www.indiapost.gov.in/banking-services/savings' };
 
 export const SOURCE_URL = 'https://www.paisabazaar.com/fixed-deposit/';
 
 /** Bundled fallback: Paisabazaar, rates as of 11 November 2026. */
 export const BUNDLED: RateTable = {
-  asOf: '2026-11-11', source: 'Paisabazaar', sourceUrl: SOURCE_URL, live: false,
+  asOf: '2026-11-11', source: 'Paisabazaar', sourceUrl: SOURCE_URL, live: false, ...SCHEME_FIELDS,
   banks: [
     ['State Bank of India', 6.45, 6.25, 6.30, 6.05], ['HDFC Bank', 6.60, 6.25, 6.55, 6.60], ['ICICI Bank', 6.60, 6.25, 6.55, 6.60],
     ['Axis Bank', 6.60, 6.25, 6.60, 6.60], ['Kotak Mahindra Bank', 6.80, 6.45, 6.40, 6.25], ['IDFC FIRST Bank', 7.25, 6.50, 7.10, 6.75],
@@ -54,7 +73,7 @@ export function parseRates(html: string): RateTable | null {
   const m = html.match(/rates as of\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/i);
   const asOf = m && MONTHS[m[2].toLowerCase()] ? `${m[3]}-${MONTHS[m[2].toLowerCase()]}-${m[1].padStart(2, '0')}` : new Date().toISOString().slice(0, 10);
   const po = BUNDLED.banks.find((b) => b.bank === 'Post Office')!;
-  return { asOf, source: 'Paisabazaar', sourceUrl: SOURCE_URL, live: true, banks: [...seen.values(), po] };
+  return { asOf, source: 'Paisabazaar', sourceUrl: SOURCE_URL, live: true, banks: [...seen.values(), po], ...SCHEME_FIELDS };
 }
 
 let cache: { at: number; table: RateTable } | null = null;

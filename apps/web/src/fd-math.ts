@@ -1,8 +1,9 @@
 /** FD helpers: tenure ↔ maturity date, the maturity estimate, and matching a bank to today's rate table. */
 
 export type BankRate = { bank: string; highest: number; y1: number; y3: number; y5: number; y2?: number };
-export type RateTable = { asOf: string; source: string; sourceUrl: string; live: boolean; banks: BankRate[] };
-export type Comp = 'quarterly' | 'monthly' | 'yearly' | 'simple';
+export type Comp = 'quarterly' | 'monthly' | 'yearly' | 'simple' | 'yearly_payout';
+export type Scheme = { id: string; institution: string; name: string; short: string; rate: number; months: number; compounding: Comp; note: string };
+export type RateTable = { asOf: string; source: string; sourceUrl: string; live: boolean; banks: BankRate[]; schemes?: Scheme[]; schemesAsOf?: string; schemesSource?: string; schemesUrl?: string };
 export type Tenure = { y: number; m: number; d: number };
 
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
@@ -35,7 +36,8 @@ export function tenureLabel(t: Tenure): string {
 /** Same maths as the server (fds.ts): compound k times a year, or simple interest. Paise in, paise out. */
 export function maturityValue(principal: number, rate: number, days: number, comp: Comp): number {
   const t = Math.max(0, days) / 365;
-  const k = { monthly: 12, quarterly: 4, yearly: 1, simple: 0 }[comp];
+  const k = { monthly: 12, quarterly: 4, yearly: 1, simple: 0, yearly_payout: -1 }[comp] ?? 4;
+  if (k === -1) return Math.round(principal * (1 + (Math.pow(1 + rate / 400, 4) - 1) * t)); // paid out yearly, not reinvested
   return Math.round(k ? principal * Math.pow(1 + rate / 100 / k, k * t) : principal * (1 + (rate / 100) * t));
 }
 
@@ -50,7 +52,7 @@ const ALIAS: Record<string, string> = {
   kotak: 'kotak mahindra bank', idfc: 'idfc first bank', 'idfc first': 'idfc first bank', yes: 'yes bank', indusind: 'indusind bank',
   pnb: 'punjab national bank', bob: 'bank of baroda', boi: 'bank of india', au: 'au small finance bank', 'au bank': 'au small finance bank',
   union: 'union bank of india', canara: 'canara bank', federal: 'federal bank', rbl: 'rbl bank', idbi: 'idbi bank',
-  'post office': 'post office', 'india post': 'post office', po: 'post office', equitas: 'equitas small finance bank',
+  'post office': 'post office', 'india post': 'post office', po: 'post office', postbank: 'post office', 'post bank': 'post office', 'post office savings': 'post office', equitas: 'equitas small finance bank',
   ujjivan: 'ujjivan small finance bank', suryoday: 'suryoday small finance bank', bandhan: 'bandhan bank', dcb: 'dcb bank',
   'standard chartered': 'standard chartered bank', sc: 'standard chartered bank', hsbc: 'hsbc bank',
 };
@@ -71,4 +73,22 @@ export function rateFor(b: BankRate, months: number): { rate: number; label: str
   if (months < 30) return b.y2 ? { rate: b.y2, label: '2-year' } : { rate: +((b.y1 + b.y3) / 2).toFixed(2), label: '2-year (between 1 and 3)' };
   if (months < 48) return { rate: b.y3, label: '3-year' };
   return { rate: b.y5, label: '5-year' };
+}
+
+export type RateOption = { id: string; label: string; rate: number; months: number | null; compounding?: Comp; note?: string; scheme: string; short?: string };
+
+/** The products to pick from for one institution: Post Office schemes, or a bank's published tenures. */
+export function rateOptions(table: RateTable | undefined, b: BankRate | null): RateOption[] {
+  if (!table || !b) return [];
+  if (b.bank === 'Post Office' && table.schemes?.length) {
+    return table.schemes.map((s) => ({ id: s.id, label: `${s.name} · ${s.rate}%`, rate: s.rate, months: s.months, compounding: s.compounding, note: s.note, scheme: `Post Office ${s.name}`, short: s.short }));
+  }
+  const o: RateOption[] = [
+    { id: 'y1', label: `1-year FD · ${b.y1}%`, rate: b.y1, months: 12, scheme: `${b.bank} 1-year FD` },
+    { id: 'y2', label: `2-year FD · ${rateFor(b, 24).rate}%${b.y2 ? '' : ' (approx.)'}`, rate: rateFor(b, 24).rate, months: 24, scheme: `${b.bank} 2-year FD` },
+    { id: 'y3', label: `3-year FD · ${b.y3}%`, rate: b.y3, months: 36, scheme: `${b.bank} 3-year FD` },
+    { id: 'y5', label: `5-year FD · ${b.y5}%`, rate: b.y5, months: 60, scheme: `${b.bank} 5-year FD` },
+  ];
+  if (b.highest > Math.max(b.y1, b.y3, b.y5)) o.push({ id: 'best', label: `Best special tenure · ${b.highest}%`, rate: b.highest, months: null, scheme: `${b.bank} special tenure FD` });
+  return o;
 }

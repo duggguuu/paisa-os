@@ -161,8 +161,8 @@ function PinSettings({ pin }: { pin: { length: number; blocked: boolean } | null
   const digits = (set: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => set(e.target.value.replace(/\D/g, '').slice(0, 6));
   return (
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-      <div className="spread"><b>Laptop PIN</b>{pin && <span className="tiny faint">{pin.length} digits{pin.blocked ? ' · paused' : ''}</span>}</div>
-      <p className="tiny faint" style={{ margin: '4px 0 8px' }}>On a laptop or desktop browser the lock asks for this PIN. Your phone keeps using Face ID. The PIN only unlocks; logging in still needs your password or Face ID.</p>
+      <div className="spread"><b>App PIN</b>{pin && <span className="tiny faint">{pin.length} digits{pin.blocked ? ' · paused' : ''}</span>}</div>
+      <p className="tiny faint" style={{ margin: '4px 0 8px' }}>On a laptop or desktop browser the lock asks for this PIN. Your phone keeps using Face ID. The PIN is also asked before an account can be deleted. It never logs you in by itself; that still needs your password or Face ID.</p>
       {!open && (
         <div className="row" style={{ gap: 8 }}>
           <button className="btn small" onClick={() => { setOpen(true); setMsg(null); }}>{pin ? 'Change PIN' : 'Set a PIN'}</button>

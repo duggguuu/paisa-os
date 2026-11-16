@@ -6,6 +6,7 @@ import { SignToggle } from '../components/SignToggle';
 import { api, money, compact, parseSignedRupees, cleanSignedAmount, KIND_LABEL, KIND_ICON, todayIST, dayLabel, maskNum, maskText } from '../lib';
 import { Sheet, useUi } from '../App';
 import { RollingMoney } from '../components/Rolling';
+import { DeleteAccountSheet } from '../components/DeleteAccount';
 
 const GROUPS: [string, string, (a: any) => boolean][] = [
   ['Money you can spend', 'Bank accounts, cash and wallets', (a) => ['bank', 'cash', 'wallet'].includes(a.kind)],
@@ -20,6 +21,11 @@ export function Accounts() {
   const [params, setParams] = useSearchParams();
   const nw = useQuery({ queryKey: ['networth'], queryFn: () => api<any>('/api/networth') });
   const kite = useQuery({ queryKey: ['kite'], queryFn: () => api<any>('/api/kite') });
+  const fdq = useQuery({ queryKey: ['fds'], queryFn: () => api<any>('/api/fds') });
+  const allFds: any[] = fdq.data?.banks.flatMap((b: any) => b.items) ?? [];
+  /** FDs held with one of your bank accounts: linked to it, or with the same bank name. */
+  const fdsOf = (a: any) => a.kind !== 'bank' ? [] : allFds.filter((f) => f.bankAccountId === a.id
+    || (!f.bankAccountId && [a.name, a.institution].filter(Boolean).some((n: string) => n.toLowerCase() === String(f.bank).toLowerCase())));
   const [editing, setEditing] = useState<any | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
 
@@ -55,16 +61,21 @@ export function Accounts() {
               <div className="section" key={title}>
                 <div className="section-title"><span>{title}{title === 'Fixed deposits' && <Link to="/fds" style={{ color: 'var(--accent)', marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>by bank →</Link>}</span><span className="num" style={{ textTransform: 'none', letterSpacing: 0 }}>{compact(total)}</span></div>
                 <div className="list">
-                  {items.map((a: any) => (
-                    <button key={a.id} className="item" onClick={() => setEditing(a)}>
+                  {items.map((a: any) => {
+                    const mine = fdsOf(a);
+                    const fdSum = mine.reduce((s: number, f: any) => s + f.principal, 0);
+                    return (
+                    <button key={a.id} className="item" onClick={() => setEditing({ ...a, fds: mine })}>
                       <div className="avatar" style={tint(a.kind)} aria-hidden>{a.icon ?? KIND_ICON[a.kind]}</div>
                       <div className="grow">
                         <div className="title">{a.name}</div>
-                        <div className="sub">{a.valuedAt ? `Market value as of ${dayLabel(a.valuedAt.slice(0, 10))}` : a.meta?.salary ? 'Salary account' : KIND_LABEL[a.kind]}</div>
+                        <div className="sub">{a.valuedAt ? `Market value as of ${dayLabel(a.valuedAt.slice(0, 10))}` : mine.length ? 'Savings' : a.meta?.salary ? 'Salary account' : KIND_LABEL[a.kind]}</div>
+                        {mine.length > 0 && <div className="sub">+ {money(fdSum, { whole: true })} in {mine.length} FD{mine.length === 1 ? '' : 's'} · total <b>{money(a.balance + fdSum, { whole: true })}</b></div>}
                       </div>
                       <div className="amt num" style={{ fontWeight: 550, color: a.balance < 0 ? 'var(--up)' : undefined }}>{money(a.balance, { whole: true })}</div>
                     </button>
-                  ))}
+                    );
+                  })}
                   {title === 'People who owe you' && (
                     <button className="item" onClick={() => setAdding('receivable')}>
                       <div className="avatar" aria-hidden>+</div>
@@ -226,6 +237,7 @@ function AccountSheet({ account, kind, onClose }: { account?: any; kind?: string
   const [openingDate, setOpeningDate] = useState(todayIST());
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const synced = !!account?.valuedAt;
 
   async function save(e: React.FormEvent) {
@@ -257,6 +269,7 @@ function AccountSheet({ account, kind, onClose }: { account?: any; kind?: string
   }
 
   const liability = ['credit_card', 'loan', 'payable'].includes(k);
+  if (deleting && account) return <DeleteAccountSheet accountId={account.id} onClose={() => setDeleting(false)} onDeleted={onClose} onHide={archive} />;
   return (
     <Sheet title={isNew ? (k === 'receivable' ? 'Add a person' : 'Add account') : account.name} onClose={onClose}>
       <form onSubmit={save}>
@@ -264,6 +277,15 @@ function AccountSheet({ account, kind, onClose }: { account?: any; kind?: string
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="hero-label">{synced ? 'Market value' : liability ? 'You owe' : k === 'receivable' ? 'They owe you' : 'Balance'}</div>
             <div className="stat-num num">{money(account.balance)}</div>
+            {account.fds?.length > 0 && (
+              <div className="bank-split">
+                <div><span>Savings</span><b className="num">{money(account.balance, { whole: true })}</b></div>
+                {account.fds.map((f: any) => (
+                  <Link key={f.id} to="/fds" onClick={onClose}><span>🔒 {f.name}{f.maturity ? ` · matures ${dayLabel(f.maturity)}` : ''}</span><b className="num">{money(f.principal, { whole: true })}</b></Link>
+                ))}
+                <div className="total"><span>Total with {account.name}</span><b className="num">{money(account.balance + account.fds.reduce((s: number, f: any) => s + f.principal, 0), { whole: true })}</b></div>
+              </div>
+            )}
             <Link to={`/activity?accountId=${account.id}`} className="small" style={{ color: 'var(--accent)' }} onClick={onClose}>See transactions →</Link>
           </div>
         )}
@@ -297,7 +319,12 @@ function AccountSheet({ account, kind, onClose }: { account?: any; kind?: string
         )}
         {err && <p className="error" role="alert">{err}</p>}
         <button className="btn primary block" disabled={busy}>{busy ? 'Saving…' : isNew ? 'Add' : 'Save'}</button>
-        {!isNew && <button type="button" className="btn block danger" style={{ marginTop: 8 }} disabled={busy} onClick={archive}>Hide this account</button>}
+        {!isNew && (
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <button type="button" className="btn grow" disabled={busy} onClick={archive}>Hide</button>
+            <button type="button" className="btn grow danger" disabled={busy} onClick={() => setDeleting(true)}>Delete account</button>
+          </div>
+        )}
       </form>
     </Sheet>
   );

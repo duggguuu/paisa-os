@@ -582,6 +582,75 @@ test('FDs: funded-from bank, bank\'s maturity amount, editing, and the rate tabl
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
 
+test('FDs: Post Office schemes, own-bank link, deducting from the bank later', async () => {
+  const { fdValue } = await import('../src/fds.js');
+  // 5-yr Post Office TD, interest paid out yearly: 1 lakh at 7.5% → 5 × 7,713.59 = 38,567.93 interest.
+  assert.equal(fdValue(1_00_000_00, 7.5, 5 * 365, 'yearly_payout'), 1_38_567_93);
+  const rates = (await req('GET', '/api/fds/rates')).body;
+  assert.ok(rates.schemes.some((x: any) => x.id === 'po-td-5' && x.rate === 7.5 && x.compounding === 'yearly_payout'));
+  assert.ok(rates.schemes.some((x: any) => x.id === 'po-nsc' && x.rate === 7.7));
+  // A savings account named like the user's own, and a TD held with it, added as "already had".
+  let r = await req('POST', '/api/accounts', { name: 'PostBank', kind: 'bank', institution: 'India Post', openingBalance: 3_00_000_00, openingDate: '2026-01-01' });
+  const pb = r.body.id;
+  r = await req('POST', '/api/fds', { bank: 'PostBank', bankAccountId: pb, principal: 1_00_000_00, rate: 7.5, start: '2026-03-01', maturity: '2031-03-01', compounding: 'yearly_payout', scheme: 'Post Office Time Deposit (5 yr)', name: 'PostBank TD 5 yr' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const td = r.body.id;
+  assert.equal(r.body.name, 'PostBank TD 5 yr');
+  assert.equal(await bal('PostBank'), 3_00_000_00, 'label-only: savings unchanged');
+  let f = (await req('GET', '/api/fds')).body.banks.flatMap((b: any) => b.items).find((x: any) => x.id === td);
+  assert.equal(f.bankAccountId, pb);
+  assert.equal(f.scheme, 'Post Office Time Deposit (5 yr)');
+  assert.equal(f.atMaturity, fdValue(1_00_000_00, 7.5, 1826, 'yearly_payout'), '1826 days: 2028 is a leap year');
+  // Now take the money out of PostBank: opening balance becomes a transfer on the start date.
+  r = await req('PATCH', `/api/fds/${td}`, { fundFromAccountId: pb });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(await bal('PostBank'), 2_00_000_00, 'deducted from savings');
+  f = (await req('GET', '/api/fds')).body.banks.flatMap((b: any) => b.items).find((x: any) => x.id === td);
+  assert.equal(f.principal, 1_00_000_00, 'FD keeps its amount');
+  assert.equal(f.fundedFromAccountId, pb);
+  r = await req('PATCH', `/api/fds/${td}`, { fundFromAccountId: pb });
+  assert.equal(r.status, 400, 'can\'t be deducted twice');
+  // Recording the transfer when adding: deducted straight away.
+  r = await req('POST', '/api/fds', { bank: 'PostBank', bankAccountId: pb, principal: 50_000_00, rate: 7.7, start: today, maturity: '2031-11-01', compounding: 'yearly', fromAccountId: pb });
+  assert.equal(await bal('PostBank'), 1_50_000_00);
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
+
+test('deleting an account needs the PIN (or the password without one) and removes its transactions', async () => {
+  let r = await req('POST', '/api/accounts', { name: 'Old Wallet', kind: 'wallet', openingBalance: 2_000_00, openingDate: '2026-01-01' });
+  const w = r.body.id;
+  await req('POST', '/api/txns', { kind: 'transfer', amount: 500_00, fromAccountId: A['SBI'].id, toAccountId: w, date: today });
+  const sbiBefore = await bal('SBI');
+  let p = (await req('GET', `/api/accounts/${w}/delete`)).body;
+  assert.equal(p.transactions, 1);
+  assert.equal(p.hasOpening, true);
+  assert.ok(p.otherAccounts.some((o: any) => o.name === 'SBI'));
+  assert.equal(p.confirmWith, 'password', 'no PIN set yet');
+  r = await req('POST', `/api/accounts/${w}/delete`, {});
+  assert.equal(r.status, 400);
+  r = await req('POST', `/api/accounts/${w}/delete`, { password: 'nope' });
+  assert.equal(r.status, 401);
+  // With a PIN, the PIN is what's asked.
+  r = await req('PUT', '/api/security/pin', { pin: '4071', password: 'correct horse battery' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  p = (await req('GET', `/api/accounts/${w}/delete`)).body;
+  assert.equal(p.confirmWith, 'pin');
+  r = await req('POST', `/api/accounts/${w}/delete`, { pin: '9999' });
+  assert.equal(r.status, 401);
+  assert.match(r.body.message, /tries left/);
+  r = await req('POST', `/api/accounts/${w}/delete`, { pin: '4071' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(await bal('Old Wallet'), undefined, 'gone');
+  assert.equal(await bal('SBI'), sbiBefore + 500_00, 'the transfer went with it');
+  r = await req('GET', `/api/accounts/${w}/delete`);
+  assert.equal(r.status, 404);
+  const cat = (await req('GET', '/api/categories')).body[0];
+  r = await req('GET', `/api/accounts/${cat.id}/delete`);
+  assert.equal(r.status, 400, 'categories aren\'t deleted here');
+  await req('DELETE', '/api/security/pin');
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
+
 test('FD rate page parser reads bank rows and the as-of date', async () => {
   const { parseRates } = await import('../src/fd-rates.js');
   const row = (n: string, a: string, b: string, c: string, d: string) => `<tr><td><a href="x">${n}</a></td><td>${a}</td><td>${b}</td><td>${c}</td><td>${d}</td></tr>`;

@@ -14,13 +14,16 @@ import { addDays, todayIST } from './money.js';
 
 const DAY = 86_400_000;
 const days = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / DAY);
-const PER_YEAR = { monthly: 12, quarterly: 4, yearly: 1, simple: 0 } as const;
+const PER_YEAR = { monthly: 12, quarterly: 4, yearly: 1, simple: 0, yearly_payout: -1 } as const;
 type Comp = keyof typeof PER_YEAR;
+const COMPS = ['quarterly', 'monthly', 'yearly', 'simple', 'yearly_payout'] as const;
 
 /** Value of `principal` after `d` days at `rate`% a year. */
 export function fdValue(principal: number, rate: number, d: number, comp: Comp = 'quarterly') {
   const t = Math.max(0, d) / 365;
-  const k = PER_YEAR[comp];
+  const k = PER_YEAR[comp] ?? 4;
+  // Post Office Time Deposit: compounded quarterly within the year, then paid out each year (not reinvested).
+  if (k === -1) return Math.round(principal * (1 + (Math.pow(1 + rate / 400, 4) - 1) * t));
   if (k === 0) return Math.round(principal * (1 + (rate / 100) * t));
   return Math.round(principal * Math.pow(1 + rate / 100 / k, k * t));
 }
@@ -33,9 +36,13 @@ export const FdInput = z.object({
   rate: z.number().min(0).max(30),
   start: ymd,
   maturity: ymd,
-  compounding: z.enum(['quarterly', 'monthly', 'yearly', 'simple']).default('quarterly'),
+  compounding: z.enum(COMPS).default('quarterly'),
+  /** Which product it is, e.g. "Post Office Time Deposit (5 yr)" or "HDFC Bank 1-year FD". */
+  scheme: z.string().trim().max(80).optional().nullable(),
   /** Pay for it from this account now (a transfer). Without it, it's added as money you already had. */
   fromAccountId: z.string().uuid().optional().nullable(),
+  /** The FD is with one of your own bank accounts (so that bank shows Savings + FD). */
+  bankAccountId: z.string().uuid().optional().nullable(),
   /** Which bank the money was transferred from (a label; set automatically when fromAccountId is used). */
   fundedFrom: z.string().trim().max(60).optional().nullable(),
   /** What the bank's receipt says you'll get at maturity, if you know it. Overrides the estimate. */
@@ -62,7 +69,7 @@ export async function createFd(sql: Sql, bookId: string, input: z.infer<typeof F
     fundedFrom = src.name;
   }
   const meta = { bank: input.bank, rate: input.rate, start: input.start, maturity: input.maturity, compounding: input.compounding, principal: input.principal,
-    fundedFrom, fundedFromAccountId: input.fromAccountId ?? null, expectedMaturity: input.expectedMaturity ?? null, note: input.note ?? null };
+    fundedFrom, fundedFromAccountId: input.fromAccountId ?? null, bankAccountId: input.bankAccountId ?? null, expectedMaturity: input.expectedMaturity ?? null, scheme: input.scheme ?? null, note: input.note ?? null };
   const id = await sql.begin(async (tx) => {
     const [acc] = await tx<{ id: string }[]>`
       insert into account (book_id, class, kind, name, institution, icon, meta)
@@ -92,8 +99,8 @@ export async function listFds(sql: Sql, bookId: string, today = todayIST()) {
       : has ? fdValue(balance, m.rate, elapsed, comp) : balance;
     return {
       id: a.id, name: a.name, bank: m.bank ?? a.institution ?? 'Other', principal: balance, rate: m.rate ?? null,
-      start: m.start ?? null, maturity: m.maturity ?? null, compounding: comp, note: m.note ?? null,
-      fundedFrom: m.fundedFrom ?? null, fundedFromAccountId: m.fundedFromAccountId ?? null,
+      start: m.start ?? null, maturity: m.maturity ?? null, compounding: comp, note: m.note ?? null, scheme: m.scheme ?? null,
+      fundedFrom: m.fundedFrom ?? null, fundedFromAccountId: m.fundedFromAccountId ?? null, bankAccountId: m.bankAccountId ?? null,
       expectedMaturity: expected, estimate, termDays: m.start && m.maturity ? days(m.start, m.maturity) : null,
       valueNow, atMaturity, interest: atMaturity !== null ? atMaturity - balance : null,
       daysLeft: m.maturity ? days(today, m.maturity) : null, matured: m.maturity ? m.maturity <= today : false,
@@ -117,7 +124,11 @@ export const FdPatch = z.object({
   rate: z.number().min(0).max(30).optional(),
   start: ymd.optional(),
   maturity: ymd.optional(),
-  compounding: z.enum(['quarterly', 'monthly', 'yearly', 'simple']).optional(),
+  compounding: z.enum(COMPS).optional(),
+  scheme: z.string().trim().max(80).optional().nullable(),
+  bankAccountId: z.string().uuid().optional().nullable(),
+  /** Take the money out of this account now: turns an "already had" FD into a transfer (dated the start date). */
+  fundFromAccountId: z.string().uuid().optional(),
   fundedFrom: z.string().trim().max(60).optional().nullable(),
   expectedMaturity: z.number().int().positive().max(1e13).optional().nullable(),
   note: z.string().trim().max(200).optional().nullable(),
@@ -134,7 +145,7 @@ export async function updateFd(sql: Sql, bookId: string, fdId: string, p: z.infe
     const m = { ...(acc.meta ?? {}) };
     const start = p.start ?? m.start, maturity = p.maturity ?? m.maturity;
     if (start && maturity && maturity <= start) throw new LedgerError('bad_dates', 'Maturity must be after the start date', 400);
-    if (p.principal !== undefined) {
+    if (p.principal !== undefined && !p.fundFromAccountId) {
       const [cur] = await tx<{ bal: string }[]>`select coalesce(sum(p.amount),0)::text as bal from posting p join txn t on t.id = p.txn_id where p.account_id = ${fdId} and t.status = 'posted'`;
       if (Number(cur.bal) !== p.principal) {
         const [other] = await tx<{ n: number }[]>`
@@ -145,10 +156,25 @@ export async function updateFd(sql: Sql, bookId: string, fdId: string, p: z.infe
         m.principal = p.principal;
       }
     }
-    for (const k of ['bank', 'rate', 'start', 'maturity', 'compounding', 'fundedFrom', 'expectedMaturity', 'note'] as const) {
+    for (const k of ['bank', 'rate', 'start', 'maturity', 'compounding', 'fundedFrom', 'expectedMaturity', 'scheme', 'note', 'bankAccountId'] as const) {
       if (p[k] !== undefined) m[k] = p[k];
     }
-    if (p.fundedFrom !== undefined) m.fundedFromAccountId = null;
+    if (p.fundedFrom !== undefined && !p.fundFromAccountId) m.fundedFromAccountId = null;
+    if (p.fundFromAccountId) {
+      const [other] = await tx<{ n: number }[]>`
+        select count(*)::int as n from posting p join txn t on t.id = p.txn_id
+        where p.account_id = ${fdId} and t.kind <> 'opening' and t.status = 'posted'`;
+      if (other.n > 0) throw new LedgerError('already_funded', 'This FD is already paid for by a transfer.', 400);
+      const [src] = await tx<{ name: string; kind: string }[]>`select name, kind from account where id = ${p.fundFromAccountId} and book_id = ${bookId} and class = 'asset'`;
+      if (!src || src.kind === 'fd') throw new LedgerError('account_not_found', 'Pick a bank, cash or wallet account', 400);
+      const [cur] = await tx<{ bal: string }[]>`select coalesce(sum(p.amount),0)::text as bal from posting p join txn t on t.id = p.txn_id where p.account_id = ${fdId} and t.status = 'posted'`;
+      const amount = p.principal ?? Number(cur.bal);
+      await setOpeningBalance(tx, bookId, fdId, 0, addDays(start ?? todayIST(), -1));
+      const s0 = start ?? todayIST();
+      await createRawTxn(tx, bookId, { kind: 'transfer', date: s0 > todayIST() ? todayIST() : s0, merchant: `${m.bank ?? acc.institution ?? ''} FD`.trim(), source: 'system',
+        postings: [{ accountId: p.fundFromAccountId, amount: -amount }, { accountId: fdId, amount }] }, 'user');
+      m.fundedFrom = src.name; m.fundedFromAccountId = p.fundFromAccountId; m.principal = amount;
+    }
     let name = acc.name as string;
     if (p.name && p.name !== acc.name) {
       const [dup] = await tx`select 1 from account where book_id = ${bookId} and kind = 'fd' and lower(name) = lower(${p.name}) and id <> ${fdId}`;

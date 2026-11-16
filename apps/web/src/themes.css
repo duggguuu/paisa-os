@@ -794,3 +794,10 @@ p.tiny, .tiny.faint { line-height: 1.5; }
 .fd-return{margin:4px 0 16px;padding:14px 16px;border-radius:14px;background:var(--surface-2, var(--surface-3));border:1px solid var(--border, transparent)}
 .fd-return-head{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);margin-bottom:8px}
 .fd-return-row{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:3px 0}
+.link-btn{border:0;background:none;padding:0;color:var(--accent);font:inherit;cursor:pointer;text-decoration:underline}
+.bank-split{margin:10px 0 8px;display:grid;gap:6px;font-size:13.5px}
+.bank-split > *{display:flex;justify-content:space-between;gap:10px;color:inherit;text-decoration:none}
+.bank-split .total{border-top:1px solid var(--border);padding-top:6px;font-weight:600}
+.delete-warn{padding:12px 14px;border-radius:14px;background:color-mix(in srgb, var(--exp, #d33) 10%, transparent);margin-bottom:16px;font-size:14px}
+.delete-warn ul{margin:6px 0 0;padding-left:18px}
+.delete-warn li{margin:3px 0}

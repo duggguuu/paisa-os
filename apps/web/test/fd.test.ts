@@ -36,3 +36,17 @@ test('FD bank matching and tenure rates', () => {
   assert.equal(rateFor(hdfc, 36).rate, 6.55);
   assert.equal(rateFor(hdfc, 60).rate, 6.6);
 });
+
+test('FD scheme options: Post Office schemes and bank tenures; PostBank means Post Office', async () => {
+  const { rateOptions, findBank, maturityValue } = await import('../src/fd-math.ts');
+  const table: any = { asOf: '2026-11-11', source: 'x', sourceUrl: 'x', live: false,
+    banks: [{ bank: 'Post Office', highest: 7.5, y1: 6.9, y2: 7.0, y3: 7.1, y5: 7.5 }, { bank: 'HDFC Bank', highest: 6.6, y1: 6.25, y3: 6.55, y5: 6.6 }],
+    schemes: [{ id: 'po-td-5', institution: 'Post Office', name: 'Time Deposit (5 yr)', short: 'TD 5 yr', rate: 7.5, months: 60, compounding: 'yearly_payout', note: '' }] };
+  assert.equal(findBank(table, 'PostBank')?.bank, 'Post Office');
+  const po = rateOptions(table, findBank(table, 'PostBank'));
+  assert.equal(po[0].scheme, 'Post Office Time Deposit (5 yr)');
+  assert.equal(po[0].compounding, 'yearly_payout');
+  const h = rateOptions(table, findBank(table, 'HDFC Bank'));
+  assert.deepEqual(h.map((o) => o.id), ['y1', 'y2', 'y3', 'y5']);
+  assert.equal(maturityValue(1_00_000_00, 7.5, 5 * 365, 'yearly_payout'), 1_38_567_93);
+});
