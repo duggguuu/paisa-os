@@ -188,7 +188,7 @@ export async function runTool(sql: Sql, bookId: string, name: string, input: any
       return {
         holdings_synced_at: h[0]?.taken_at ?? null,
         holdings: h.map((x) => ({ name: x.instrument, type: x.asset_type, quantity: x.quantity, avg_price: x.avg_price, last_price: x.last_price, value_rupees: rs(x.value_paise), invested_rupees: rs(x.cost_paise), gain_rupees: rs(Number(x.value_paise) - Number(x.cost_paise)), gain_pct: Number(x.cost_paise) ? Math.round(((Number(x.value_paise) - Number(x.cost_paise)) / Number(x.cost_paise)) * 1000) / 10 : null })),
-        fixed_deposits: fds.banks.flatMap((b) => b.items).map((f) => ({ name: f.name, bank: f.bank, principal_rupees: rs(f.principal), rate_pct: f.rate, start: f.start, maturity: f.maturity, value_today_rupees: rs(f.valueNow), at_maturity_rupees: rs(f.atMaturity), matured: f.matured })),
+        fixed_deposits: fds.banks.flatMap((b) => b.items).map((f) => ({ name: f.name, bank: f.bank, principal_rupees: rs(f.principal), rate_pct: f.rate, start: f.start, maturity: f.maturity, value_today_rupees: rs(f.valueNow), at_maturity_rupees: rs(f.atMaturity), maturity_is_bank_figure: f.expectedMaturity != null, funded_from: f.fundedFrom, matured: f.matured })),
         fd_totals_rupees: { principal: rs(fds.totals.principal), value_today: rs(fds.totals.valueNow), at_maturity: rs(fds.totals.atMaturity) },
       };
     }

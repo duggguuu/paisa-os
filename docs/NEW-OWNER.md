@@ -201,7 +201,7 @@ Do these once, in this order:
    - Tap **+**, or speak: tap the mic and say *"spent 450 on Swiggy from ICICI card yesterday"*.
    - Or tap 📷 to scan a bill or receipt.
 6. **Zerodha (optional).** To see your stocks and mutual funds at market value, go to **Settings → Zerodha (Kite)**. It needs your own Kite Connect app from developers.kite.trade (Zerodha may charge for it); Settings shows the exact **redirect URL** to give that app. Then tap **Accounts → Holdings → Log in & sync** about once a day. Paisa only reads your holdings; it can't place orders.
-7. **Optional extras:** **Budget Planner**, **Goals**, **Bills & recurring**, **Owe & owed** (money you've lent, borrowed, or that friends owe you), **FDs** and **Splitwise** (import its exports or screenshots).
+7. **Optional extras:** **Budget Planner**, **Goals**, **Bills & recurring**, **Owe & owed** (money you've lent, borrowed, or that friends owe you), **FDs** and **Splitwise** (import its exports or screenshots). In FDs you note which bank the FD is in and which account the money came from, set the duration (years, months, days), and see the expected return; the app suggests today's rate for that bank and tenure, and **Compare rates** lists banks side by side. If your FD receipt shows the maturity amount, type it in and the app uses that figure. Tap an FD to edit it.
 
 **Only salary counts as income.** Money coming in that isn't earnings (a friend paying you back, money from family, refunds) goes under **"Money in (not income)"**. It still shows in your balances; it just isn't counted as earnings. At the bottom of **Salary & tax** you can review your incoming money and move anything that isn't earnings out of income, using **Select all** to do several at once.
 

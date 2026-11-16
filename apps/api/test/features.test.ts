@@ -539,6 +539,64 @@ test('FDs: grouped by bank, maturity value, maturing pays principal + interest i
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
 
+test('FDs: funded-from bank, bank\'s maturity amount, editing, and the rate table', async () => {
+  // Already-had FD, labelled with where the money came from and the bank's own maturity figure.
+  let r = await req('POST', '/api/fds', { bank: 'HDFC Bank', principal: 2_00_000_00, rate: 6.6, start: '2026-02-01', maturity: '2027-05-01', fundedFrom: 'Kotak savings', expectedMaturity: 2_16_400_00 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const hid = r.body.id;
+  let f = (await req('GET', '/api/fds')).body.banks.flatMap((b: any) => b.items).find((x: any) => x.id === hid);
+  assert.equal(f.fundedFrom, 'Kotak savings');
+  assert.equal(f.atMaturity, 2_16_400_00, 'bank figure wins over the estimate');
+  assert.ok(f.estimate > 2_00_000_00 && f.estimate !== f.atMaturity);
+  assert.equal(f.interest, 16_400_00);
+  assert.ok(f.valueNow >= f.principal && f.valueNow <= f.atMaturity);
+  // Paid by transfer: the source account's name is recorded automatically.
+  r = await req('POST', '/api/fds', { bank: 'Axis Bank', principal: 10_000_00, rate: 6.25, start: today, maturity: '2027-12-01', fromAccountId: A['SBI'].id });
+  const tid = r.body.id;
+  f = (await req('GET', '/api/fds')).body.banks.flatMap((b: any) => b.items).find((x: any) => x.id === tid);
+  assert.equal(f.fundedFrom, 'SBI');
+  assert.equal(f.fundedFromAccountId, A['SBI'].id);
+  // Edit: rename, new rate/tenure, clear the bank figure, change the amount (allowed: opening balance).
+  r = await req('PATCH', `/api/fds/${hid}`, { name: 'HDFC 15-month', rate: 6.75, maturity: '2027-08-01', expectedMaturity: null, principal: 2_50_000_00, fundedFrom: 'ICICI salary' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  f = (await req('GET', '/api/fds')).body.banks.flatMap((b: any) => b.items).find((x: any) => x.id === hid);
+  assert.equal(f.name, 'HDFC 15-month');
+  assert.equal(f.principal, 2_50_000_00);
+  assert.equal(f.rate, 6.75);
+  assert.equal(f.maturity, '2027-08-01');
+  assert.equal(f.expectedMaturity, null);
+  assert.equal(f.atMaturity, f.estimate);
+  assert.equal(f.fundedFrom, 'ICICI salary');
+  // A transfer-funded FD's amount can't be changed here (the transfer is the record) but other fields can.
+  r = await req('PATCH', `/api/fds/${tid}`, { principal: 12_000_00 });
+  assert.equal(r.status, 400);
+  r = await req('PATCH', `/api/fds/${tid}`, { principal: 10_000_00, note: 'auto-renew off' });
+  assert.equal(r.status, 200, 'same amount is fine');
+  r = await req('PATCH', `/api/fds/${tid}`, { maturity: '2020-01-01' });
+  assert.equal(r.status, 400, 'maturity before start');
+  // Rates: the test server can't reach the site, so the bundled table is served.
+  const rates = (await req('GET', '/api/fds/rates')).body;
+  assert.equal(rates.live, false);
+  assert.ok(rates.banks.length > 30);
+  assert.ok(rates.banks.some((b: any) => b.bank === 'HDFC Bank' && b.y1 > 0));
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
+
+test('FD rate page parser reads bank rows and the as-of date', async () => {
+  const { parseRates } = await import('../src/fd-rates.js');
+  const row = (n: string, a: string, b: string, c: string, d: string) => `<tr><td><a href="x">${n}</a></td><td>${a}</td><td>${b}</td><td>${c}</td><td>${d}</td></tr>`;
+  const banks = Array.from({ length: 16 }, (_, i) => row(`Bank ${i}`, '7.00', '6.50', '6.75', '6.60')).join('');
+  const html = `<table>${row('HDFC Bank', '6.60', '6.25', '6.55', '6.60')}${row('Induslnd Bank', '7.25', '6.75', '7.25', '6.65')}${banks}
+    <tr><td>Tax saver</td><td>6.40%</td><td>6.90%</td></tr></table><i>Fixed deposit rates as of 3 December 2026</i>`;
+  const t = parseRates(html)!;
+  assert.equal(t.asOf, '2026-12-03');
+  assert.ok(t.live);
+  assert.deepEqual(t.banks.find((b) => b.bank === 'HDFC Bank'), { bank: 'HDFC Bank', highest: 6.6, y1: 6.25, y3: 6.55, y5: 6.6 });
+  assert.ok(t.banks.some((b) => b.bank === 'IndusInd Bank'), 'typo on the page is fixed');
+  assert.ok(t.banks.some((b) => b.bank === 'Post Office'));
+  assert.equal(parseRates('<table>' + row('Only', '1', '1', '1', '1') + '</table>'), null, 'too few rows: not trusted');
+});
+
 test('interest-only loan: payment is all interest, principal stays; a loan can be corrected', async () => {
   let r = await req('POST', '/api/loans', { lender: 'Lender B', name: 'Personal Loan', type: 'interest_only', amount: 20_00_000_00, rate: 12, emi: 19_000_00, emiDay: 5, fromAccountId: A['SBI'].id });
   assert.equal(r.status, 200, JSON.stringify(r.body));

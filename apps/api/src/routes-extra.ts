@@ -15,6 +15,7 @@ import * as copilot from './copilot.js';
 import * as stuff from './stuff.js';
 import * as debts from './debts.js';
 import * as fds from './fds.js';
+import * as fdRates from './fd-rates.js';
 import * as salary from './salary.js';
 import { todayIST } from './money.js';
 
@@ -184,6 +185,8 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
   // Fixed deposits, grouped by bank
   api.get('/api/fds', async (req) => fds.listFds(sql, B(req)));
   api.post('/api/fds', async (req) => fds.createFd(sql, B(req), fds.FdInput.parse(req.body)));
+  api.get('/api/fds/rates', async () => fdRates.getRates(ctx.fetch ?? fetch));
+  api.patch('/api/fds/:id', async (req) => fds.updateFd(sql, B(req), P(req), fds.FdPatch.parse(req.body)));
   api.post('/api/fds/:id/mature', async (req) => fds.matureFd(sql, B(req), (req.params as any).id, fds.MatureInput.parse(req.body)));
 
   // Budget planner + financial health
