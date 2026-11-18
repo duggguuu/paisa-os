@@ -96,7 +96,7 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
     if (day === 25) exp(d, 5_000, 'Family/Parents', 'axis', 'Mom', 'Sent home');
     if (dow === 0 || dow === 3) exp(d, between(600, 2_400), 'Food/Groceries', pick(['hdfc', 'card', 'axis']), pick(['BigBasket', 'Zepto', 'Blinkit', 'Nature\'s Basket']));
     if (r() < 0.45) exp(d, between(180, 950), 'Food/Delivery', pick(['card', 'axis', 'paytm']), pick(['Swiggy', 'Zomato']));
-    if (r() < 0.22) exp(d, between(350, 2_200), 'Food/Dining out', pick(['card', 'hdfc']), pick(['Barbeque Nation', 'Truffles', 'Meghana Foods', 'Toit', 'Empire']));
+    if (r() < 0.22) exp(d, between(350, 2_200), 'Food/Dining out', pick(['card', 'hdfc']), pick(['Barbeque Nation', 'Truffles', 'Meghana Foods', 'Mainland China', 'Empire']));
     if (r() < 0.3) exp(d, between(180, 450), 'Coffee/Orders', pick(['card', 'paytm']), pick(['Third Wave Coffee', 'Blue Tokai', 'Starbucks', 'Subko']));
     if (r() < 0.04) exp(d, between(650, 1_400), 'Coffee/Beans', pick(['card', 'hdfc']), pick(['Blue Tokai beans', 'Subko beans', 'KC Roasters']));
     if (r() < 0.5) exp(d, between(60, 420), 'Transport/Cab & auto', pick(['paytm', 'axis', 'cash']), pick(['Uber', 'Ola', 'Rapido', 'Namma Yatri']));
