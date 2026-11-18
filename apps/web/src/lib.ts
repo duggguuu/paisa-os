@@ -1,4 +1,5 @@
 /** API client, money formatting and small shared helpers. */
+import { canQueue, enqueue } from './offline';
 
 export type BookMode = 'real' | 'demo';
 
@@ -30,12 +31,21 @@ export function forgetUnlockKey() {
 export const authHeaders = (): Record<string, string> => ({ 'x-book': bookMode, 'x-unlock': unlockKey() });
 
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
-  const res = await fetch(path, {
-    method: opts.method ?? 'GET',
-    credentials: 'same-origin',
-    headers: { ...authHeaders(), ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}) },
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  });
+  const method = opts.method ?? 'GET';
+  // Offline: a new transaction is kept on the device and sent when you're back online.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false && canQueue(method, path)) return { id: null, queued: true, ...enqueue(path, method, opts.body) } as T;
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      credentials: 'same-origin',
+      headers: { ...authHeaders(), ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}) },
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch {
+    if (canQueue(method, path)) return { id: null, queued: true, ...enqueue(path, method, opts.body) } as T;
+    throw new ApiError(0, 'offline', "You're offline. This needs an internet connection.");
+  }
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (res.ok && typeof data?.unlockKey === 'string') { try { sessionStorage.setItem(UNLOCK, data.unlockKey); } catch { /* private mode */ } }

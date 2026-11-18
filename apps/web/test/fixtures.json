@@ -330,8 +330,8 @@
    "parent_id": null
   },
   {
-   "id": "Snacks & coffee",
-   "name": "Snacks & coffee",
+   "id": "Snacks",
+   "name": "Snacks",
    "class": "expense",
    "parent_id": null
   },
@@ -424,6 +424,30 @@
    "name": "Other",
    "class": "expense",
    "parent_id": null
+  },
+  {
+   "id": "Coffee",
+   "name": "Coffee",
+   "class": "expense",
+   "parent_id": null
+  },
+  {
+   "id": "Beans",
+   "name": "Beans",
+   "class": "expense",
+   "parent_id": "Coffee"
+  },
+  {
+   "id": "Equipment",
+   "name": "Equipment",
+   "class": "expense",
+   "parent_id": "Coffee"
+  },
+  {
+   "id": "Orders",
+   "name": "Orders",
+   "class": "expense",
+   "parent_id": "Coffee"
   }
  ]
 }

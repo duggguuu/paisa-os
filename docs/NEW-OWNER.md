@@ -205,6 +205,12 @@ Do these once, in this order:
 
 **Widgets:** on Home, the **Widgets** section → **Edit** lets you pick tiles (safe to spend, this month, net worth, budget, bills, FDs, goals, top spending), make each small, medium or large, and reorder them. For your iPhone home screen and Lock Screen, go to **Settings → Widgets → Set up iPhone widgets** and follow the steps; it uses the free Scriptable app.
 
+**Zerodha:** money you add to Kite, and mutual funds bought straight from your bank (Coin or a SIP), are **transfers** from your bank to Zerodha, not spending. Accounts → Holdings has buttons for both, plus **Withdraw to bank**, and shows your **unused funds in Kite** after each sync.
+
+**Offline:** once you've opened Paisa with internet, it opens without a connection too and shows your last-saved data. New entries you add offline are kept on the phone and sent when you're back online (the strip at the top shows how many are waiting). If the app lock is on, offline it unlocks with Face ID or your PIN, as long as you've used that once on this phone while online.
+
+**Coffee** has its own category (Beans, Equipment, Orders and more).
+
 **Deleting an account:** Accounts → tap the account → **Delete account**. You'll see what goes with it, then enter your app PIN (or your password if you haven't set a PIN). **Hide** is the safer choice: it keeps the history.
 
 **Only salary counts as income.** Money coming in that isn't earnings (a friend paying you back, money from family, refunds) goes under **"Money in (not income)"**. It still shows in your balances; it just isn't counted as earnings. At the bottom of **Salary & tax** you can review your incoming money and move anything that isn't earnings out of income, using **Select all** to do several at once.

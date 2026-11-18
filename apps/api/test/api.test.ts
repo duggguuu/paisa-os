@@ -18,6 +18,7 @@ const fakeKite: typeof fetch = async (input: any, init?: any) => {
   const ok = (data: unknown) => new Response(JSON.stringify({ status: 'success', data }), { status: 200 });
   if (u.endsWith('/session/token')) return ok({ access_token: 'tok_123', user_id: 'AB1234' });
   if (u.endsWith('/portfolio/holdings')) return ok([{ tradingsymbol: 'NIFTYBEES', isin: 'INF204KB14I2', quantity: 100, t1_quantity: 0, average_price: 250, last_price: 270.5 }]);
+  if (u.endsWith('/user/margins')) return ok({ equity: { net: 5000, available: { cash: 4200.5, live_balance: 4200.5 } }, commodity: { net: 0 } });
   if (u.endsWith('/mf/holdings')) return ok([{ fund: 'Flexi Cap Fund - Direct', tradingsymbol: 'INF879O01027', quantity: 10.5, average_price: 80, last_price: 89.2332 }]);
   return new Response('{}', { status: 404 });
 };
@@ -118,12 +119,14 @@ test('Kite: link, login callback, sync holdings into snapshots (read-only endpoi
   assert.equal(k.holdings.length, 2);
   const nifty = k.holdings.find((h: any) => h.instrument === 'NIFTYBEES');
   assert.equal(nifty.value_paise, 27_050_00);
-  assert.deepEqual(calls, ['POST /session/token', 'GET /portfolio/holdings', 'GET /mf/holdings']);
+  assert.deepEqual(calls, ['POST /session/token', 'GET /portfolio/holdings', 'GET /mf/holdings', 'GET /user/margins']);
+  assert.equal(k.unusedFunds, 4_200_50, 'unused Kite funds');
+  assert.ok(!k.holdings.some((h: any) => h.asset_type === 'cash'), 'funds are shown apart from holdings');
   const [secret] = await sql<{ api_secret_enc: string; access_token_enc: string }[]>`select api_secret_enc, access_token_enc from kite_link`;
   assert.ok(!secret.api_secret_enc.includes('kitesecret456') && !secret.access_token_enc.includes('tok_123'), 'secrets are encrypted at rest');
   const nw = (await req('GET', '/api/networth')).body;
   const zerodha = nw.accounts.find((a: any) => a.name === 'Zerodha');
-  assert.equal(zerodha.balance, 27_050_00 + Math.round(10.5 * 89.2332 * 100));
+  assert.equal(zerodha.balance, 27_050_00 + Math.round(10.5 * 89.2332 * 100) + 4_200_50, 'value = holdings + unused funds');
 });
 
 test('logout ends the session', async () => {

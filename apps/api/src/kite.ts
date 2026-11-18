@@ -83,6 +83,17 @@ export async function syncHoldings(sql: Sql, cipher: Cipher, bookId: string, f: 
     mfError = e.message; // Some Personal apps can't read MF holdings; equity still syncs.
   }
 
+  // Unused funds: cash sitting in the Kite account, not yet invested (equity segment, today's live balance).
+  let funds: number | null = null;
+  try {
+    const m = await kiteCall(f, '/user/margins', opts);
+    const eq = m?.equity;
+    const v = Number(eq?.available?.live_balance ?? eq?.available?.cash ?? eq?.net);
+    if (Number.isFinite(v)) funds = v;
+  } catch (e: any) {
+    if (e.code === 'kite_login_required') throw e;
+  }
+
   const accountId = await zerodhaAccount(sql, bookId);
   const takenAt = new Date().toISOString();
   const rows = [
@@ -100,6 +111,8 @@ export async function syncHoldings(sql: Sql, cipher: Cipher, bookId: string, f: 
       value_paise: toPaise(Number(h.quantity ?? 0) * Number(h.last_price ?? 0)),
     })),
   ].filter((r) => r.quantity > 0);
+  // Stored as one 'cash' row so the account's value = holdings + unused funds.
+  if (funds !== null && funds > 0) rows.push({ instrument: 'Unused funds', isin: null, asset_type: 'cash', quantity: 1, avg_price: funds, last_price: funds, value_paise: toPaise(funds) });
 
   await sql.begin(async (tx) => {
     for (const r of rows) {
@@ -108,7 +121,7 @@ export async function syncHoldings(sql: Sql, cipher: Cipher, bookId: string, f: 
     }
     await audit(tx, bookId, 'holdings', accountId, 'sync', null, { count: rows.length, takenAt, mfError }, 'kite');
   });
-  return { accountId, takenAt, equityCount: rows.filter((r) => r.asset_type === 'equity').length, mfCount: rows.filter((r) => r.asset_type === 'mf').length, mfError };
+  return { accountId, takenAt, equityCount: rows.filter((r) => r.asset_type === 'equity').length, mfCount: rows.filter((r) => r.asset_type === 'mf').length, mfError, fundsPaise: funds !== null ? toPaise(funds) : null };
 }
 
 /** Latest snapshot per investment account. */

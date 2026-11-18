@@ -3,6 +3,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { NavLink, Route, Routes, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, getBook, setBook } from './lib';
+import { offlineUser, offlineUnlocked, rememberUser } from './offline';
+import { OfflineBar, OfflineLock, useOnline } from './components/Offline';
 import { Login } from './pages/Login';
 import { Home } from './pages/Home';
 import { Activity } from './pages/Activity';
@@ -44,6 +46,12 @@ export function App() {
   const qc = useQueryClient();
   // staleTime 0: re-checked whenever the app comes back to the foreground, so the lock shows straight away.
   const status = useQuery({ queryKey: ['auth'], queryFn: () => api('/api/auth/status'), staleTime: 0 });
+  const online = useOnline();
+  const [, rerender] = useState(0);
+  useEffect(() => { if (status.data?.user) rememberUser(status.data.user); }, [status.data]);
+  // Offline (or the server can't be reached) and nothing fresh from the server: use what's on this device.
+  const unreachable = !status.data && (!online || status.fetchStatus === 'paused' || (status.isError && (status.error as any)?.status === 0));
+  const me = unreachable ? offlineUser() : null;
   useEffect(() => {
     const locked = () => qc.invalidateQueries({ queryKey: ['auth'] });
     window.addEventListener('paisa:locked', locked);
@@ -51,13 +59,18 @@ export function App() {
   }, [qc]);
   // Hide the splash (index.html) once we know where to go; keep it up at least briefly so it doesn't flash.
   useEffect(() => {
-    if (status.isLoading) return;
+    if (status.isLoading && !unreachable) return;
     const el = document.getElementById('splash');
     if (!el) return;
     const shownFor = performance.now();
     const t = setTimeout(() => { el.classList.add('done'); setTimeout(() => el.remove(), 400); }, Math.max(0, 700 - shownFor));
     return () => clearTimeout(t);
-  }, [status.isLoading]);
+  }, [status.isLoading, unreachable]);
+  if (unreachable) {
+    if (!me) return <div className="main"><p className="error" style={{ marginTop: 40 }}>You're offline. Open Paisa once with internet on this device, and after that it works offline too.</p></div>;
+    if (me.lockEnabled && !offlineUnlocked()) return <OfflineLock user={me} onUnlocked={() => rerender((n) => n + 1)} />;
+    return <Shell />;
+  }
   if (status.isLoading) return null;
   if (status.isError) return <div className="main"><p className="error">Can't reach the server. Check your connection and reload.</p></div>;
   if (!status.data.user) return <Login setupNeeded={status.data.setupNeeded} passkeyLogin={status.data.passkeyLogin} />;
@@ -80,6 +93,12 @@ function Shell() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [add, setAdd] = useState<QuickAddPreset | null>(null);
+  // Load what "Add transaction" needs up front, so it's saved on the device and works offline too.
+  useEffect(() => {
+    if (!navigator.onLine) return;
+    qc.prefetchQuery({ queryKey: ['accounts'], queryFn: () => api<any[]>('/api/accounts') });
+    qc.prefetchQuery({ queryKey: ['categories'], queryFn: () => api<any[]>('/api/categories') });
+  }, [qc]);
   // A daily reminder opens the app with ?add=1: go straight to "Add transaction".
   useEffect(() => {
     const p = new URLSearchParams(loc.search);
@@ -139,6 +158,7 @@ function Shell() {
           <div className="foot">{book === 'demo' ? 'Viewing sample data' : 'Your private ledger'}</div>
         </nav>
         <main className="main">
+          <OfflineBar />
           {book === 'demo' && (
             <div className="banner warn">
               <span>You're viewing <b>sample data</b>. Nothing here is real.</span>

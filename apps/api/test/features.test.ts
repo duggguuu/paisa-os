@@ -688,6 +688,52 @@ test('widgets: Home tiles saved per user; view-only link for iPhone widgets', as
   assert.equal((await req('GET', '/api/widgets')).body.link.hideAmounts, true, 'setting kept');
 });
 
+test('coffee: its own category; migration 011 moves coffee out of Food and other categories', async () => {
+  let cats = (await req('GET', '/api/categories')).body;
+  const under = (parent: string) => cats.filter((c: any) => cats.find((p: any) => p.id === c.parent_id)?.name === parent).map((c: any) => c.name);
+  const top = (name: string) => cats.find((c: any) => c.name === name && !c.parent_id);
+  assert.ok(top('Coffee'), 'Coffee category');
+  assert.ok(['Beans', 'Equipment', 'Orders'].every((n) => under('Coffee').includes(n)));
+  assert.ok(under('Food').includes('Snacks') && !under('Food').some((n: string) => /coffee/i.test(n)), 'no coffee under Food');
+  // Simulate an older book: coffee under Food, a café-named category, entries at coffee places.
+  const food = top('Food');
+  const id = async (name: string, parentId: string | null) => (await req('POST', '/api/categories', { name, class: 'expense', ...(parentId ? { parentId } : {}) })).body.id;
+  const snack = cats.find((c: any) => c.name === 'Snacks' && c.parent_id === food.id).id;
+  await sql`update account set name = 'Snacks & coffee' where id = ${snack}`;
+  const cafeTop = await id('Cafés', null);
+  const cafeSub = await id('Weekend brunch', cafeTop);
+  const dining = cats.find((c: any) => c.name === 'Dining out' && c.parent_id === food.id).id;
+  const sh = top('Shopping');
+  const online = cats.find((c: any) => c.name === 'Online orders' && c.parent_id === sh.id).id;
+  const add = async (categoryId: string, merchant: string) => (await req('POST', '/api/txns', { kind: 'expense', amount: 300_00, accountId: A['SBI'].id, categoryId, date: today, merchant })).body.id;
+  const t1 = await add(dining, 'Third Wave Coffee');
+  const t2 = await add(dining, 'Meghana Foods');
+  const t3 = await add(online, 'Blue Tokai');
+  const t4 = await add(cafeSub, 'Brunch place');
+  const t5 = await add(snack, 'Chai point');
+  const t6 = await add(online, 'Amazon coffee grinder');
+  const m011 = fs.readFileSync(new URL('../../../db/migrations/011_coffee_and_kite_funds.sql', import.meta.url), 'utf8');
+  await sql.unsafe(m011);
+  await sql.unsafe(m011);  // twice: nothing duplicated or broken
+  cats = (await req('GET', '/api/categories')).body;
+  const catOf = async (t: string) => {
+    const x = (await req('GET', `/api/txns/${t}`)).body;
+    const c = x.postings.find((p: any) => p.kind === 'category');
+    const cat = cats.find((k: any) => k.id === c.account_id);
+    return `${cats.find((k: any) => k.id === cat.parent_id)?.name}/${cat.name}`;
+  };
+  assert.equal(await catOf(t1), 'Coffee/Orders');
+  assert.equal(await catOf(t2), 'Food/Dining out', 'not a coffee place');
+  assert.equal(await catOf(t3), 'Coffee/Beans');
+  assert.equal(await catOf(t4), 'Coffee/Orders', 'café-named category folded in');
+  assert.equal(await catOf(t5), 'Food/Snacks');
+  assert.equal(await catOf(t6), 'Coffee/Equipment');
+  assert.ok(!cats.some((c: any) => /caf[eé]/i.test(c.name)), 'café categories removed');
+  assert.equal(cats.filter((c: any) => c.name === 'Coffee' && !c.parent_id).length, 1);
+  assert.equal(under('Coffee').filter((n: string) => n === 'Orders').length, 1);
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
+
 test('FD rate page parser reads bank rows and the as-of date', async () => {
   const { parseRates } = await import('../src/fd-rates.js');
   const row = (n: string, a: string, b: string, c: string, d: string) => `<tr><td><a href="x">${n}</a></td><td>${a}</td><td>${b}</td><td>${c}</td><td>${d}</td></tr>`;

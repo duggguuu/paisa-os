@@ -15,6 +15,8 @@ export interface QuickAddPreset {
   voice?: boolean; // start listening as soon as the sheet opens
   /** Pre-filled values (e.g. drafted by the copilot); nothing is saved until the owner taps Save. */
   draft?: { kind: 'expense' | 'income'; amount: number; categoryId: string; accountId: string; date: string; merchant: string | null; note: string | null };
+  /** Start a transfer between two accounts (e.g. bank → Zerodha), with a label. */
+  transfer?: { fromAccountId?: string | null; toAccountId?: string | null; merchant?: string; note?: string };
 }
 
 type Kind = 'expense' | 'income' | 'transfer';
@@ -34,6 +36,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
 
   const draft = preset.draft;
   const initial = useMemo(() => {
+    if (!edit && preset.transfer) return { kind: 'transfer' as Kind, amount: '', categoryId: null, accountId: preset.transfer.fromAccountId ?? lastAccount(), toAccountId: preset.transfer.toAccountId ?? null };
     if (!edit && draft) return { kind: draft.kind as Kind, amount: String(draft.amount / 100), categoryId: draft.categoryId, accountId: draft.accountId, toAccountId: null };
     if (!edit) return null;
     const ps = edit.postings as any[];
@@ -51,12 +54,12 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
 
   const [kind, setKind] = useState<Kind>(initial?.kind ?? preset.kind ?? 'expense');
   const [amount, setAmount] = useState(initial?.amount ?? '');
-  const [merchant, setMerchant] = useState(edit?.merchant ?? draft?.merchant ?? '');
+  const [merchant, setMerchant] = useState(edit?.merchant ?? draft?.merchant ?? preset.transfer?.merchant ?? '');
   const [categoryId, setCategoryId] = useState<string | null>(initial?.categoryId ?? null);
   const [accountId, setAccountId] = useState<string | null>(initial?.accountId ?? null);
   const [toAccountId, setToAccountId] = useState<string | null>(initial?.toAccountId ?? null);
   const [date, setDate] = useState<string>(edit?.date ?? draft?.date ?? todayIST());
-  const [note, setNote] = useState(edit?.note ?? draft?.note ?? '');
+  const [note, setNote] = useState(edit?.note ?? draft?.note ?? preset.transfer?.note ?? '');
   const [splitWith, setSplitWith] = useState<string[]>([]);
   const [touched, setTouched] = useState({ category: !!initial, account: !!initial });
   const [error, setError] = useState<string | null>(null);
@@ -193,8 +196,14 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
 
     setSaving(true);
     try {
-      const res = await api<{ id: string }>(edit ? `/api/txns/${edit.id}` : '/api/txns', { method: edit ? 'PUT' : 'POST', body });
+      const res = await api<{ id: string; queued?: boolean }>(edit ? `/api/txns/${edit.id}` : '/api/txns', { method: edit ? 'PUT' : 'POST', body });
       try { localStorage.setItem('paisa.lastAccount', accountId); } catch { /* ignore */ }
+      if (res.queued) {
+        // Offline: don't wait for a refresh that can't happen yet.
+        onClose(); savedCheck();
+        toast(`Saved on this phone · ${money(paise)}. It will sync when you're online.`);
+        return;
+      }
       await qc.invalidateQueries();
       onClose();
       savedCheck();

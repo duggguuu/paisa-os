@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { startAuthentication, startRegistration, browserSupportsWebAuthn, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
 import { api, forgetUnlockKey } from '../lib';
 import { Icon } from './Icons';
+import { forgetOffline, rememberPasskey, rememberPin } from '../offline';
 
 /** Friendly message for the ways a Face ID prompt can fail. */
 function faceIdError(e: any): string {
@@ -85,6 +86,7 @@ export function LockScreen({ email }: { email?: string }) {
       const optionsJSON = await o.take();          // instant when prefetched: keeps Safari's tap window
       const response = await startAuthentication({ optionsJSON });
       await api('/api/auth/unlock/verify', { method: 'POST', body: { response } });
+      rememberPasskey(response.id);   // so Face ID also unlocks offline on this device
       await done();
     } catch (e: any) { setErr(faceIdError(e)); o.reload(); }
     finally { setBusy(false); }
@@ -94,6 +96,7 @@ export function LockScreen({ email }: { email?: string }) {
     setErr(null); setBusy(true);
     try {
       await api(method === 'pin' ? '/api/auth/unlock/pin' : '/api/auth/unlock/password', { method: 'POST', body: method === 'pin' ? { pin: value } : { password: value } });
+      if (method === 'pin') await rememberPin(value);   // the same PIN unlocks offline on this device
       await done();
     } catch (e: any) {
       setSecret('');
@@ -133,7 +136,7 @@ export function LockScreen({ email }: { email?: string }) {
       <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
         {others.map((m) => <button key={m} className="btn small" onClick={() => switchTo(m)}>{label[m]}</button>)}
       </div>
-      <button className="btn small" style={{ marginTop: 4 }} onClick={async () => { await api('/api/auth/logout', { method: 'POST' }); forgetUnlockKey(); window.location.href = '/'; }}>Log out instead</button>
+      <button className="btn small" style={{ marginTop: 4 }} onClick={async () => { await api('/api/auth/logout', { method: 'POST' }); forgetUnlockKey(); await forgetOffline(); window.location.href = '/'; }}>Log out instead</button>
     </div>
   );
 }
@@ -154,6 +157,7 @@ function PinSettings({ pin }: { pin: { length: number; blocked: boolean } | null
     if (p1 !== p2) return setErr("The two PINs don't match");
     try {
       await api('/api/security/pin', { method: 'PUT', body: { pin: p1, password } });
+      await rememberPin(p1);
       setP1(''); setP2(''); setPassword(''); setOpen(false); setMsg('PIN saved');
       await qc.invalidateQueries({ queryKey: ['auth'] });
     } catch (e: any) { setErr(e.message); }

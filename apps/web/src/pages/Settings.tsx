@@ -8,6 +8,7 @@ import { BackupSettings } from '../components/Backup';
 import { ModeSeg, ThemeList } from '../components/Appearance';
 import { api, authHeaders, forgetUnlockKey } from '../lib';
 import { useUi } from '../App';
+import { forgetOffline } from '../offline';
 
 export function Settings() {
   const qc = useQueryClient();
@@ -40,6 +41,7 @@ export function Settings() {
   async function logout() {
     await api('/api/auth/logout', { method: 'POST' });
     forgetUnlockKey();
+    await forgetOffline();
     qc.clear();
     window.location.href = '/';
   }

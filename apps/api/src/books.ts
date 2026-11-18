@@ -6,11 +6,12 @@ import { todayIST } from './money.js';
 /**
  * Default category tree (category › subcategory). Icons are emoji so they render everywhere.
  * Existing names never change (past transactions point at them); new ones are added by migration 009
- * for books created before. Keep the two in step when you add defaults.
+ * (and Coffee by 011, which also renamed Food › "Snacks & coffee" to "Snacks") for books created before. Keep the two in step when you add defaults.
  */
 export const DEFAULT_CATEGORIES: { expense: [string, string, string[]][]; income: [string, string, string[]][] } = {
   expense: [
-    ['Food', '🍲', ['Groceries', 'Ration & staples', 'Vegetables & fruits', 'Milk & dairy', 'Meat, fish & eggs', 'Bakery & sweets', 'Drinking water', 'Dining out', 'Delivery', 'Snacks & coffee', 'Office meals']],
+    ['Food', '🍲', ['Groceries', 'Ration & staples', 'Vegetables & fruits', 'Milk & dairy', 'Meat, fish & eggs', 'Bakery & sweets', 'Drinking water', 'Dining out', 'Delivery', 'Snacks', 'Office meals']],
+    ['Coffee', '☕', ['Beans', 'Equipment', 'Orders', 'Accessories & filters', 'Milk & syrups', 'Bean subscriptions', 'Servicing & descaling', 'Tastings & workshops']],
     ['Household help', '🧑‍🍳', ['Cook', 'Maid', 'Cleaning', 'Laundry & ironing', 'Driver', 'Babysitter & nanny', 'Gardener', 'Security & watchman']],
     ['Housing', '🏠', ['Rent', 'Maintenance', 'Electricity', 'Internet', 'Water & gas', 'Cooking gas (LPG)', 'Repairs & services', 'Furniture & furnishing', 'Appliances', 'Home decor', 'Pest control', 'Property tax', 'Brokerage & deposit']],
     ['Transport', '🛵', ['Fuel', 'Cab & auto', 'Public transport', 'Parking & tolls', 'Vehicle service', 'Train', 'Bike & car rental', 'FASTag recharge']],

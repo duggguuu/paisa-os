@@ -685,7 +685,17 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
       const tokenFresh = !!link?.token_obtained_at && todayIST(new Date(link.token_obtained_at)) === today;
       return {
         linked: !!link, apiKey: link?.api_key ?? null, tokenFresh, kiteUserId: link?.kite_user_id ?? null,
-        redirectUrl: `${cfg.publicUrl}/api/kite/callback`, holdings,
+        redirectUrl: `${cfg.publicUrl}/api/kite/callback`,
+        holdings: holdings.filter((h: any) => h.asset_type !== 'cash'),
+        // Cash in Kite not yet invested, and the money you've moved in (transfers to the Zerodha account, net).
+        unusedFunds: holdings.filter((h: any) => h.asset_type === 'cash').reduce((s: number, h: any) => s + Number(h.value_paise), 0),
+        hasFundsRow: holdings.some((h: any) => h.asset_type === 'cash'),
+        zerodha: await (async () => {
+          const [z] = await sql<{ id: string }[]>`select id from account where book_id = ${B(req)} and kind = 'investment' and meta->>'kite' = 'true' limit 1`;
+          if (!z) return null;
+          const [b] = await sql<{ bal: string }[]>`select coalesce(sum(p.amount),0)::text as bal from posting p join txn t on t.id = p.txn_id where p.account_id = ${z.id} and t.status = 'posted'`;
+          return { id: z.id, moneyIn: Number(b.bal) };
+        })(),
       };
     });
     api.put('/api/kite/credentials', async (req) => {

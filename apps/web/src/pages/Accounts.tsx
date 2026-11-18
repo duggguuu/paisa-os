@@ -103,7 +103,8 @@ const gainPct = (h: any) => (h.cost_paise ? (h.value_paise - h.cost_paise) / h.c
 
 function Investments({ k }: { k: any }) {
   const qc = useQueryClient();
-  const { toast } = useUi();
+  const { toast, openAdd } = useUi();
+  const [howTo, setHowTo] = useState(false);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<{ type: 'all' | 'equity' | 'mf'; perf: 'all' | 'up' | 'down'; sort: HSort }>(() => {
     try { return { type: 'all', perf: 'all', sort: 'value', ...JSON.parse(localStorage.getItem(H_PREF) ?? '{}') }; } catch { return { type: 'all', perf: 'all', sort: 'value' }; }
@@ -169,12 +170,36 @@ function Investments({ k }: { k: any }) {
             <button className="btn small accent" disabled={busy} onClick={sync}>{busy ? 'Syncing…' : k.tokenFresh ? 'Sync now' : 'Log in & sync'}</button>
           </div>
         )}
-        {holdings.length > 0 && (
+        {(holdings.length > 0 || k.hasFundsRow) && (
           <>
             <div className="divider" />
-            <div className="spread small"><span className="muted">Invested</span><span className="num">{money(cost, { whole: true })}</span></div>
-            <div className="spread small"><span className="muted">Current value</span><span className="num">{money(value, { whole: true })}</span></div>
-            <div className="spread small"><span className="muted">Gain</span><span className={`num ${value - cost >= 0 ? 'pos' : ''}`} style={{ color: value - cost < 0 ? 'var(--up)' : undefined }}>{money(value - cost, { whole: true, sign: true })} ({cost ? ((value - cost) / cost * 100).toFixed(1) : '0'}%)</span></div>
+            <div className="spread small"><span className="muted">Invested in holdings</span><span className="num">{money(cost, { whole: true })}</span></div>
+            <div className="spread small"><span className="muted">Holdings value</span><span className="num">{money(value, { whole: true })}</span></div>
+            <div className="spread small"><span className="muted">Unused funds in Kite</span><span className="num">{k.hasFundsRow ? money(k.unusedFunds, { whole: true }) : <span className="faint">sync to see</span>}</span></div>
+            <div className="spread small" style={{ fontWeight: 600 }}><span>Total in Zerodha</span><span className="num">{money(value + (k.unusedFunds ?? 0), { whole: true })}</span></div>
+            <div className="spread small"><span className="muted">Gain on holdings</span><span className={`num ${value - cost >= 0 ? 'pos' : ''}`} style={{ color: value - cost < 0 ? 'var(--up)' : undefined }}>{money(value - cost, { whole: true, sign: true })} ({cost ? ((value - cost) / cost * 100).toFixed(1) : '0'}%)</span></div>
+            {k.zerodha && k.zerodha.moneyIn !== 0 && (
+              <div className="spread small"><span className="muted">Money you've put in (net of withdrawals)</span><span className="num">{money(k.zerodha.moneyIn, { whole: true })}</span></div>
+            )}
+          </>
+        )}
+        {k.linked && k.zerodha && (
+          <>
+            <div className="divider" />
+            <div className="row wrap" style={{ gap: 8 }}>
+              <button className="btn small" onClick={() => openAdd({ transfer: { toAccountId: k.zerodha.id, merchant: 'Added funds to Kite' } })}>+ Add funds to Kite</button>
+              <button className="btn small" onClick={() => openAdd({ transfer: { toAccountId: k.zerodha.id, merchant: 'Mutual fund purchase', note: 'Paid straight from the bank (Coin)' } })}>Bought a mutual fund</button>
+              <button className="btn small" onClick={() => openAdd({ transfer: { fromAccountId: k.zerodha.id, merchant: 'Withdrew from Kite' } })}>Withdraw to bank</button>
+              <button className="btn small" onClick={() => setHowTo((x) => !x)}>{howTo ? 'Hide' : 'How these work'}</button>
+            </div>
+            {howTo && (
+              <div className="notif-setup small">
+                <p><b>Adding money to Kite</b> is a <b>transfer</b> from your bank to Zerodha, not spending: your bank goes down, and the money now sits in Zerodha. It shows up as <b>Unused funds</b> after the next sync, until you buy something with it.</p>
+                <p><b>Buying a mutual fund straight from your bank</b> (Zerodha Coin, or a SIP mandate) is also a <b>transfer</b> from the bank to Zerodha. The fund appears in your holdings after the next sync. For a fund bought outside Zerodha (an AMC site, another app), add an investment account for it under <b>+ Add</b> and transfer into that instead.</p>
+                <p><b>Buying stocks with your Kite funds</b> needs nothing: the money is already in Zerodha; it just moves from unused funds into holdings. <b>Withdrawing</b> is a transfer from Zerodha back to your bank.</p>
+                <p className="tiny faint">Zerodha's value comes from the sync (holdings + unused funds), so your net worth stays right. "Money you've put in" adds up these transfers, so you can compare it with the total.</p>
+              </div>
+            )}
           </>
         )}
       </div>

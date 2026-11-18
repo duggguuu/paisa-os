@@ -136,9 +136,13 @@ function findAccounts(s: string, accounts: Acc[]): { ids: string[]; rest: string
 
 /** Everyday words → words that appear in category names. */
 const CATEGORY_HINTS: [RegExp, string[]][] = [
+  // Coffee has its own category ("parent/child" needles match a subcategory under that parent).
+  [/\b(coffee|espresso|aeropress|moka|v60|dripper|french press)\b.*\b(grinder|machine|kettle|scale|dripper|equipment|gear)\b|\b(grinder|espresso machine|aeropress|moka pot|v60|dripper|french press)\b/, ['coffee/equipment']],
+  [/\b(coffee beans?|beans|ground coffee|roast(ers?|ery)?)\b/, ['coffee/beans']],
+  [/\b(coffee|cappuccino|latte|espresso|americano|cold brew|mocha|starbucks|third wave|blue tokai|subko|barista|ccd|costa)\b/, ['coffee/orders']],
   [/\b(swiggy|zomato|delivery|ordered|takeout)\b/, ['delivery', 'dining', 'food']],
   [/\b(lunch|dinner|breakfast|restaurant|cafe|dining|biryani|pizza|burger)\b/, ['dining', 'eating out', 'restaurant', 'food']],
-  [/\b(coffee|tea|chai|snacks?|starbucks)\b/, ['snack', 'coffee', 'dining', 'food']],
+  [/\b(tea|chai|snacks?)\b/, ['snack', 'dining', 'food']],
   [/\b(groceries|grocery|vegetables|sabzi|milk|blinkit|zepto|bigbasket|instamart|dmart|kirana)\b/, ['grocer', 'food']],
   [/\b(uber|ola|rapido|cab|taxi|auto|rickshaw)\b/, ['cab', 'auto', 'transport']],
   [/\b(metro|bus|train|irctc|local)\b/, ['public', 'metro', 'transport']],
@@ -170,7 +174,9 @@ function findCategory(s: string, cats: Cat[], kind: 'expense' | 'income'): strin
   for (const [re, needles] of CATEGORY_HINTS) {
     if (!re.test(s)) continue;
     for (const n of needles) {
-      const c = pool.find((c) => norm(c.name).includes(n));
+      const [parent, child] = n.includes('/') ? n.split('/') : [null, n];
+      const c = pool.find((c) => norm(c.name).includes(child)
+        && (!parent || norm(cats.find((x) => x.id === c.parent_id)?.name ?? '').includes(parent)));
       if (c) return c.id;
     }
   }

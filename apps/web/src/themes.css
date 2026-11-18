@@ -827,3 +827,12 @@ p.tiny, .tiny.faint { line-height: 1.5; }
 .tile-empty{width:100%;text-align:left;font-size:14px;color:var(--ink-2);cursor:pointer}
 .tile-edit .seg button{min-height:28px;padding:4px 10px}
 @media (min-width:900px){.tiles{grid-template-columns:repeat(4,1fr)}.tile-m{grid-column:span 2}.tile-l{grid-column:span 4}}
+
+/* ── Offline strip ─────────────────────────────────────────────────────── */
+.offline-bar{margin:8px 0 12px;border-radius:14px;background:var(--surface-3);font-size:13px;overflow:hidden}
+.offline-bar.off{background:color-mix(in srgb, var(--amber, #d98a00) 16%, var(--surface))}
+.offline-line{display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.offline-line .dot{width:8px;height:8px;border-radius:50%;background:var(--green, #1f9d55);flex:none}
+.offline-bar.off .offline-line .dot{background:var(--amber, #d98a00)}
+.offline-list{padding:0 14px 12px;display:grid;gap:8px}
+.offline-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--surface)}
