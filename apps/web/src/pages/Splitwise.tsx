@@ -321,7 +321,7 @@ function PlanFooter({ p, skip }: { p: any; skip: Set<string> }) {
 function ResultCard({ r }: { r: any }) {
   return (
     <div className="section"><div className="card">
-      <b>Imported {r.imported}{r.alreadyImported ? ` (${r.alreadyImported} were already in)` : ''}.</b>
+      <b>Imported {r.imported}{r.alreadyImported ? ` (${r.alreadyImported} were already in)` : ''}.</b>{r.matched ? <> {r.matched} matched entries you'd already added by hand, so they weren't added again.</> : null}
       <p className="small muted" style={{ marginBottom: 0 }}>
         {r.peopleCreated ? `${r.peopleCreated} people added to Accounts. ` : ''}{r.skipped ? `${r.skipped} skipped. ` : ''}
         {r.errors?.length ? `${r.errors.length} couldn't be imported: ${r.errors.slice(0, 2).join('; ')}` : ''}

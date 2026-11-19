@@ -846,3 +846,5 @@ p.tiny, .tiny.faint { line-height: 1.5; }
 .split-amt{min-width:92px;text-align:right;white-space:nowrap}
 .split-sw{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:14px}
 .split-sw input{margin-top:3px}
+.acct-pick{margin:6px 0 10px}
+.acct-card{display:grid;gap:6px;margin-bottom:10px}

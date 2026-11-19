@@ -105,7 +105,11 @@ export async function buildPostings(tx: Tx, bookId: string, input: TxnInput): Pr
       const ids = [input.accountId, ...input.lines.map((l) => (l.categoryId ?? l.receivableId)!)];
       const acc = await loadAccounts(tx, bookId, [...new Set(ids)]);
       const payer = acc.get(input.accountId)!;
-      need(isMoneyAccount(payer), 'bad_account', `${payer.name} can't pay for an expense`);
+      // A friend can be the payer ("Rohan paid, I owe him my share"): only your share(s) are booked,
+      // and the friend's account goes down by that much (you owe them). Nothing leaves your bank.
+      const friendPaid = payer.kind === 'receivable';
+      need(isMoneyAccount(payer) || friendPaid, 'bad_account', `${payer.name} can't pay for an expense`);
+      if (friendPaid) need(input.lines.every((l) => l.categoryId), 'bad_split', `When ${payer.name} paid, add only your own share; what others owe ${payer.name} isn't yours to track`);
       const out: PostingDraft[] = [];
       for (const l of input.lines) {
         const target = acc.get((l.categoryId ?? l.receivableId)!)!;

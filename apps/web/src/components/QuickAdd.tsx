@@ -67,6 +67,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const [shares, setShares] = useState<Record<string, string>>({});
   const [toSplitwise, setToSplitwise] = useState<boolean | null>(null);   // null = follow the default
   const [repaidBy, setRepaidBy] = useState<string | null>(null);          // income that's someone paying you back
+  const [paidBy, setPaidBy] = useState<string | null>(null);              // a friend paid the bill; you owe your share
   const [touched, setTouched] = useState({ category: !!initial, account: !!initial });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -180,11 +181,14 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const paise = kind === 'transfer' ? parseRupees(amount) : parseSignedRupees(amount);
   const negative = kind !== 'transfer' && !!paise && paise < 0;
   const canSplit = kind === 'expense' && !edit && people.length > 0 && !negative;
-  const split = computeSplit(paise && paise > 0 ? paise : 0, splitMode, splitWith, myShare, shares);
+  const friendPaid = canSplit && !!paidBy;
+  const splitIds = friendPaid ? [paidBy!, ...splitWith.filter((x) => x !== paidBy)] : splitWith;
+  const split = computeSplit(paise && paise > 0 ? paise : 0, splitMode, splitIds, myShare, shares);
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? '';
   const sw = useQuery({ queryKey: ['splitwise'], queryFn: () => api<any>('/api/splitwise'), enabled: !edit, staleTime: 5 * 60_000 });
   const swLinked = !!sw.data?.link;
   const onSw = (id: string) => !!people.find((p) => p.id === id)?.meta?.splitwise_id;
-  const swTargets = kind === 'income' ? (repaidBy ? [repaidBy] : []) : splitWith;
+  const swTargets = kind === 'income' ? (repaidBy ? [repaidBy] : []) : friendPaid ? [] : splitWith;
   const swPossible = swLinked && swTargets.length > 0 && swTargets.every(onSw);
   const pushSw = swPossible && (toSplitwise ?? true);
   const repaying = kind === 'income' && !edit && !!repaidBy && !negative;
@@ -193,12 +197,19 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
     setError(null);
     if (!paise) return setError('Enter an amount');
     if (kind !== 'transfer' && !repaying && !categoryId) return setError('Pick a category');
-    if (!accountId) return setError('Pick an account');
+    if (!accountId && !friendPaid) return setError('Pick an account');
     if (kind === 'transfer' && (!toAccountId || toAccountId === accountId)) return setError('Pick a different account to move money into');
     let body: any;
     const common = { date, merchant: merchant.trim() || null, note: note.trim() || null, idempotencyKey: edit ? undefined : idemKey, source: edit ? undefined : source };
     if (kind === 'transfer') body = { kind, amount: paise, fromAccountId: accountId, toAccountId, ...common };
     else if (repaying) body = { kind: 'transfer', amount: paise, fromAccountId: repaidBy, toAccountId: accountId, ...common };
+    else if (friendPaid) {
+      if (split.error) return setError(split.error);
+      if (split.mine <= 0) return setError('Your share needs to be more than ₹0');
+      const n = splitIds.length + 1;
+      const auto = `Total ${money(paise)} split ${n} ways · ${nameOf(paidBy!)} paid`;
+      body = { kind: 'split', accountId: paidBy, ...common, note: [note.trim(), auto].filter(Boolean).join(' · '), lines: [{ amount: split.mine, categoryId }] };
+    }
     else if (splitWith.length && canSplit) {
       if (split.error) return setError(split.error);
       const lines = [
@@ -213,7 +224,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
     try {
       const viaSw = !edit && pushSw && (body.kind === 'split' || repaying);
       const res = await api<{ id: string; queued?: boolean }>(edit ? `/api/txns/${edit.id}` : viaSw ? '/api/splitwise/add' : '/api/txns', { method: edit ? 'PUT' : 'POST', body });
-      try { localStorage.setItem('paisa.lastAccount', accountId); } catch { /* ignore */ }
+      try { if (!friendPaid && accountId) localStorage.setItem('paisa.lastAccount', accountId); } catch { /* ignore */ }
       if (res.queued) {
         // Offline: don't wait for a refresh that can't happen yet.
         onClose(); savedCheck();
@@ -331,7 +342,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
           </div>
         )}
 
-        <div className="field">
+        <div className="field" style={friendPaid ? { display: 'none' } : undefined}>
           <label>{kind === 'transfer' ? 'From' : kind === 'income' ? 'Into' : 'Paid from'}</label>
           <div className="chips">
             {(kind === 'transfer' ? transferTargets : moneyAccounts).map((a) => (
@@ -355,14 +366,29 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
 
         {canSplit && (
           <div className="field split-box">
-            <label>Split with</label>
+            <label>Who paid?</label>
+            <div className="seg full" style={{ marginBottom: 10 }}>
+              <button type="button" className={!paidBy ? 'on' : ''} onClick={() => setPaidBy(null)}>I paid</button>
+              <button type="button" className={paidBy ? 'on' : ''} onClick={() => setPaidBy(paidBy ?? people[0]?.id ?? null)}>Someone else paid</button>
+            </div>
+            {paidBy && (
+              <>
+                <div className="chips" style={{ marginBottom: 10 }}>
+                  {people.map((p) => (
+                    <button type="button" key={p.id} className={`chip ${paidBy === p.id ? 'on' : ''}`} onClick={() => { setPaidBy(p.id); setSplitWith((s) => s.filter((x) => x !== p.id)); }}>{p.icon ?? '🧑'} {p.name}</button>
+                  ))}
+                </div>
+                <span className="tiny muted" style={{ display: 'block', marginBottom: 8 }}>Enter the full bill above. Only your share is your spending, and it's added to what you owe {nameOf(paidBy)}. Nothing leaves your bank until you pay them back.</span>
+              </>
+            )}
+            <label>{paidBy ? 'Also shared with (optional)' : 'Split with'}</label>
             <div className="chips">
-              {people.map((p) => (
+              {people.filter((p) => p.id !== paidBy).map((p) => (
                 <button type="button" key={p.id} className={`chip ${splitWith.includes(p.id) ? 'on' : ''}`}
                   onClick={() => setSplitWith((s) => (s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id]))}>{p.icon ?? '🧑'} {p.name}</button>
               ))}
             </div>
-            {splitWith.length > 0 && (
+            {splitIds.length > 0 && (
               <>
                 <div className="seg full" style={{ marginTop: 10 }}>
                   {([['equal', 'Equally'], ['percent', 'By %'], ['amount', 'By ₹']] as const).map(([m, l]) => (
@@ -370,7 +396,7 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
                   ))}
                 </div>
                 <div className="split-rows">
-                  {[{ id: '__me', name: 'You (your spending)', amount: split.mine, pct: split.minePct }, ...split.others.map((o) => ({ ...o, name: `${people.find((p) => p.id === o.id)?.name ?? ''} owes you` }))].map((r) => {
+                  {[{ id: '__me', name: 'You (your spending)', amount: split.mine, pct: split.minePct }, ...split.others.map((o) => ({ ...o, name: friendPaid ? `${nameOf(o.id)}'s share${o.id === paidBy ? ' (paid)' : ''}` : `${nameOf(o.id)} owes you` }))].map((r) => {
                     const val = r.id === '__me' ? myShare : shares[r.id] ?? '';
                     const set = (v: string) => (r.id === '__me' ? setMyShare(v) : setShares((s) => ({ ...s, [r.id]: v })));
                     return (
@@ -391,7 +417,8 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
                 </div>
                 {split.error ? <span className="error" style={{ display: 'block' }}>{split.error}</span>
                   : splitMode !== 'equal' && <span className="tiny faint">Leave a share blank and it takes an equal part of what's left. Only your share counts as spending; the rest is money owed to you.</span>}
-                {swLinked && (
+                {friendPaid && paise && !split.error ? <span className="tiny muted" style={{ display: 'block', marginTop: 6 }}>You owe {nameOf(paidBy!)} <b>{money(split.mine)}</b>; that's also what counts as your spending.{swLinked ? ` If ${nameOf(paidBy!)} added this on Splitwise, the next Splitwise sync recognises this entry and won't add it twice.` : ''}</span> : null}
+                {swLinked && !friendPaid && (
                   <label className="toggle-row split-sw">
                     <input type="checkbox" disabled={!swPossible} checked={pushSw} onChange={(e) => setToSplitwise(e.target.checked)} />
                     <span>Also add to Splitwise{!swPossible && <span className="tiny faint" style={{ display: 'block' }}>Only for your Splitwise friends (import from Splitwise once so Paisa knows them).</span>}</span>

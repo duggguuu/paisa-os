@@ -74,24 +74,40 @@ export function Activity() {
   const month = useQuery({ queryKey: ['trans-month', anchor], queryFn: () => api<any>(`/api/trans/month?anchor=${anchor}`) });
   const range = month.data?.range;
   // Explicit filters (from other screens) override the month.
-  const filtered = ['from', 'q', 'accountId', 'categoryId', 'min', 'kind', 'deleted'].some((k) => params.get(k));
+  // (Picking one account keeps the month, so you can step through an account month by month.)
+  const filtered = ['from', 'q', 'categoryId', 'min', 'kind', 'deleted'].some((k) => params.get(k));
   const qs = new URLSearchParams();
   if (params.get('from')) { qs.set('from', params.get('from')!); if (params.get('to')) qs.set('to', params.get('to')!); }
   else if (range && !params.get('q')) { qs.set('from', range.from); qs.set('to', range.to); }
   for (const k of ['kind', 'q', 'accountId', 'categoryId', 'min']) if (params.get(k)) qs.set(k, params.get(k)!);
   if (params.get('deleted')) qs.set('includeVoid', 'true');
   qs.set('limit', '500');
-  const txns = useQuery({ queryKey: ['txns', qs.toString()], queryFn: () => api<any[]>(`/api/txns?${qs}`), enabled: !!range || filtered });
+  const txns = useQuery({ queryKey: ['txns', qs.toString()], queryFn: () => api<any[]>(`/api/txns?${qs}`), enabled: !!range || filtered || !!params.get('accountId') });
 
   const shift = (n: number) => { if (!range) return; set({ m: n < 0 ? addDays(range.from, -1) : range.to, from: null, to: null }); };
   const totals = useMemo(() => {
-    if (!filtered && month.data) return { income: month.data.income, expense: month.data.expense };
+    if (!filtered && !params.get('accountId') && month.data) return { income: month.data.income, expense: month.data.expense };
     return (txns.data ?? []).filter((t) => t.status === 'posted').reduce((a, t) => { const f = flows(t); return { income: a.income + f.income, expense: a.expense + f.expense }; }, { income: 0, expense: 0 });
-  }, [filtered, month.data, txns.data]);
+  }, [filtered, month.data, txns.data, params]);
+
+  // One account: its name, balance, and what went in and out over the list shown.
+  const accts = useQuery({ queryKey: ['accounts'], queryFn: () => api<any[]>('/api/accounts') });
+  const accId = params.get('accountId');
+  const acc = accId ? (accts.data ?? []).find((a) => a.id === accId) : null;
+  const accFlow = useMemo(() => {
+    if (!accId) return null;
+    let inn = 0, out = 0;
+    for (const t of txns.data ?? []) {
+      if (t.status !== 'posted') continue;
+      for (const p of t.postings ?? []) if ((p.accountId ?? p.account_id) === accId) { if (p.amount > 0) inn += Number(p.amount); else out -= Number(p.amount); }
+    }
+    return { inn, out };
+  }, [accId, txns.data]);
+  const pickable = (accts.data ?? []).filter((a) => a.kind !== 'category' && a.kind !== 'equity' && !a.is_archived);
 
   const filters: string[] = [];
   if (params.get('from') && params.get('to')) filters.push(params.get('to') === addDays(params.get('from')!, 1) ? shortDate(params.get('from')!) : `${shortDate(params.get('from')!)} – ${shortDate(addDays(params.get('to')!, -1))}`);
-  if (params.get('accountId')) filters.push('one account');
+  if (accId) filters.push(acc?.name ?? 'one account');
   if (params.get('categoryId')) filters.push('one category');
   if (params.get('min')) filters.push(`above ${money(Number(params.get('min')), { whole: true })}`);
   if (params.get('kind')) filters.push(KINDS.find(([k]) => k === params.get('kind'))?.[1] ?? '');
@@ -116,6 +132,17 @@ export function Activity() {
           <button aria-label="Previous month" onClick={() => shift(-1)}><Icon name="back" /></button>
           <b>{range ? periodLabel('month', range.from, range.to) : '…'}</b>
           <button aria-label="Next month" onClick={() => shift(1)} disabled={!range || range.to > todayIST()}><Icon name="chevron" /></button>
+        </div>
+      )}
+      <select className="input acct-pick" value={accId ?? ''} onChange={(e) => set({ accountId: e.target.value || null })} aria-label="Show one account">
+        <option value="">All accounts</option>
+        {pickable.map((a) => <option key={a.id} value={a.id}>{a.icon ? `${a.icon} ` : ''}{a.name}</option>)}
+      </select>
+      {acc && accFlow && (
+        <div className="card acct-card">
+          <div className="spread"><span className="muted small">{acc.name} · balance now</span><b className="num">{money(acc.balance)}</b></div>
+          <div className="spread small"><span className="muted">Money in {params.get('from') ? '' : range ? `(${periodLabel('month', range.from, range.to)})` : ''}</span><span className="num inc">{money(accFlow.inn)}</span></div>
+          <div className="spread small"><span className="muted">Money out</span><span className="num">{money(accFlow.out)}</span></div>
         </div>
       )}
       {filters.length > 0 && (

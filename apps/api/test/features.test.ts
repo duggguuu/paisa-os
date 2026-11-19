@@ -17,7 +17,7 @@ const today = todayIST();
 // ---------- fake external APIs ----------
 const ME = 1, ROHAN = 2, ADITI = 3;
 const u = (id: number, first: string) => ({ id, first_name: first, last_name: null });
-const swExpenses = [
+const swExpenses: any[] = [
   { // before the start date: Rohan paid ₹1,000 dinner, split 50/50 → you owe Rohan ₹500
     id: 101, description: 'Dinner at Barbeque Nation', cost: '1000.0', currency_code: 'INR', date: '2026-01-05T14:00:00Z', payment: false, deleted_at: null,
     category: { name: 'Dining out' },
@@ -788,6 +788,40 @@ test('split by percentage: your share is spending, the rest is owed; can go to S
   r = await req('POST', '/api/txns', { ...body, idempotencyKey: crypto.randomUUID(), lines: [{ amount: 200_00, categoryId: cat.id }, { amount: 800_00, receivableId: nobody }] });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.equal(await bal('Kabir'), 800_00);
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
+
+test('a friend paid: only your share is spending, you owe them; Splitwise import matches it instead of doubling', async () => {
+  const rohan = (await req('GET', '/api/accounts')).body.find((a: any) => a.kind === 'receivable' && a.name === 'Rohan');
+  const games = (await req('GET', '/api/categories')).body.find((c: any) => c.name === 'Games');
+  const before = { r: await bal('Rohan'), sbi: await bal('SBI') };
+  // GTA 6 for ₹7,499, Rohan paid, split 2 ways → you owe ₹3,749.50.
+  let r = await req('POST', '/api/txns', { kind: 'split', accountId: rohan.id, date: today, merchant: 'GTA 6', note: 'Total ₹7,499 split 2 ways · Rohan paid',
+    lines: [{ amount: 3749_50, categoryId: games.id }] });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const handId = r.body.id;
+  assert.equal(await bal('Rohan'), before.r - 3749_50, 'you owe Rohan your half');
+  assert.equal(await bal('SBI'), before.sbi, 'nothing left your bank');
+  // Others' shares can't be booked when a friend paid.
+  r = await req('POST', '/api/txns', { kind: 'split', accountId: rohan.id, date: today, lines: [{ amount: 100_00, categoryId: games.id }, { amount: 100_00, receivableId: rohan.id }] });
+  assert.equal(r.status, 422);
+  assert.match(r.body.message, /add only your own share/);
+  // Rohan also put it on Splitwise; the next import links it to the hand entry.
+  swExpenses.push({ id: 7777, cost: '7499.0', currency_code: 'INR', description: 'GTA 6', date: `${today}T10:00:00Z`, payment: false, deleted_at: null,
+    category: { name: 'Games' }, updated_at: `${today}T10:00:00Z`,
+    users: [{ user_id: ME, user: u(ME, 'Sam'), paid_share: '0.0', owed_share: '3749.5', net_balance: '-3749.5' },
+            { user_id: ROHAN, user: u(ROHAN, 'Rohan'), paid_share: '7499.0', owed_share: '3749.5', net_balance: '3749.5' }],
+    repayments: [{ from: ME, to: ROHAN, amount: '3749.5' }] });
+  r = await req('POST', '/api/splitwise/import', { since: '2026-02-01' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.matched, 1, JSON.stringify(r.body));
+  assert.equal(await bal('Rohan'), before.r - 3749_50, 'not counted twice');
+  const t = (await req('GET', `/api/txns/${handId}`)).body;
+  assert.equal(t.external_ref ?? t.externalRef, 'sw:7777');
+  r = await req('POST', '/api/splitwise/import', { since: '2026-02-01' });
+  assert.equal(r.body.matched, 0);
+  assert.equal(await bal('Rohan'), before.r - 3749_50);
+  swExpenses.pop();
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
 

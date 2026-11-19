@@ -235,7 +235,7 @@ async function bookPlan(sql: Sql, bookId: string,
   skipIds: (number | string)[], how: { ref: (e: Plan) => string; meta: (f: Friend) => Record<string, string> }) {
   await checkDefaultAccount(sql, bookId, p.defaultAccountId);
   const skip = new Set(skipIds.map(String));
-  const result = { imported: 0, alreadyImported: 0, skipped: 0, peopleCreated: 0, openingSet: 0, errors: [] as string[] };
+  const result = { imported: 0, alreadyImported: 0, matched: 0, skipped: 0, peopleCreated: 0, openingSet: 0, errors: [] as string[] };
 
   await sql.begin(async (tx) => {
     // People: link or create. New people get an opening balance = everything before the start date.
@@ -269,6 +269,13 @@ async function bookPlan(sql: Sql, bookId: string,
       if (e.bank !== 0) postings.push({ accountId: p.defaultAccountId, amount: e.bank });
       for (const pe of e.people) postings.push({ accountId: accountFor.get(String(pe.swId))!, amount: pe.amount, memo: pe.amount > 0 ? `${pe.name} owes you` : `you owe ${pe.name}` });
       if (postings.length < 2) { result.skipped++; continue; }
+      // Already entered by hand in Paisa (e.g. "Rohan paid, I owe half")? Link it instead of adding it twice.
+      const same = await findHandEntered(tx, bookId, e, postings, accountFor);
+      if (same) {
+        await tx`update txn set external_ref = ${how.ref(e)} where id = ${same}`;
+        result.matched++;
+        continue;
+      }
       try {
         await tx.savepoint((sp) => createRawTxn(sp as unknown as Tx, bookId, {
           kind: e.kind, date: e.date, merchant: e.description, note: 'From Splitwise', source: 'splitwise', externalRef: how.ref(e), postings,
@@ -281,6 +288,35 @@ async function bookPlan(sql: Sql, bookId: string,
     await audit(tx, bookId, 'splitwise', bookId, 'sync', null, { since: p.since, ...result, errors: result.errors.length }, 'splitwise');
   });
   return result;
+}
+
+/**
+ * A hand-entered transaction that books the same thing as this Splitwise expense: no external ref yet,
+ * within a week of it, same amount owed by/to each person, same total spending, and the same money
+ * moved out of (or into) one of your accounts.
+ */
+async function findHandEntered(tx: Tx, bookId: string, e: Plan, postings: PostingDraft[], accountFor: Map<string, string>): Promise<string | null> {
+  const people = new Map(e.people.map((pe) => [accountFor.get(String(pe.swId))!, pe.amount]));
+  const rows = await tx<{ txn_id: string; account_id: string; amount: number; class: string; kind: string }[]>`
+    select p.txn_id, p.account_id, p.amount::bigint as amount, a.class, a.kind
+    from txn t join posting p on p.txn_id = t.id join account a on a.id = p.account_id
+    where t.book_id = ${bookId} and t.status = 'posted' and t.external_ref is null and t.kind in ('expense', 'split', 'transfer')
+      and t.occurred_on between ${addDays(e.date, -7)} and ${addDays(e.date, 7)}
+      and exists (select 1 from posting q where q.txn_id = t.id and q.account_id = any(${[...people.keys()]}::uuid[]))`;
+  type Row = (typeof rows)[number];
+  const byTxn = new Map<string, Row[]>();
+  for (const r of rows) byTxn.set(r.txn_id, [...(byTxn.get(r.txn_id) ?? []), r]);
+  for (const [id, ps] of byTxn) {
+    const spend = ps.filter((x) => x.class === 'expense').reduce((s, x) => s + Number(x.amount), 0);
+    if (spend !== e.yourShare) continue;
+    const persons = ps.filter((x) => x.kind === 'receivable');
+    if (persons.length !== people.size || !persons.every((x) => people.get(x.account_id) === Number(x.amount))) continue;
+    const money = ps.filter((x) => x.class !== 'expense' && x.class !== 'income' && x.kind !== 'receivable');
+    if (e.bank === 0 ? money.length !== 0 : money.length !== 1 || Number(money[0].amount) !== e.bank) continue;
+    if (ps.length !== postings.length) continue;
+    return id;
+  }
+  return null;
 }
 
 // ---------- Spreadsheet exports (free accounts) ----------

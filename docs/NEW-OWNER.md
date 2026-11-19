@@ -211,6 +211,10 @@ Do these once, in this order:
 
 **Splitting a bill:** in Add transaction, pick the people under **Split with**, then **Equally**, **By %** or **By ₹**. Only your share counts as spending; the rest shows as money they owe you. Leave a share blank and it fills in the rest. If Splitwise is linked, **Also add to Splitwise** creates the expense there too. When someone pays you back, choose **Income** and pick them under **Someone paying you back?**: it lowers what they owe instead of counting as income.
 
+**One account's transactions:** on **Trans.**, pick the account from the dropdown under the month. You see its balance and what went in and out that month; the arrows step through months. (Or Accounts → tap the account → See transactions.)
+
+**When a friend paid:** in Add transaction (Expense), enter the full bill, then under **Who paid?** choose **Someone else paid** and the friend. Only your share counts as spending and it's added to what you owe them; nothing leaves your bank. If they also put it on Splitwise, the next Splitwise sync recognises your entry and doesn't add it again.
+
 **Coffee** has its own category (Beans, Equipment, Orders and more).
 
 **Deleting an account:** Accounts → tap the account → **Delete account**. You'll see what goes with it, then enter your app PIN (or your password if you haven't set a PIN). **Hide** is the safer choice: it keeps the history.
