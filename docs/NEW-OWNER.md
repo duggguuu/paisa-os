@@ -209,6 +209,8 @@ Do these once, in this order:
 
 **Offline:** once you've opened Paisa with internet, it opens without a connection too and shows your last-saved data. New entries you add offline are kept on the phone and sent when you're back online (the strip at the top shows how many are waiting). If the app lock is on, offline it unlocks with Face ID or your PIN, as long as you've used that once on this phone while online.
 
+**Splitting a bill:** in Add transaction, pick the people under **Split with**, then **Equally**, **By %** or **By ₹**. Only your share counts as spending; the rest shows as money they owe you. Leave a share blank and it fills in the rest. If Splitwise is linked, **Also add to Splitwise** creates the expense there too. When someone pays you back, choose **Income** and pick them under **Someone paying you back?**: it lowers what they owe instead of counting as income.
+
 **Coffee** has its own category (Beans, Equipment, Orders and more).
 
 **Deleting an account:** Accounts → tap the account → **Delete account**. You'll see what goes with it, then enter your app PIN (or your password if you haven't set a PIN). **Hide** is the safer choice: it keeps the history.

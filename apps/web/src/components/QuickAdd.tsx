@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { computeSplit, type SplitMode } from '../split-math';
 import { api, money, parseRupees, parseSignedRupees, cleanSignedAmount, todayIST, addDays, uuid, shortDate, maskText } from '../lib';
 import { SignToggle } from './SignToggle';
 import { savedCheck } from '../motion-fx';
@@ -61,6 +62,11 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const [date, setDate] = useState<string>(edit?.date ?? draft?.date ?? todayIST());
   const [note, setNote] = useState(edit?.note ?? draft?.note ?? preset.transfer?.note ?? '');
   const [splitWith, setSplitWith] = useState<string[]>([]);
+  const [splitMode, setSplitMode] = useState<SplitMode>('equal');
+  const [myShare, setMyShare] = useState('');
+  const [shares, setShares] = useState<Record<string, string>>({});
+  const [toSplitwise, setToSplitwise] = useState<boolean | null>(null);   // null = follow the default
+  const [repaidBy, setRepaidBy] = useState<string | null>(null);          // income that's someone paying you back
   const [touched, setTouched] = useState({ category: !!initial, account: !!initial });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -174,29 +180,39 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const paise = kind === 'transfer' ? parseRupees(amount) : parseSignedRupees(amount);
   const negative = kind !== 'transfer' && !!paise && paise < 0;
   const canSplit = kind === 'expense' && !edit && people.length > 0 && !negative;
+  const split = computeSplit(paise && paise > 0 ? paise : 0, splitMode, splitWith, myShare, shares);
+  const sw = useQuery({ queryKey: ['splitwise'], queryFn: () => api<any>('/api/splitwise'), enabled: !edit, staleTime: 5 * 60_000 });
+  const swLinked = !!sw.data?.link;
+  const onSw = (id: string) => !!people.find((p) => p.id === id)?.meta?.splitwise_id;
+  const swTargets = kind === 'income' ? (repaidBy ? [repaidBy] : []) : splitWith;
+  const swPossible = swLinked && swTargets.length > 0 && swTargets.every(onSw);
+  const pushSw = swPossible && (toSplitwise ?? true);
+  const repaying = kind === 'income' && !edit && !!repaidBy && !negative;
 
   async function save() {
     setError(null);
     if (!paise) return setError('Enter an amount');
-    if (kind !== 'transfer' && !categoryId) return setError('Pick a category');
+    if (kind !== 'transfer' && !repaying && !categoryId) return setError('Pick a category');
     if (!accountId) return setError('Pick an account');
     if (kind === 'transfer' && (!toAccountId || toAccountId === accountId)) return setError('Pick a different account to move money into');
     let body: any;
     const common = { date, merchant: merchant.trim() || null, note: note.trim() || null, idempotencyKey: edit ? undefined : idemKey, source: edit ? undefined : source };
     if (kind === 'transfer') body = { kind, amount: paise, fromAccountId: accountId, toAccountId, ...common };
+    else if (repaying) body = { kind: 'transfer', amount: paise, fromAccountId: repaidBy, toAccountId: accountId, ...common };
     else if (splitWith.length && canSplit) {
-      const n = splitWith.length + 1;
-      const each = Math.floor(paise / n);
-      const mine = paise - each * splitWith.length;
-      body = {
-        kind: 'split', accountId, ...common,
-        lines: [{ amount: mine, categoryId }, ...splitWith.map((pid) => ({ amount: each, receivableId: pid }))],
-      };
+      if (split.error) return setError(split.error);
+      const lines = [
+        ...(split.mine > 0 ? [{ amount: split.mine, categoryId }] : []),
+        ...split.others.filter((o) => o.amount > 0).map((o) => ({ amount: o.amount, receivableId: o.id })),
+      ];
+      if (!lines.some((l: any) => l.receivableId)) return setError('Give at least one person a share, or remove them from the split');
+      body = { kind: 'split', accountId, ...common, lines };
     } else body = { kind, amount: paise, accountId, categoryId, ...common };
 
     setSaving(true);
     try {
-      const res = await api<{ id: string; queued?: boolean }>(edit ? `/api/txns/${edit.id}` : '/api/txns', { method: edit ? 'PUT' : 'POST', body });
+      const viaSw = !edit && pushSw && (body.kind === 'split' || repaying);
+      const res = await api<{ id: string; queued?: boolean }>(edit ? `/api/txns/${edit.id}` : viaSw ? '/api/splitwise/add' : '/api/txns', { method: edit ? 'PUT' : 'POST', body });
       try { localStorage.setItem('paisa.lastAccount', accountId); } catch { /* ignore */ }
       if (res.queued) {
         // Offline: don't wait for a refresh that can't happen yet.
@@ -285,7 +301,29 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
           </div>
         )}
 
-        {kind !== 'transfer' && (
+        {kind === 'income' && !edit && people.length > 0 && !negative && (
+          <div className="field">
+            <label>Someone paying you back?</label>
+            <div className="chips">
+              {people.map((p) => (
+                <button type="button" key={p.id} className={`chip ${repaidBy === p.id ? 'on' : ''}`} onClick={() => setRepaidBy(repaidBy === p.id ? null : p.id)}>{p.icon ?? '🧑'} {p.name}</button>
+              ))}
+            </div>
+            {repaidBy ? (
+              <>
+                <span className="tiny muted">Not income: it lowers what {people.find((p) => p.id === repaidBy)?.name} owes you{paise && paise > 0 ? ` by ${money(paise)}` : ''} and adds it to the account below.</span>
+                {swLinked && (
+                  <label className="toggle-row split-sw">
+                    <input type="checkbox" disabled={!swPossible} checked={pushSw} onChange={(e) => setToSplitwise(e.target.checked)} />
+                    <span>Record the payment in Splitwise too{!swPossible && <span className="tiny faint" style={{ display: 'block' }}>Only for your Splitwise friends.</span>}</span>
+                  </label>
+                )}
+              </>
+            ) : <span className="tiny faint">Pick the person if this is a friend settling up (Splitwise or otherwise). For other money that isn't income, use a category under "Money in (not income)".</span>}
+          </div>
+        )}
+
+        {kind !== 'transfer' && !repaying && (
           <div className="field">
             <label>Category</label>
             <CategoryPicker cats={categories.data ?? []} cls={kind === 'income' ? 'income' : 'expense'} value={categoryId}
@@ -316,17 +354,51 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
         )}
 
         {canSplit && (
-          <div className="field">
-            <label>Split equally with</label>
+          <div className="field split-box">
+            <label>Split with</label>
             <div className="chips">
               {people.map((p) => (
                 <button type="button" key={p.id} className={`chip ${splitWith.includes(p.id) ? 'on' : ''}`}
                   onClick={() => setSplitWith((s) => (s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id]))}>{p.icon ?? '🧑'} {p.name}</button>
               ))}
             </div>
-            {splitWith.length > 0 && paise ? (
-              <span className="tiny muted">Your share {money(paise - Math.floor(paise / (splitWith.length + 1)) * splitWith.length)} counts as spending; {splitWith.length === 1 ? 'they owe' : 'each owes'} {money(Math.floor(paise / (splitWith.length + 1)))}.</span>
-            ) : null}
+            {splitWith.length > 0 && (
+              <>
+                <div className="seg full" style={{ marginTop: 10 }}>
+                  {([['equal', 'Equally'], ['percent', 'By %'], ['amount', 'By ₹']] as const).map(([m, l]) => (
+                    <button type="button" key={m} className={splitMode === m ? 'on' : ''} onClick={() => { setSplitMode(m); setMyShare(''); setShares({}); }}>{l}</button>
+                  ))}
+                </div>
+                <div className="split-rows">
+                  {[{ id: '__me', name: 'You (your spending)', amount: split.mine, pct: split.minePct }, ...split.others.map((o) => ({ ...o, name: `${people.find((p) => p.id === o.id)?.name ?? ''} owes you` }))].map((r) => {
+                    const val = r.id === '__me' ? myShare : shares[r.id] ?? '';
+                    const set = (v: string) => (r.id === '__me' ? setMyShare(v) : setShares((s) => ({ ...s, [r.id]: v })));
+                    return (
+                      <div key={r.id} className="split-row">
+                        <span className="grow">{r.name}</span>
+                        {splitMode !== 'equal' && (
+                          <span className="split-input">
+                            {splitMode === 'amount' && <span className="faint">₹</span>}
+                            <input className="input num" inputMode="decimal" value={val} placeholder={split.error ? '' : splitMode === 'percent' ? String(+r.pct.toFixed(1)) : String(Math.round(r.amount) / 100)}
+                              onChange={(e) => set(e.target.value.replace(/[^\d.]/g, ''))} aria-label={`${r.name} share`} />
+                            {splitMode === 'percent' && <span className="faint">%</span>}
+                          </span>
+                        )}
+                        <b className="num split-amt">{paise ? money(r.amount) : '—'}<span className="tiny faint"> {paise ? `${+r.pct.toFixed(1)}%` : ''}</span></b>
+                      </div>
+                    );
+                  })}
+                </div>
+                {split.error ? <span className="error" style={{ display: 'block' }}>{split.error}</span>
+                  : splitMode !== 'equal' && <span className="tiny faint">Leave a share blank and it takes an equal part of what's left. Only your share counts as spending; the rest is money owed to you.</span>}
+                {swLinked && (
+                  <label className="toggle-row split-sw">
+                    <input type="checkbox" disabled={!swPossible} checked={pushSw} onChange={(e) => setToSplitwise(e.target.checked)} />
+                    <span>Also add to Splitwise{!swPossible && <span className="tiny faint" style={{ display: 'block' }}>Only for your Splitwise friends (import from Splitwise once so Paisa knows them).</span>}</span>
+                  </label>
+                )}
+              </>
+            )}
           </div>
         )}
 

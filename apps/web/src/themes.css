@@ -836,3 +836,13 @@ p.tiny, .tiny.faint { line-height: 1.5; }
 .offline-bar.off .offline-line .dot{background:var(--amber, #d98a00)}
 .offline-list{padding:0 14px 12px;display:grid;gap:8px}
 .offline-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--surface)}
+
+/* ── Split an expense by % or ₹ ─────────────────────────────────────────── */
+.split-rows{display:grid;gap:6px;margin:10px 0 6px}
+.split-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:12px;background:var(--surface-2,var(--surface-3));font-size:14px}
+.split-row .grow{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.split-input{display:flex;align-items:center;gap:4px}
+.split-input .input{width:74px;min-height:36px;padding:6px 8px;text-align:right}
+.split-amt{min-width:92px;text-align:right;white-space:nowrap}
+.split-sw{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:14px}
+.split-sw input{margin-top:3px}

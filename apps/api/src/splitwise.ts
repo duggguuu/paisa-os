@@ -1,5 +1,7 @@
 /**
- * Splitwise import (read-only: this app never writes to Splitwise).
+ * Splitwise import, plus one write: when you split a new expense (or log a repayment) in Paisa and tick
+ * "Also add to Splitwise", it's created there too and booked here with that expense's `sw:<id>`, so a
+ * later import skips it instead of counting it twice.
  *
  * Every Splitwise friend becomes a person account here (they owe you = positive balance).
  * Each expense is booked from your point of view, using Splitwise's own `repayments`
@@ -18,7 +20,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import type { Sql, Tx } from './db.js';
 import type { Cipher } from './crypto.js';
-import { createRawTxn, LedgerError, audit, type PostingDraft } from './ledger.js';
+import { createRawTxn, createTxn, LedgerError, audit, TxnInput, type PostingDraft } from './ledger.js';
 import { setOpeningBalance } from './books.js';
 import { addDays } from './money.js';
 
@@ -439,4 +441,71 @@ export async function importCsv(sql: Sql, bookId: string, input: CsvIn) {
     ref: (e) => String(e.id),
     meta: (fr) => ({ splitwise_name: String(fr.swId) }),
   });
+}
+
+// ── Writing to Splitwise: a split expense or a repayment made in Paisa ─────
+async function swPost(f: Fetch, apiKey: string, path: string, body: Record<string, unknown>) {
+  const res = await f(`${BASE}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (res.status === 401) throw new LedgerError('splitwise_auth', 'Splitwise rejected the API key. Create a new one and link again.', 401);
+  const j: any = await res.json().catch(() => null);
+  const errs = j?.errors && (Array.isArray(j.errors) ? j.errors : Object.values(j.errors).flat());
+  if (!res.ok || (errs && errs.length)) throw new LedgerError('splitwise_error', `Splitwise said: ${errs?.length ? errs.join(', ') : res.status}`, 502);
+  return j;
+}
+const rs = (p: number) => (p / 100).toFixed(2);
+
+/**
+ * Create the expense (or repayment) in Splitwise, then book it here with external_ref sw:<id>.
+ * If booking here fails, the Splitwise expense is deleted again so the two never disagree.
+ */
+export async function addToSplitwise(sql: Sql, cipher: Cipher, bookId: string, raw: unknown, f: Fetch = fetch) {
+  const input = TxnInput.parse(raw);
+  if (input.kind !== 'split' && input.kind !== 'transfer') throw new LedgerError('bad_kind', 'Only split expenses and repayments go to Splitwise', 400);
+  if (input.idempotencyKey) {   // a retry of the same save: don't add it to Splitwise twice
+    const [done] = await sql<{ id: string; external_ref: string | null }[]>`select id, external_ref from txn where book_id = ${bookId} and idempotency_key = ${input.idempotencyKey}`;
+    if (done) return { id: done.id, duplicate: true, splitwiseId: done.external_ref?.startsWith('sw:') ? Number(done.external_ref.slice(3)) : null };
+  }
+  const [l] = await sql<any[]>`select api_key_enc, sw_user_id from splitwise_link where book_id = ${bookId}`;
+  if (!l) throw new LedgerError('splitwise_not_linked', 'Link Splitwise first (More → Splitwise)', 400);
+  const key = cipher.decrypt(l.api_key_enc), me = Number(l.sw_user_id);
+  const people = new Map((await sql<{ id: string; name: string; sw: string | null }[]>`
+    select id, name, meta->>'splitwise_id' as sw from account where book_id = ${bookId} and kind = 'receivable'`).map((p) => [p.id, p]));
+  const friend = (id: string) => {
+    const p = people.get(id);
+    if (!p) throw new LedgerError('bad_person', 'That person wasn\'t found', 400);
+    if (!p.sw) throw new LedgerError('not_on_splitwise', `${p.name} isn't one of your Splitwise friends. Import from Splitwise once so Paisa knows them, or untick "Also add to Splitwise".`, 400);
+    return Number(p.sw);
+  };
+  let body: Record<string, unknown>;
+  if (input.kind === 'split') {
+    const owed = new Map<number, number>();
+    let mine = 0;
+    for (const ln of input.lines) {
+      if (ln.categoryId) mine += ln.amount;
+      else { const fid = friend(ln.receivableId!); owed.set(fid, (owed.get(fid) ?? 0) + ln.amount); }
+    }
+    if (!owed.size) throw new LedgerError('nobody', 'Pick at least one person to split with', 400);
+    const cost = mine + [...owed.values()].reduce((s, x) => s + x, 0);
+    body = { cost: rs(cost), description: (input.merchant || input.description || 'Expense').slice(0, 100), details: input.note ?? undefined,
+      date: `${input.date}T12:00:00Z`, currency_code: 'INR', group_id: 0,
+      users__0__user_id: me, users__0__paid_share: rs(cost), users__0__owed_share: rs(mine) };
+    [...owed.entries()].forEach(([fid, amt], i) => Object.assign(body, {
+      [`users__${i + 1}__user_id`]: fid, [`users__${i + 1}__paid_share`]: '0.00', [`users__${i + 1}__owed_share`]: rs(amt) }));
+  } else {
+    // A repayment: money from someone who owes you (their person account) into your account.
+    const fid = friend(input.fromAccountId);
+    body = { cost: rs(input.amount), description: 'Payment', payment: true, date: `${input.date}T12:00:00Z`, currency_code: 'INR', group_id: 0,
+      users__0__user_id: fid, users__0__paid_share: rs(input.amount), users__0__owed_share: '0.00',
+      users__1__user_id: me, users__1__paid_share: '0.00', users__1__owed_share: rs(input.amount) };
+  }
+  const created = await swPost(f, key, '/create_expense', body);
+  const swId = created?.expenses?.[0]?.id;
+  if (!swId) throw new LedgerError('splitwise_error', 'Splitwise didn\'t return the new expense', 502);
+  try {
+    const r = await createTxn(sql, bookId, { ...input, externalRef: `sw:${swId}`, source: input.source ?? 'manual' } as any);
+    return { ...r, splitwiseId: swId };
+  } catch (e) {
+    await swPost(f, key, `/delete_expense/${swId}`, {}).catch(() => undefined);
+    throw e;
+  }
 }

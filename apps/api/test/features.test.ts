@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -44,9 +45,16 @@ const swExpenses = [
     users: [{ user_id: ME, paid_share: '20', owed_share: '10', net_balance: '10' }, { user_id: ROHAN, paid_share: '0', owed_share: '10', net_balance: '-10' }],
     repayments: [{ from: ROHAN, to: ME, amount: '10' }] },
 ];
-const fakeFetch: typeof fetch = async (input: any) => {
+const swWrites: { path: string; body: any }[] = [];
+const fakeFetch: typeof fetch = async (input: any, init?: any) => {
   const s = String(input);
   const json = (d: unknown, status = 200) => new Response(JSON.stringify(d), { status });
+  if (s.includes('splitwise.com') && init?.method === 'POST') {
+    const path = new URL(s).pathname.replace('/api/v3.0', '');
+    swWrites.push({ path, body: init.body ? JSON.parse(init.body) : null });
+    if (path === '/create_expense') return json({ expenses: [{ id: 9000 + swWrites.length }], errors: {} });
+    return json({ success: true });
+  }
   if (s.includes('splitwise.com')) {
     if (s.includes('/get_current_user')) return json({ user: { id: ME, first_name: 'Sam', last_name: 'G' } });
     if (s.includes('/get_expenses')) return json({ expenses: new URL(s).searchParams.get('offset') === '0' ? swExpenses : [] });
@@ -731,6 +739,55 @@ test('coffee: its own category; migration 011 moves coffee out of Food and other
   assert.ok(!cats.some((c: any) => /caf[eé]/i.test(c.name)), 'café categories removed');
   assert.equal(cats.filter((c: any) => c.name === 'Coffee' && !c.parent_id).length, 1);
   assert.equal(under('Coffee').filter((n: string) => n === 'Orders').length, 1);
+  assert.equal((await req('GET', '/api/integrity')).body.ok, true);
+});
+
+test('split by percentage: your share is spending, the rest is owed; can go to Splitwise too', async () => {
+  const people = (await req('GET', '/api/accounts')).body.filter((a: any) => a.kind === 'receivable');
+  const rohan = people.find((p: any) => p.name === 'Rohan');
+  const aditi = people.find((p: any) => p.name === 'Aditi');
+  assert.ok(rohan?.meta?.splitwise_id && aditi?.meta?.splitwise_id, 'Splitwise friends from the import');
+  const cat = (await req('GET', '/api/categories')).body.find((c: any) => c.name === 'Dining out');
+  const before = { r: await bal('Rohan'), a: await bal('Aditi'), sbi: await bal('SBI') };
+  // ₹1,000 dinner: me 40%, Rohan 35%, Aditi 25%, also added to Splitwise.
+  const body = { kind: 'split', accountId: A['SBI'].id, date: today, merchant: 'Dinner at Toast', idempotencyKey: crypto.randomUUID(),
+    lines: [{ amount: 400_00, categoryId: cat.id }, { amount: 350_00, receivableId: rohan.id }, { amount: 250_00, receivableId: aditi.id }] };
+  let r = await req('POST', '/api/splitwise/add', body);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const w = swWrites.at(-1)!;
+  assert.equal(w.path, '/create_expense');
+  assert.equal(w.body.cost, '1000.00');
+  assert.equal(w.body.users__0__user_id, 1);
+  assert.equal(w.body.users__0__paid_share, '1000.00');
+  assert.equal(w.body.users__0__owed_share, '400.00');
+  assert.deepEqual([w.body.users__1__owed_share, w.body.users__2__owed_share].sort(), ['250.00', '350.00']);
+  assert.equal(await bal('Rohan'), before.r + 350_00);
+  assert.equal(await bal('Aditi'), before.a + 250_00);
+  assert.equal(await bal('SBI'), before.sbi - 1000_00);
+  const t = (await req('GET', `/api/txns/${r.body.id}`)).body;
+  assert.equal(t.external_ref ?? t.externalRef, `sw:${r.body.splitwiseId}`, 'so a later import skips it');
+  // Retrying the same save doesn't add it to Splitwise again.
+  const n = swWrites.length;
+  r = await req('POST', '/api/splitwise/add', body);
+  assert.equal(r.body.duplicate, true);
+  assert.equal(swWrites.length, n);
+  // Someone paying you back: a transfer from their balance, also recorded in Splitwise as a payment.
+  r = await req('POST', '/api/splitwise/add', { kind: 'transfer', amount: 350_00, fromAccountId: rohan.id, toAccountId: A['SBI'].id, date: today });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(swWrites.at(-1)!.body.payment, true);
+  assert.equal(swWrites.at(-1)!.body.users__0__user_id, 2, 'Rohan paid');
+  assert.equal(await bal('Rohan'), before.r);
+  // A person who isn't on Splitwise is refused (nothing written anywhere).
+  const nobody = (await req('POST', '/api/accounts', { name: 'Kabir', kind: 'receivable', openingBalance: 0 })).body.id;
+  const k = swWrites.length;
+  r = await req('POST', '/api/splitwise/add', { ...body, idempotencyKey: crypto.randomUUID(), lines: [{ amount: 500_00, categoryId: cat.id }, { amount: 500_00, receivableId: nobody }] });
+  assert.equal(r.status, 400);
+  assert.match(r.body.message, /Kabir isn't one of your Splitwise friends/);
+  assert.equal(swWrites.length, k);
+  // Without Splitwise, the same split is just a Paisa entry.
+  r = await req('POST', '/api/txns', { ...body, idempotencyKey: crypto.randomUUID(), lines: [{ amount: 200_00, categoryId: cat.id }, { amount: 800_00, receivableId: nobody }] });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(await bal('Kabir'), 800_00);
   assert.equal((await req('GET', '/api/integrity')).body.ok, true);
 });
 

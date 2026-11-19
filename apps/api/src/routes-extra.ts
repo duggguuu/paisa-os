@@ -70,6 +70,7 @@ export async function registerExtras(api: FastifyInstance, ctx: { sql: Sql; ciph
     return { ok: true };
   });
   api.delete('/api/splitwise', async (req) => { await splitwise.unlink(sql, B(req)); return { ok: true }; });
+  api.post('/api/splitwise/add', async (req) => splitwise.addToSplitwise(sql, cipher, B(req), req.body, ctx.fetch));
   api.get('/api/splitwise/preview', async (req) => {
     const q = z.object({ since: date.optional() }).parse(req.query);
     return splitwise.plan(sql, cipher, B(req), q.since ?? null, ctx.fetch);
