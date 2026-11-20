@@ -9,6 +9,7 @@ import { Icon } from './Icons';
 import { CategoryPicker } from './CategoryPicker';
 import { useNavigate } from 'react-router-dom';
 import { parseSpoken, speechSupported, listen, type Draft } from '../voice';
+import { MOODS, MOOD_GROUPS, moodById, PAY_METHODS, payMethodFromText, moodFromText, type PayMethod } from '../moods';
 
 export interface QuickAddPreset {
   kind?: 'expense' | 'income' | 'transfer';
@@ -24,6 +25,11 @@ type Kind = 'expense' | 'income' | 'transfer';
 
 function lastAccount(): string | null {
   try { return localStorage.getItem('paisa.lastAccount'); } catch { return null; }
+}
+/** The way you last paid from this bank (UPI, debit card, net banking), remembered per bank on this device. */
+function lastMethod(accountId: string | null): PayMethod | null {
+  if (!accountId) return null;
+  try { return (localStorage.getItem(`paisa.payMethod.${accountId}`) as PayMethod | null) || null; } catch { return null; }
 }
 
 export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose: () => void }) {
@@ -68,9 +74,13 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const [toSplitwise, setToSplitwise] = useState<boolean | null>(null);   // null = follow the default
   const [repaidBy, setRepaidBy] = useState<string | null>(null);          // income that's someone paying you back
   const [paidBy, setPaidBy] = useState<string | null>(null);              // a friend paid the bill; you owe your share
-  const [touched, setTouched] = useState({ category: !!initial, account: !!initial });
+  const [mood, setMood] = useState<string | null>(edit?.mood ?? null);
+  const [moodGuessed, setMoodGuessed] = useState(false);
+  const [payMethod, setPayMethod] = useState<PayMethod | null>(edit ? edit.pay_method ?? null : null);
+  const [touched, setTouched] = useState({ category: !!initial, account: !!initial, mood: !!edit?.mood, method: !!edit });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const touchedRef = useRef(touched); touchedRef.current = touched; // read by the delayed merchant suggestion
   const amountRef = useRef<HTMLInputElement>(null);
   const [phrase, setPhrase] = useState('');
   const [listening, setListening] = useState(false);
@@ -120,7 +130,9 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
     setToAccountId(d.toAccountId ?? null);
     setDate(d.date ?? todayIST());
     setSplitWith(d.splitWith ?? []);
-    setTouched({ category: !!d.categoryId, account: !!d.accountId });
+    setTouched((t) => ({ ...t, category: !!d.categoryId, account: !!d.accountId }));
+    const pm = payMethodFromText(text); if (pm) { setPayMethod(pm); setTouched((t) => ({ ...t, method: true })); }
+    const md = moodFromText(text); if (md) { setMood(md); setTouched((t) => ({ ...t, mood: true })); }
     setHeard(text.trim());
     setSource('voice');
     setError(null);
@@ -167,9 +179,11 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
     if (kind === 'transfer' || merchant.trim().length < 2 || edit) return;
     const t = setTimeout(async () => {
       try {
-        const s = await api<{ categoryId: string | null; accountId: string | null }>(`/api/suggest?merchant=${encodeURIComponent(merchant.trim())}`);
-        if (s.categoryId && !touched.category) setCategoryId(s.categoryId);
-        if (s.accountId && !touched.account) setAccountId(s.accountId);
+        const s = await api<{ categoryId: string | null; accountId: string | null; mood?: string | null }>(`/api/suggest?merchant=${encodeURIComponent(merchant.trim())}`);
+        const t = touchedRef.current;
+        if (s.categoryId && !t.category) setCategoryId(s.categoryId);
+        if (s.accountId && !t.account) setAccountId(s.accountId);
+        if (s.mood && !t.mood && kind === 'expense') { setMood(s.mood); setMoodGuessed(true); }
       } catch { /* suggestion is optional */ }
     }, 350);
     return () => clearTimeout(t);
@@ -192,6 +206,12 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
   const swPossible = swLinked && swTargets.length > 0 && swTargets.every(onSw);
   const pushSw = swPossible && (toSplitwise ?? true);
   const repaying = kind === 'income' && !edit && !!repaidBy && !negative;
+  const spending = (kind === 'expense' || (kind as string) === 'split') && !negative;
+  // Debit card / UPI / net banking: only when the money leaves a bank account (expenses and transfers out).
+  const payingBank = !friendPaid && kind !== 'income' && !repaying && (accounts.data ?? []).find((a) => a.id === accountId)?.kind === 'bank';
+  useEffect(() => {
+    if (!touched.method && payingBank) setPayMethod(lastMethod(accountId));
+  }, [accountId, payingBank]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save() {
     setError(null);
@@ -200,7 +220,10 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
     if (!accountId && !friendPaid) return setError('Pick an account');
     if (kind === 'transfer' && (!toAccountId || toAccountId === accountId)) return setError('Pick a different account to move money into');
     let body: any;
-    const common = { date, merchant: merchant.trim() || null, note: note.trim() || null, idempotencyKey: edit ? undefined : idemKey, source: edit ? undefined : source };
+    const common = {
+      date, merchant: merchant.trim() || null, note: note.trim() || null, idempotencyKey: edit ? undefined : idemKey, source: edit ? undefined : source,
+      mood: spending ? mood : null, payMethod: payingBank ? payMethod : null,
+    };
     if (kind === 'transfer') body = { kind, amount: paise, fromAccountId: accountId, toAccountId, ...common };
     else if (repaying) body = { kind: 'transfer', amount: paise, fromAccountId: repaidBy, toAccountId: accountId, ...common };
     else if (friendPaid) {
@@ -224,7 +247,10 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
     try {
       const viaSw = !edit && pushSw && (body.kind === 'split' || repaying);
       const res = await api<{ id: string; queued?: boolean }>(edit ? `/api/txns/${edit.id}` : viaSw ? '/api/splitwise/add' : '/api/txns', { method: edit ? 'PUT' : 'POST', body });
-      try { if (!friendPaid && accountId) localStorage.setItem('paisa.lastAccount', accountId); } catch { /* ignore */ }
+      try {
+        if (!friendPaid && accountId) localStorage.setItem('paisa.lastAccount', accountId);
+        if (payingBank && payMethod) localStorage.setItem(`paisa.payMethod.${accountId}`, payMethod);
+      } catch { /* ignore */ }
       if (res.queued) {
         // Offline: don't wait for a refresh that can't happen yet.
         onClose(); savedCheck();
@@ -347,9 +373,19 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
           <div className="chips">
             {(kind === 'transfer' ? transferTargets : moneyAccounts).map((a) => (
               <button type="button" key={a.id} className={`chip ${accountId === a.id ? 'on' : ''}`}
-                onClick={() => { setAccountId(a.id); setTouched((t) => ({ ...t, account: true })); }}>{a.icon ?? ''} {a.name}</button>
+                onClick={() => { setAccountId(a.id); setTouched((t) => ({ ...t, account: true, method: false })); }}>{a.icon ?? ''} {a.name}</button>
             ))}
           </div>
+          {payingBank && (
+            <div className="pay-methods" role="group" aria-label={`How you paid from ${(accounts.data ?? []).find((a) => a.id === accountId)?.name ?? 'this bank'}`}>
+              {PAY_METHODS.map((m) => (
+                <button type="button" key={m.id} className={`chip small ${payMethod === m.id ? 'on' : ''}`} aria-pressed={payMethod === m.id}
+                  onClick={() => { setPayMethod(payMethod === m.id ? null : m.id); setTouched((t) => ({ ...t, method: true })); }}>
+                  <span aria-hidden>{m.icon}</span> {m.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {kind === 'transfer' && (
@@ -426,6 +462,26 @@ export function QuickAdd({ preset, onClose }: { preset: QuickAddPreset; onClose:
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {spending && (
+          <div className="field mood-field">
+            <label>Mindset <span className="faint" style={{ fontWeight: 400 }}>(optional)</span></label>
+            {MOOD_GROUPS.map((g) => (
+              <div key={g.id} className={`mood-group ${g.id}`}>
+                <span className="mood-group-label tiny faint">{g.label}</span>
+                <div className="chips">
+                  {MOODS.filter((m) => m.group === g.id).map((m) => (
+                    <button type="button" key={m.id} className={`chip mood ${g.id} ${mood === m.id ? 'on' : ''}`} aria-pressed={mood === m.id} title={m.hint}
+                      onClick={() => { setMood(mood === m.id ? null : m.id); setMoodGuessed(false); setTouched((t) => ({ ...t, mood: true })); }}>
+                      <span aria-hidden>{m.emoji}</span> {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <span className="tiny muted">{mood ? `${moodById(mood)?.hint}.${moodGuessed ? ' Picked from your past spends here; tap to change.' : ''}` : 'How did this spend feel? Stats shows where your money goes by mindset.'}</span>
           </div>
         )}
 

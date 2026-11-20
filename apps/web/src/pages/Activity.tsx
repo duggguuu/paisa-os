@@ -5,6 +5,7 @@ import { api, money, parseRupees, shortDate, addDays, todayIST, periodLabel, mas
 import { Icon } from '../components/Icons';
 import { useUi } from '../App';
 import { SwipeTxn } from '../components/Swipe';
+import { MOODS, moodById, PAY_METHODS, payMethodLabel } from '../moods';
 
 type Tab = 'daily' | 'calendar' | 'monthly' | 'summary' | 'description';
 const TABS: [Tab, string][] = [['daily', 'Daily'], ['calendar', 'Calendar'], ['monthly', 'Monthly'], ['summary', 'Summary'], ['description', 'Description']];
@@ -34,12 +35,14 @@ export function TransRow({ t }: { t: any }) {
   const sub = cat?.parent ? cat.name : null;
   const icon = cat?.icon ?? (t.kind === 'transfer' ? '⇄' : '•');
   const note = t.merchant ?? t.description ?? '';
-  const acct = t.kind === 'transfer' ? `${out?.name ?? '?'} → ${into?.name ?? '?'}` : (kind === 'inc' ? into : out)?.name ?? '';
+  const pm = payMethodLabel(t.pay_method);
+  const acct = (t.kind === 'transfer' ? `${out?.name ?? '?'} → ${into?.name ?? '?'}` : (kind === 'inc' ? into : out)?.name ?? '') + (pm ? ` · ${pm}` : '');
+  const md = moodById(t.mood);
   return (
     <SwipeTxn t={t}>
       <button className={`trow ${t.status === 'void' ? 'void' : ''}`} onClick={() => openTxn(t.id)}>
         <span className="tc"><span className="ticon" aria-hidden>{icon}</span><span className="tcat"><span>{top}</span>{sub && <small>{sub}</small>}</span></span>
-        <span className="tm">{note ? <><span className="tt">{note}</span><small>{acct}</small></> : <span className="tacct">{acct}</span>}</span>
+        <span className="tm">{note ? <><span className="tt">{note}</span><small>{acct}{md && <span className="mood-tag" title={md.hint}> · {md.emoji} {md.label}</span>}</small></> : <span className="tacct">{acct}{md && <span className="mood-tag" title={md.hint}> · {md.emoji} {md.label}</span>}</span>}</span>
         <span className={`ta num ${kind}`}>{n2(t.amount)}</span>
       </button>
     </SwipeTxn>
@@ -79,14 +82,14 @@ export function Activity() {
   const qs = new URLSearchParams();
   if (params.get('from')) { qs.set('from', params.get('from')!); if (params.get('to')) qs.set('to', params.get('to')!); }
   else if (range && !params.get('q')) { qs.set('from', range.from); qs.set('to', range.to); }
-  for (const k of ['kind', 'q', 'accountId', 'categoryId', 'min']) if (params.get(k)) qs.set(k, params.get(k)!);
+  for (const k of ['kind', 'q', 'accountId', 'categoryId', 'min', 'mood']) if (params.get(k)) qs.set(k, params.get(k)!);
   if (params.get('deleted')) qs.set('includeVoid', 'true');
   qs.set('limit', '500');
-  const txns = useQuery({ queryKey: ['txns', qs.toString()], queryFn: () => api<any[]>(`/api/txns?${qs}`), enabled: !!range || filtered || !!params.get('accountId') });
+  const txns = useQuery({ queryKey: ['txns', qs.toString()], queryFn: () => api<any[]>(`/api/txns?${qs}`), enabled: !!range || filtered || !!params.get('accountId') || !!params.get('mood') });
 
   const shift = (n: number) => { if (!range) return; set({ m: n < 0 ? addDays(range.from, -1) : range.to, from: null, to: null }); };
   const totals = useMemo(() => {
-    if (!filtered && !params.get('accountId') && month.data) return { income: month.data.income, expense: month.data.expense };
+    if (!filtered && !params.get('accountId') && !params.get('mood') && month.data) return { income: month.data.income, expense: month.data.expense };
     return (txns.data ?? []).filter((t) => t.status === 'posted').reduce((a, t) => { const f = flows(t); return { income: a.income + f.income, expense: a.expense + f.expense }; }, { income: 0, expense: 0 });
   }, [filtered, month.data, txns.data, params]);
 
@@ -97,11 +100,15 @@ export function Activity() {
   const accFlow = useMemo(() => {
     if (!accId) return null;
     let inn = 0, out = 0;
+    const by: Record<string, number> = {}; // money out by how you paid (UPI / debit card / net banking)
     for (const t of txns.data ?? []) {
       if (t.status !== 'posted') continue;
-      for (const p of t.postings ?? []) if ((p.accountId ?? p.account_id) === accId) { if (p.amount > 0) inn += Number(p.amount); else out -= Number(p.amount); }
+      for (const p of t.postings ?? []) if ((p.accountId ?? p.account_id) === accId) {
+        if (p.amount > 0) inn += Number(p.amount);
+        else { out -= Number(p.amount); by[t.pay_method ?? 'other'] = (by[t.pay_method ?? 'other'] ?? 0) - Number(p.amount); }
+      }
     }
-    return { inn, out };
+    return { inn, out, by };
   }, [accId, txns.data]);
   const pickable = (accts.data ?? []).filter((a) => a.kind !== 'category' && a.kind !== 'equity' && !a.is_archived);
 
@@ -111,19 +118,27 @@ export function Activity() {
   if (params.get('categoryId')) filters.push('one category');
   if (params.get('min')) filters.push(`above ${money(Number(params.get('min')), { whole: true })}`);
   if (params.get('kind')) filters.push(KINDS.find(([k]) => k === params.get('kind'))?.[1] ?? '');
+  if (params.get('mood')) filters.push(params.get('mood') === 'none' ? 'no mindset' : `${moodById(params.get('mood'))?.emoji ?? ''} ${moodById(params.get('mood'))?.label ?? params.get('mood')}`);
 
   return (
     <>
       <div className="trans-head">
         <button className="icon-plain" aria-label="Search" onClick={() => setShowSearch((s) => !s)}><Icon name="search" /></button>
         <h1 className="page-title" style={{ margin: 0 }}>Trans.</h1>
-        <button className={`icon-plain ${showFilter || params.get('kind') ? 'on' : ''}`} aria-label="Filter" onClick={() => setShowFilter((s) => !s)}><Icon name="activity" /></button>
+        <button className={`icon-plain ${showFilter || params.get('kind') || params.get('mood') ? 'on' : ''}`} aria-label="Filter" onClick={() => setShowFilter((s) => !s)}><Icon name="activity" /></button>
       </div>
       {showSearch && <input className="input" type="search" autoFocus placeholder='Search merchant, note, tag, or "above 5000"' value={text} onChange={(e) => setText(e.target.value)} aria-label="Search transactions" style={{ marginBottom: 8 }} />}
       {showFilter && (
         <div className="chips" style={{ marginBottom: 8 }}>
           {KINDS.map(([k, label]) => <button key={k} className={`chip ${(params.get('kind') ?? '') === k ? 'on' : ''}`} onClick={() => set({ kind: k || null })}>{label}</button>)}
           <button className={`chip ${params.get('deleted') ? 'on' : ''}`} onClick={() => set({ deleted: params.get('deleted') ? null : '1' })}>Show deleted</button>
+        </div>
+      )}
+      {(showFilter || params.get('mood')) && (
+        <div className="chips" style={{ marginBottom: 8 }} aria-label="Mindset">
+          <span className="tiny faint" style={{ alignSelf: 'center' }}>Mindset</span>
+          {MOODS.map((m) => <button key={m.id} className={`chip small ${params.get('mood') === m.id ? 'on' : ''}`} title={m.hint} onClick={() => set({ mood: params.get('mood') === m.id ? null : m.id })}>{m.emoji} {m.label}</button>)}
+          <button className={`chip small ${params.get('mood') === 'none' ? 'on' : ''}`} onClick={() => set({ mood: params.get('mood') === 'none' ? null : 'none' })}>Not tagged</button>
         </div>
       )}
 
@@ -143,6 +158,12 @@ export function Activity() {
           <div className="spread"><span className="muted small">{acc.name} · balance now</span><b className="num">{money(acc.balance)}</b></div>
           <div className="spread small"><span className="muted">Money in {params.get('from') ? '' : range ? `(${periodLabel('month', range.from, range.to)})` : ''}</span><span className="num inc">{money(accFlow.inn)}</span></div>
           <div className="spread small"><span className="muted">Money out</span><span className="num">{money(accFlow.out)}</span></div>
+          {acc.kind === 'bank' && PAY_METHODS.some((m) => accFlow.by[m.id]) && (
+            <div className="acct-methods">
+              {PAY_METHODS.filter((m) => accFlow.by[m.id]).map((m) => <span key={m.id}>{m.icon} {m.label} <b className="num">{money(accFlow.by[m.id])}</b></span>)}
+              {accFlow.by.other ? <span className="faint">Other <span className="num">{money(accFlow.by.other)}</span></span> : null}
+            </div>
+          )}
         </div>
       )}
       {filters.length > 0 && (

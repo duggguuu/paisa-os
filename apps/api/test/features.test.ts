@@ -1227,3 +1227,55 @@ test('subcategories can be renamed and moved; a move follows the new parent inco
   await req('PATCH', `/api/categories/${gig}`, { parentId: salaryParent.id });
   assert.equal(await counts(), true);
 });
+
+test('mindset and payment method: saved, edited, filtered, suggested, in stats; method only kept for banks', async () => {
+  const cats = (await req('GET', '/api/categories')).body;
+  const cat = cats.find((c: any) => c.class === 'expense' && c.parent_id);
+  const accts = (await req('GET', '/api/accounts')).body;
+  const cash = accts.find((a: any) => a.kind === 'cash') ?? accts.find((a: any) => a.kind === 'wallet');
+  const d = addDays(today, -1);
+  const r = await req('POST', '/api/txns', { kind: 'expense', amount: 1499_00, accountId: A['SBI'].id, categoryId: cat.id, date: d, merchant: 'Mood Test Store', mood: 'impulse', payMethod: 'upi' });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  let t = (await req('GET', `/api/txns/${r.body.id}`)).body;
+  assert.equal(t.mood, 'impulse');
+  assert.equal(t.pay_method, 'upi');
+
+  // Unknown moods/methods are refused.
+  assert.equal((await req('POST', '/api/txns', { kind: 'expense', amount: 100, accountId: A['SBI'].id, categoryId: cat.id, date: d, mood: 'angry' })).status, 400);
+  assert.equal((await req('POST', '/api/txns', { kind: 'expense', amount: 100, accountId: A['SBI'].id, categoryId: cat.id, date: d, payMethod: 'cheque' })).status, 400);
+
+  // Editing keeps/changes them; a mood on income and a method on non-bank money are dropped.
+  await req('PUT', `/api/txns/${r.body.id}`, { kind: 'expense', amount: 1499_00, accountId: A['SBI'].id, categoryId: cat.id, date: d, merchant: 'Mood Test Store', mood: 'splurge', payMethod: 'debit_card' });
+  t = (await req('GET', `/api/txns/${r.body.id}`)).body;
+  assert.equal(t.mood, 'splurge'); assert.equal(t.pay_method, 'debit_card');
+  if (cash) {
+    const c = await req('POST', '/api/txns', { kind: 'expense', amount: 50_00, accountId: cash.id, categoryId: cat.id, date: d, mood: 'daily', payMethod: 'upi' });
+    const ct = (await req('GET', `/api/txns/${c.body.id}`)).body;
+    assert.equal(ct.mood, 'daily'); assert.equal(ct.pay_method, null, 'no method for cash');
+  }
+  const inc = cats.find((c: any) => c.class === 'income');
+  const ir = await req('POST', '/api/txns', { kind: 'income', amount: 10_00, accountId: A['SBI'].id, categoryId: inc.id, date: d, mood: 'treat' });
+  assert.equal((await req('GET', `/api/txns/${ir.body.id}`)).body.mood, null, 'income has no mindset');
+
+  // Filter and list.
+  const list = (await req('GET', `/api/txns?mood=splurge&from=${d}&to=${today}`)).body;
+  assert.ok(list.length >= 1 && list.every((x: any) => x.mood === 'splurge'));
+  assert.equal(list.find((x: any) => x.id === r.body.id)?.pay_method, 'debit_card');
+  const none = (await req('GET', `/api/txns?mood=none&from=${d}&to=${today}`)).body;
+  assert.ok(none.every((x: any) => x.mood === null && ['expense', 'split'].includes(x.kind)));
+
+  // Usual mindset at a merchant.
+  assert.equal((await req('GET', '/api/suggest?merchant=mood%20test%20store')).body.mood, 'splurge');
+
+  // Stats by mindset.
+  const s = (await req('GET', `/api/stats?period=custom&from=${d}&to=${today}`)).body;
+  assert.ok(s.moods.find((m: any) => m.mood === 'splurge')?.amount >= 1499_00);
+
+  // Splits carry the mindset too.
+  const rohan = accts.find((a: any) => a.kind === 'receivable');
+  if (rohan) {
+    const sp = await req('POST', '/api/txns', { kind: 'split', accountId: A['SBI'].id, date: d, mood: 'social', payMethod: 'netbanking', lines: [{ amount: 500_00, categoryId: cat.id }, { amount: 500_00, receivableId: rohan.id }] });
+    const st = (await req('GET', `/api/txns/${sp.body.id}`)).body;
+    assert.equal(st.mood, 'social'); assert.equal(st.pay_method, 'netbanking');
+  }
+});

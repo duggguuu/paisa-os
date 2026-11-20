@@ -5,7 +5,7 @@
 import { firstOnOrAfter } from './recurring.js';
 import crypto from 'node:crypto';
 import type { Sql } from './db.js';
-import { createTxn, type TxnInput } from './ledger.js';
+import { createTxn, type TxnInput, type MOODS } from './ledger.js';
 import { createAccount } from './books.js';
 import { addDays, fmt, parseDate, todayIST } from './money.js';
 
@@ -132,6 +132,9 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
       if (due <= 0) continue;
       e.amount = due;
     }
+    // Sample mindsets and payment methods, so Stats → Spending by mindset has something to show.
+    if (e.kind === 'expense' && !e.mood) e.mood = demoMood(e.merchant ?? '', e.amount);
+    if ((e.kind === 'expense' || e.kind === 'transfer') && !e.payMethod) e.payMethod = (['upi', 'upi', 'debit_card', 'netbanking'] as const)[e.date.charCodeAt(9) % 4];
     const res = await createTxn(sql, bookId, e, 'demo-seed');
     // A refund on one Amazon order to show refunds reducing Shopping.
     if (e.kind === 'expense' && e.merchant === 'Amazon' && !refunded) {
@@ -190,4 +193,18 @@ export async function seedDemo(sql: Sql, bookId: string, opts: { reset?: boolean
   }
 
   return { count: entries.length };
+}
+
+/** A plausible mindset for a demo expense. */
+function demoMood(merchant: string, amount: number): (typeof MOODS)[number] {
+  const m = merchant.toLowerCase();
+  if (/landlord|rent|electric|bescom|act fibernet|airtel|jio|dmart|bigbasket|zepto|nature|pharm|apollo|insurance/.test(m)) return 'essential';
+  if (/\bmom\b|\bdad\b|parents/.test(m)) return 'gift';
+  if (/netflix|spotify/.test(m)) return 'planned';
+  if (/uber|ola|rapido|swiggy|zomato|blinkit|zepto/.test(m)) return amount > 600 * 100 ? 'convenience' : 'daily';
+  if (/coffee|starbucks|third wave|blue tokai/.test(m)) return 'treat';
+  if (/amazon|myntra|flipkart|ajio/.test(m)) return amount > 3_000 * 100 ? 'impulse' : 'planned';
+  if (/pvr|inox|bookmyshow|bar|pub|restaurant|china/.test(m)) return 'social';
+  if (/gym|cult|udemy|book/.test(m)) return 'growth';
+  return amount > 5_000 * 100 ? 'splurge' : 'daily';
 }

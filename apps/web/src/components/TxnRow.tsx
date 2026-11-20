@@ -2,6 +2,7 @@ import { money } from '../lib';
 import { useUi } from '../App';
 import { tint } from './Icons';
 import { SwipeTxn } from './Swipe';
+import { moodById, payMethodLabel } from '../moods';
 
 /** One transaction in a list. Expenses show plain; income and incoming money show green with +. */
 export function TxnRow({ t }: { t: any }) {
@@ -20,6 +21,9 @@ export function TxnRow({ t }: { t: any }) {
   if (t.kind === 'transfer') sub = `${moneyOut?.name ?? '?'} → ${moneyIn?.name ?? '?'}`;
   else if (t.kind === 'split') sub = `Split · ${moneyOut?.name ?? ''}`;
   else sub = [cats.map((c) => c.name).join(', '), (incoming ? moneyIn : moneyOut)?.name].filter(Boolean).join(' · ');
+  const pm = payMethodLabel(t.pay_method), md = moodById(t.mood);
+  if (pm) sub += ` · ${pm}`;
+  if (md) sub += ` · ${md.emoji} ${md.label}`;
   const title = t.merchant ?? t.description ?? (t.kind === 'transfer' ? 'Transfer' : cats[0]?.name ?? 'Transaction');
   return (
     <SwipeTxn t={t}>

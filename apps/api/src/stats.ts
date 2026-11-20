@@ -124,6 +124,17 @@ export async function byMerchant(tx: Tx, bookId: string, r: Range, categoryId?: 
     group by 1 having sum(p.amount) <> 0 order by amount desc limit 50`;
 }
 
+/** Spending by the mindset it was tagged with ('none' = not tagged). */
+export async function byMood(tx: Tx, bookId: string, r: Range, categoryId?: string) {
+  return tx<{ mood: string; amount: number; count: number }[]>`
+    select coalesce(t.mood, 'none') as mood, sum(p.amount)::bigint as amount, count(distinct t.id)::int as count
+    from txn t join posting p on p.txn_id = t.id join account c on c.id = p.account_id
+    where t.book_id = ${bookId} and t.status = 'posted' and c.class = 'expense'
+      and t.occurred_on >= ${r.from} and t.occurred_on < ${r.to}
+      ${categoryId ? tx`and (c.id = ${categoryId} or c.parent_id = ${categoryId})` : tx``}
+    group by 1 having sum(p.amount) > 0 order by amount desc`;
+}
+
 /** Spending attributed to the account that paid for it. */
 export async function byAccount(tx: Tx, bookId: string, r: Range) {
   return tx<{ id: string; name: string; kind: string; amount: number }[]>`

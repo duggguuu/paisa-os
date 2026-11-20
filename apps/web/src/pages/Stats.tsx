@@ -7,6 +7,9 @@ import { useAppear, useCountUp } from '../motion';
 import { CategoryTable, usePlanner } from '../components/Planner';
 import { TxnRow } from '../components/TxnRow';
 import { Icon } from '../components/Icons';
+import { MOOD_GROUPS, moodById, type MoodGroup } from '../moods';
+
+const GROUP_COLOR: Record<MoodGroup, string> = { need: '#4f9d7a', want: '#5b7fd6', moment: '#e0803a' };
 
 type Period = 'week' | 'month' | 'year';
 type Tab = 'stats' | 'budget' | 'note';
@@ -120,6 +123,7 @@ export function Stats() {
               <div className="list">{s.transactions.map((t: any) => <TxnRow key={t.id} t={{ ...t, merchant: t.title, postings: [{ kind: 'category', name: t.category, icon: null, amount: t.amount }], source: 'manual', status: 'posted' }} />)}</div>
             </div>
           )}
+          {side === 'expense' && s.moods && <MoodCard moods={s.moods} range={s.range} />}
           {!categoryId && side === 'expense' && s.trend.length > 0 && (
             <div className="section">
               <div className="section-title"><span>Trend</span><span className="tiny faint" style={{ textTransform: 'none', letterSpacing: 0 }}>tap a bar to open that {period}</span></div>
@@ -144,6 +148,44 @@ export function Stats() {
         </>
       )}
     </>
+  );
+}
+
+/** Spending by mindset: Needed it / Chose it / In the moment, then each mood. Tap one to see those spends. */
+function MoodCard({ moods, range }: { moods: { mood: string; amount: number; count: number }[]; range: { from: string; to: string } }) {
+  const navigate = useNavigate();
+  const total = moods.reduce((t, m) => t + Number(m.amount), 0);
+  const tagged = moods.filter((m) => m.mood !== 'none' && moodById(m.mood));
+  if (!total) return null;
+  const go = (mood: string) => navigate(`/activity?from=${range.from}&to=${range.to}&mood=${mood}`);
+  if (!tagged.length) return (
+    <div className="section">
+      <div className="section-title">Spending by mindset</div>
+      <p className="small muted" style={{ margin: 0 }}>Tag expenses with a mindset (Essential, Impulse, Splurge…) when you add them, and this shows how much went where.</p>
+    </div>
+  );
+  const byGroup = MOOD_GROUPS.map((g) => ({ ...g, amount: tagged.filter((m) => moodById(m.mood)!.group === g.id).reduce((t, m) => t + Number(m.amount), 0) }));
+  const untagged = Number(moods.find((m) => m.mood === 'none')?.amount ?? 0);
+  return (
+    <div className="section">
+      <div className="section-title"><span>Spending by mindset</span><span className="tiny faint" style={{ textTransform: 'none', letterSpacing: 0 }}>tap one to see those spends</span></div>
+      <div className="card">
+        <div className="mood-share-groups" aria-hidden>
+          {byGroup.map((g) => g.amount > 0 && <i key={g.id} style={{ width: `${(g.amount / total) * 100}%`, background: GROUP_COLOR[g.id] }} />)}
+        </div>
+        <div className="mood-legend">
+          {byGroup.map((g) => <span key={g.id}><span className="sw" style={{ background: GROUP_COLOR[g.id] }} />{g.label} <b className="num">{((g.amount / total) * 100).toFixed(0)}%</b></span>)}
+          {untagged > 0 && <span><span className="sw" style={{ background: 'var(--surface-3)' }} />Not tagged <b className="num">{((untagged / total) * 100).toFixed(0)}%</b></span>}
+        </div>
+        <div className="share-list">
+          {tagged.map((m, i) => {
+            const md = moodById(m.mood)!;
+            return <ShareRow key={m.mood} i={i} color={GROUP_COLOR[md.group]} share={Number(m.amount) / total} icon={md.emoji} name={`${md.label} · ${m.count}`} amount={Number(m.amount)} onClick={() => go(m.mood)} />;
+          })}
+          {untagged > 0 && <ShareRow color="var(--border-strong)" share={untagged / total} name="Not tagged" amount={untagged} onClick={() => go('none')} i={tagged.length} />}
+        </div>
+      </div>
+    </div>
   );
 }
 

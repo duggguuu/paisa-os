@@ -217,6 +217,10 @@ Do these once, in this order:
 
 **Coffee** has its own category (Beans, Equipment, Orders and more).
 
+**Mindset:** when you add an expense you can tag how it felt: Needed it (Essential, Daily, Planned), Chose it (Growth, Social, Giving, Treat, Splurge, Luxury) or In the moment (Impulse, Convenience, Comfort, Bored, FOMO). It's optional. The app suggests your usual mindset for a place you've tagged before. **Stats → Spending by mindset** shows the split; tap one to see those spends. On **Trans.**, the filter button lets you show one mindset.
+
+**How you paid:** when an expense or transfer comes out of a bank account, pick **UPI**, **Debit Card** or **Net Banking** under that bank. The app remembers your last choice for each bank. Saying "via UPI" or "on my debit card" fills it in too. On Trans., picking a bank shows its money out split by method.
+
 **Deleting an account:** Accounts → tap the account → **Delete account**. You'll see what goes with it, then enter your app PIN (or your password if you haven't set a PIN). **Hide** is the safer choice: it keeps the history.
 
 **Only salary counts as income.** Money coming in that isn't earnings (a friend paying you back, money from family, refunds) goes under **"Money in (not income)"**. It still shows in your balances; it just isn't counted as earnings. At the bottom of **Salary & tax** you can review your incoming money and move anything that isn't earnings out of income, using **Select all** to do several at once.

@@ -543,7 +543,12 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
         where t.book_id = ${B(req)} and t.status = 'posted' and lower(t.merchant) = lower(${q.merchant})
           and a.class in ('asset', 'liability') and a.kind <> 'receivable'
         order by t.occurred_on desc, t.created_at desc limit 1`;
-      return { categoryId: cat?.category_id ?? null, accountId: acc?.account_id ?? null };
+      // Your usual mindset there: the most common mood among the last 5 tagged spends at this merchant.
+      const [md] = await sql<{ mood: string }[]>`
+        select mood from (select t.mood from txn t where t.book_id = ${B(req)} and t.status = 'posted' and t.mood is not null
+                            and lower(t.merchant) = lower(${q.merchant}) order by t.occurred_on desc, t.created_at desc limit 5) x
+        group by mood order by count(*) desc limit 1`;
+      return { categoryId: cat?.category_id ?? null, accountId: acc?.account_id ?? null, mood: md?.mood ?? null };
     });
 
     // Transactions
@@ -554,11 +559,12 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
         min: z.coerce.number().optional(), max: z.coerce.number().optional(),
         kind: z.enum(['expense', 'income', 'transfer', 'split', 'refund', 'opening']).optional(),
         includeVoid: z.coerce.boolean().optional(),
+        mood: z.string().regex(/^[a-z_]{2,24}$/).optional(), // 'none' = not tagged
         limit: z.coerce.number().int().min(1).max(500).default(100), before: z.string().optional(),
       }).parse(req.query);
       const like = q.q ? `%${q.q.replace(/[%_]/g, (m) => '\\' + m)}%` : null;
       return sql<any[]>`
-        select t.id, t.occurred_on::text as date, t.kind, t.status, t.merchant, t.description, t.note, t.tags, t.source, t.external_ref,
+        select t.id, t.occurred_on::text as date, t.kind, t.status, t.merchant, t.description, t.note, t.mood, t.pay_method, t.tags, t.source, t.external_ref,
                t.refund_of, t.created_at,
                (select sum(abs(p.amount)) / 2 from posting p where p.txn_id = t.id)::bigint as amount,
                (select json_agg(json_build_object('accountId', p.account_id, 'name', a.name, 'class', a.class, 'kind', a.kind,
@@ -571,6 +577,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
           ${q.from ? sql`and t.occurred_on >= ${q.from}` : sql``}
           ${q.to ? sql`and t.occurred_on < ${q.to}` : sql``}
           ${q.kind ? sql`and t.kind = ${q.kind}` : sql``}
+          ${q.mood === 'none' ? sql`and t.mood is null and t.kind in ('expense', 'split')` : q.mood ? sql`and t.mood = ${q.mood}` : sql``}
           ${like ? sql`and (t.merchant ilike ${like} or t.description ilike ${like} or t.note ilike ${like} or ${q.q!} = any(t.tags)
                  or exists (select 1 from posting sp join account sc on sc.id = sp.account_id left join account spc on spc.id = sc.parent_id
                             where sp.txn_id = t.id and sc.kind = 'category' and (sc.name ilike ${like} or spc.name ilike ${like})))` : sql``}
@@ -632,7 +639,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
       const msd = req.book!.month_start_day;
       const ranges = stats.resolvePeriod(q.period, q.anchor ?? todayIST(), msd, q.from && q.to ? { from: q.from, to: q.to } : undefined);
       const r = ranges.current;
-      const [sum, prevSum, categories, merchants, accounts, people, daily, excluded, trend] = await Promise.all([
+      const [sum, prevSum, categories, merchants, accounts, people, daily, excluded, trend, moods] = await Promise.all([
         stats.summary(sql, B(req), r),
         ranges.previous ? stats.summary(sql, B(req), ranges.previous) : null,
         stats.byCategory(sql, B(req), q.period, ranges, q.categoryId),
@@ -642,10 +649,11 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
         stats.daily(sql, B(req), r),
         stats.excluded(sql, B(req), r),
         q.period === 'custom' ? [] : stats.trend(sql, B(req), q.period, r, msd),
+        stats.byMood(sql, B(req), r, q.categoryId),
       ]);
       const transactions = q.categoryId ? await stats.transactionsFor(sql, B(req), r, q.categoryId) : [];
       const incomeCategories = await stats.byIncomeCategory(sql, B(req), r);
-      return { period: q.period, range: r, previousRange: ranges.previous, comparedToDate: ranges.toDate, summary: sum, previousSummary: prevSum, categories, incomeCategories, merchants, accounts, people, daily, excluded, trend, transactions };
+      return { period: q.period, range: r, previousRange: ranges.previous, comparedToDate: ranges.toDate, summary: sum, previousSummary: prevSum, categories, incomeCategories, merchants, accounts, people, daily, excluded, trend, moods, transactions };
     });
 
     api.get('/api/integrity', async (req) => bookIntegrity(sql, B(req)));

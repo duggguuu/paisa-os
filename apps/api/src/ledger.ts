@@ -17,8 +17,14 @@ const signedPaise = z.number().int().min(-1e13).max(1e13).refine((n) => n !== 0,
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const id = z.string().uuid();
 
+/** The mindset behind a spend. Keep in step with apps/web/src/moods.ts. */
+export const MOODS = ['essential', 'daily', 'planned', 'growth', 'social', 'gift', 'treat', 'splurge', 'luxury', 'impulse', 'convenience', 'comfort', 'bored', 'fomo'] as const;
+
 const common = {
   date,
+  mood: z.enum(MOODS).optional().nullable(),
+  /** How money left a bank account (only kept when the paying account is a bank). */
+  payMethod: z.enum(['debit_card', 'upi', 'netbanking']).optional().nullable(),
   merchant: z.string().trim().max(120).optional().nullable(),
   description: z.string().trim().max(200).optional().nullable(),
   note: z.string().trim().max(2000).optional().nullable(),
@@ -159,6 +165,18 @@ function describe(input: TxnInput): string | null {
   return input.description ?? input.merchant ?? null;
 }
 
+/** A mood only means something on spending. */
+const moodOf = (i: TxnInput) => (i.kind === 'expense' || i.kind === 'split' ? i.mood ?? null : null);
+
+/** A payment method only applies when the money came out of a bank account. */
+async function payMethodOf(tx: Tx, bookId: string, i: TxnInput): Promise<string | null> {
+  if (!i.payMethod) return null;
+  const from = i.kind === 'transfer' ? i.fromAccountId : i.kind === 'expense' || i.kind === 'split' ? i.accountId : null;
+  if (!from) return null;
+  const [a] = await tx<{ kind: string }[]>`select kind from account where id = ${from} and book_id = ${bookId}`;
+  return a?.kind === 'bank' ? i.payMethod : null;
+}
+
 export interface TxnResult { id: string; duplicate: boolean }
 
 export interface TxnLinks { recurringId?: string | null; importBatchId?: string | null }
@@ -174,8 +192,8 @@ export async function createTxn(sql: Sql, bookId: string, input: TxnInput, actor
     let row: { id: string };
     try {
       [row] = await tx<{ id: string }[]>`
-        insert into txn (book_id, kind, occurred_on, description, merchant, note, tags, source, external_ref, idempotency_key, refund_of, recurring_id, import_batch_id)
-        values (${bookId}, ${input.kind}, ${input.date}, ${describe(input)}, ${input.merchant ?? null}, ${input.note ?? null},
+        insert into txn (book_id, kind, occurred_on, description, merchant, note, mood, pay_method, tags, source, external_ref, idempotency_key, refund_of, recurring_id, import_batch_id)
+        values (${bookId}, ${input.kind}, ${input.date}, ${describe(input)}, ${input.merchant ?? null}, ${input.note ?? null}, ${moodOf(input)}, ${await payMethodOf(tx, bookId, input)},
                 ${input.tags ?? []}, ${input.source ?? 'manual'}, ${input.externalRef ?? null}, ${input.idempotencyKey ?? null},
                 ${input.kind === 'refund' ? input.refundOf : null}, ${links.recurringId ?? null}, ${links.importBatchId ?? null})
         returning id`;
@@ -249,7 +267,7 @@ export async function updateTxn(sql: Sql, bookId: string, txnId: string, input: 
     await tx`delete from posting where txn_id = ${txnId}`;
     await tx`
       update txn set kind = ${input.kind}, occurred_on = ${input.date}, description = ${describe(input)},
-        merchant = ${input.merchant ?? null}, note = ${input.note ?? null}, tags = ${input.tags ?? []},
+        merchant = ${input.merchant ?? null}, note = ${input.note ?? null}, mood = ${moodOf(input)}, pay_method = ${await payMethodOf(tx, bookId, input)}, tags = ${input.tags ?? []},
         external_ref = ${input.externalRef ?? null}, refund_of = ${input.kind === 'refund' ? input.refundOf : null},
         updated_at = now()
       where id = ${txnId}`;

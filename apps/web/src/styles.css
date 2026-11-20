@@ -736,3 +736,16 @@ body { letter-spacing: 0.005em; font-size: 15.5px; }
 .holdings-tools { display: grid; gap: 8px; margin-top: 10px; }
 .holdings-sort { width: auto; flex: 1 1 170px; min-width: 0; padding-top: 8px; padding-bottom: 8px; }
 .linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
+
+/* ---------- how you paid (under the chosen bank) & mindset ---------- */
+.pay-methods { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0 10px; padding: 8px 0 2px 12px; border-left: 2px solid var(--border-strong); }
+.chip.small { min-height: 32px; padding: 5px 11px; font-size: 12.5px; }
+.mood-field .mood-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 6px; }
+.mood-group-label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; }
+.mood-tag { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.mood-share-groups { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--surface-3); margin: 4px 0 10px; }
+.mood-share-groups i { display: block; height: 100%; }
+.mood-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; }
+.mood-legend b { color: var(--ink); font-weight: 600; }
+.mood-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: 0; }
+.acct-methods { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
