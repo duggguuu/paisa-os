@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { SecuritySettings } from '../components/Security';
 import { WidgetsSettings } from '../components/WidgetsSettings';
 import { NotificationSettings } from '../components/Notifications';
+import { InstallApp } from '../components/InstallApp';
 import { BackupSettings } from '../components/Backup';
 import { ModeSeg, ThemeList } from '../components/Appearance';
 import { api, authHeaders, forgetUnlockKey } from '../lib';
@@ -49,6 +50,7 @@ export function Settings() {
   return (
     <>
       <h1 className="page-title">Settings</h1>
+      <InstallApp />
 
       <div className="section-title">Which book</div>
       <div className="card">

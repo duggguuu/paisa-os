@@ -46,8 +46,8 @@ export async function registrationOptions(sql: Sql, cfg: PasskeyConfig, userId: 
 export async function verifyRegistration(sql: Sql, cfg: PasskeyConfig, userId: string, challenge: string, response: any, deviceName: string | null) {
   const v = await verifyRegistrationResponse({
     response, expectedChallenge: challenge, expectedOrigin: cfg.origin, expectedRPID: cfg.rpID, requireUserVerification: true,
-  }).catch((e: Error) => { throw new LedgerError('passkey_failed', `Couldn't set up Face ID: ${e.message}`, 400); });
-  if (!v.verified || !v.registrationInfo) throw new LedgerError('passkey_failed', "Couldn't set up Face ID", 400);
+  }).catch((e: Error) => { throw new LedgerError('passkey_failed', `Couldn't set up Face ID / fingerprint: ${e.message}`, 400); });
+  if (!v.verified || !v.registrationInfo) throw new LedgerError('passkey_failed', "Couldn't set up Face ID / fingerprint", 400);
   const c = v.registrationInfo.credential;
   await sql`insert into webauthn_credential (id, user_id, public_key, counter, transports, device_name)
             values (${c.id}, ${userId}, ${Buffer.from(c.publicKey)}, ${c.counter}, ${(c.transports ?? []) as string[]}, ${deviceName})
@@ -58,7 +58,7 @@ export async function verifyRegistration(sql: Sql, cfg: PasskeyConfig, userId: s
 /** Options for a Face ID prompt. `userId` limits it to that owner's passkeys (unlock); omit for login. */
 export async function authenticationOptions(sql: Sql, cfg: PasskeyConfig, userId?: string) {
   const creds = await credsFor(sql, userId);
-  if (!creds.length) throw new LedgerError('no_passkey', 'Face ID is not set up on this account yet. Log in with your password, then turn it on in Settings.', 400);
+  if (!creds.length) throw new LedgerError('no_passkey', 'Face ID / fingerprint is not set up on this account yet. Log in with your password, then turn it on in Settings → Security.', 400);
   return generateAuthenticationOptions({
     rpID: cfg.rpID, userVerification: 'required', timeout: 60_000,
     allowCredentials: creds.map((c) => ({ id: c.id, transports: c.transports as any })),
@@ -73,8 +73,8 @@ export async function verifyAuthentication(sql: Sql, cfg: PasskeyConfig, challen
   const v = await verifyAuthenticationResponse({
     response, expectedChallenge: challenge, expectedOrigin: cfg.origin, expectedRPID: cfg.rpID, requireUserVerification: true,
     credential: { id: c.id, publicKey: new Uint8Array(c.public_key), counter: Number(c.counter), transports: c.transports as any },
-  }).catch((e: Error) => { throw new LedgerError('passkey_failed', `Face ID check failed: ${e.message}`, 401); });
-  if (!v.verified) throw new LedgerError('passkey_failed', 'Face ID check failed', 401);
+  }).catch((e: Error) => { throw new LedgerError('passkey_failed', `Face ID / fingerprint check failed: ${e.message}`, 401); });
+  if (!v.verified) throw new LedgerError('passkey_failed', 'Face ID / fingerprint check failed', 401);
   await sql`update webauthn_credential set counter = ${v.authenticationInfo.newCounter}, last_used_at = now() where id = ${c.id}`;
   return c.user_id;
 }

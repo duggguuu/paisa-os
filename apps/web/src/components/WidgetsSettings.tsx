@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib';
 import { useUi } from '../App';
 import { scriptableScript, WIDGET_FEATURES } from '../widget-script';
+import { isInstalled, platform } from '../device';
 
 const when = (iso: string) => new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -45,6 +46,13 @@ export function WidgetsSettings() {
   }
 
   if (!q.data) return <div className="card"><div className="skeleton" /></div>;
+  if (platform() === 'android') return (
+    <div className="card">
+      <p className="small" style={{ marginTop: 0 }}><b>On Android:</b> touch and hold the Paisa icon to get its shortcuts: <b>Add expense</b>, <b>Say it</b>, <b>Transactions</b> and <b>Stats</b>. Drag any of them onto your home screen to make it a one-tap button.</p>
+      {!isInstalled() && <p className="tiny faint">Shortcuts appear once Paisa is installed (Settings → Install, at the top of this page).</p>}
+      <p className="tiny faint" style={{ marginBottom: 0 }}>Live number widgets (balance, safe to spend…) use an iPhone-only app, so on Android your numbers live in Paisa's own <b>Home → Widgets</b>, in small, medium and large tiles.</p>
+    </div>
+  );
   return (
     <div className="card">
       <p className="small" style={{ marginTop: 0 }}>Put Paisa on your iPhone <b>home screen</b> and <b>Lock Screen</b> in small, medium and large sizes. iPhone only lets App Store apps make widgets, so this uses the free <b>Scriptable</b> app to draw them. Widgets for Paisa's own Home screen are under <b>Home → Widgets → Edit</b>.</p>

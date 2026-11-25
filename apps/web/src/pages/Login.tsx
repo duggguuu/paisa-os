@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib';
 import { useFaceIdLogin } from '../components/Security';
+import { bio, bioIcon } from '../device';
 import { Icon } from '../components/Icons';
 
 export function Login({ setupNeeded, passkeyLogin }: { setupNeeded: boolean; passkeyLogin?: boolean }) {
@@ -51,7 +52,7 @@ export function Login({ setupNeeded, passkeyLogin }: { setupNeeded: boolean; pas
             try { await faceId.run(); await qc.invalidateQueries({ queryKey: ['auth'] }); }
             catch (e: any) { setErr(e.message); }
             finally { setBusy(false); }
-          }}><Icon name="faceid" /> Log in with Face ID</button>
+          }}><Icon name={bioIcon()} /> Log in with {bio()}</button>
         )}
         {setupNeeded
           ? <p className="note">You'll also get a separate demo book with sample data to explore. It never mixes with your real records.</p>

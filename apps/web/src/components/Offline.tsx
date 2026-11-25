@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { money } from '../lib';
+import { bio } from '../device';
 import {
   discard, flushOutbox, hasOfflinePasskey, hasOfflinePin, outbox, SAVED_AT, unlockWithFaceId, unlockWithPin, type OfflineUser, type Pending,
 } from '../offline';
@@ -94,8 +95,8 @@ export function OfflineLock({ user, onUnlocked }: { user: OfflineUser; onUnlocke
     <div className="lock-screen">
       <img src="/logo-mark.png" alt="" className="lock-logo" />
       <h1>Paisa is locked</h1>
-      <p className="muted small">You're offline. {face || canPin ? 'Unlock on this device to see your saved data and add entries.' : 'Unlock once with Face ID or your PIN while online, and it will work offline next time.'}</p>
-      {face && <button className="btn accent" disabled={busy} onClick={tryFace}>{busy ? 'Checking…' : 'Unlock with Face ID'}</button>}
+      <p className="muted small">You're offline. {face || canPin ? 'Unlock on this device to see your saved data and add entries.' : `Unlock once with ${bio()} or your PIN while online, and it will work offline next time.`}</p>
+      {face && <button className="btn accent" disabled={busy} onClick={tryFace}>{busy ? 'Checking…' : `Unlock with ${bio()}`}</button>}
       {canPin && (
         <label className="pin-boxes" aria-label={`Enter your ${user.pinLength}-digit PIN`} style={{ marginTop: 12 }}>
           <input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="off" maxLength={user.pinLength!} value={pin} disabled={busy} autoFocus={!face}

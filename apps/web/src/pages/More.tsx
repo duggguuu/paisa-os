@@ -18,7 +18,7 @@ const ITEMS: [string, string, string, string][] = [
   ['/splitwise', 'users', 'Splitwise', 'Shared expenses'],
   ['/mandates', 'repeat', 'Mandates & subscriptions', 'Auto-debits, renewals and their reminders'],
   ['/categories', 'pie', 'Categories', 'Add and edit expense & income categories'],
-  ['/settings', 'settings', 'Settings', 'Face ID, Zerodha, sample data, export'],
+  ['/settings', 'settings', 'Settings', 'App lock, Zerodha, sample data, export'],
 ];
 
 export function More() {

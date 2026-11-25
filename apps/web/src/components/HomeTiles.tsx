@@ -189,7 +189,7 @@ function TilesEditor({ initial, onClose }: { initial: Tile[]; onClose: () => voi
           ))}
         </div>
       </>}
-      <p className="tiny faint">Want them on your iPhone home screen too? Settings → Widgets.</p>
+      <p className="tiny faint">{/Android/i.test(navigator.userAgent) ? 'Quick buttons on your Android home screen: touch and hold the Paisa icon (Settings → Widgets).' : 'Want them on your iPhone home screen too? Settings → Widgets.'}</p>
       <button className="btn accent block" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
     </Sheet>
   );

@@ -8,9 +8,11 @@ import { initTheme } from './theme';
 import { App } from './App';
 import { installScrollReveal } from './motion-fx';
 import { restoreCache, persistCache, installOutbox } from './offline';
+import { captureInstallPrompt } from './device';
 
 initTheme();
 installScrollReveal();
+captureInstallPrompt();
 
 // Service worker: notifications, plus a copy of the app itself so it opens offline (pages are always
 // fetched fresh when online). Registering it is harmless where push isn't supported.

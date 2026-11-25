@@ -17,7 +17,9 @@ const b64ToBytes = (s: string) => { const p = '='.repeat((4 - (s.length % 4)) % 
 function unsupported(): string | null {
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone;
   if (/iPhone|iPad/.test(navigator.userAgent) && !standalone) return 'On iPhone, notifications work in the installed app: in Safari tap Share → Add to Home Screen, open Paisa from your home screen, then come back here.';
-  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'This browser can’t show notifications. Use Chrome, Edge, Firefox, or Safari on a Mac / the installed iPhone app (iOS 16.4 or later).';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return /Android/i.test(navigator.userAgent)
+    ? 'This browser can’t show notifications. Open Paisa in Chrome (or install it from Chrome: ⋮ → Install app), then come back here.'
+    : 'This browser can’t show notifications. Use Chrome, Edge, Firefox, or Safari on a Mac / the installed iPhone app (iOS 16.4 or later).';
   return null;
 }
 

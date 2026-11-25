@@ -99,10 +99,15 @@ function Shell() {
     qc.prefetchQuery({ queryKey: ['accounts'], queryFn: () => api<any[]>('/api/accounts') });
     qc.prefetchQuery({ queryKey: ['categories'], queryFn: () => api<any[]>('/api/categories') });
   }, [qc]);
-  // A daily reminder opens the app with ?add=1: go straight to "Add transaction".
+  // A daily reminder or an app shortcut (long-press the icon on Android) opens the app with ?add=…:
+  // 1 = "Add transaction", voice = start listening, income / transfer = that kind.
   useEffect(() => {
     const p = new URLSearchParams(loc.search);
-    if (p.get('add') === '1' && loc.pathname === '/') { setAdd({}); navigate('/', { replace: true }); }
+    const a = p.get('add');
+    if (a && loc.pathname === '/') {
+      setAdd(a === 'voice' ? { voice: true } : a === 'income' || a === 'transfer' ? { kind: a } : {});
+      navigate('/', { replace: true });
+    }
   }, [loc.search, loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   const [txn, setTxn] = useState<string | null>(null);
   const [toastState, setToast] = useState<{ msg: string; action?: { label: string; run: () => void }; id: number } | null>(null);

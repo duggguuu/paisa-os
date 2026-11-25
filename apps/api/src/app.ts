@@ -144,7 +144,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     if (!s) throw new LedgerError('unauthenticated', 'Session expired. Please log in again.', 401);
     req.userId = s.user_id;
     (req as any).locked = s.locked;
-    if (s.locked && !opts.allowLocked) throw new LedgerError('locked', 'Paisa is locked. Unlock with Face ID or your password.', 423);
+    if (s.locked && !opts.allowLocked) throw new LedgerError('locked', 'Paisa is locked. Unlock with Face ID, your fingerprint or your password.', 423);
     if (!s.locked && s.lock_enabled && s.refresh) {
       await sql`update session set unlocked_until = now() + make_interval(mins => ${s.lock_minutes}) where token_hash = ${sha256(token)}`;
     }
@@ -163,7 +163,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     const raw = req.cookies[CHALLENGE_COOKIE];
     reply.clearCookie(CHALLENGE_COOKIE, { path: '/api/' });
     const u = raw ? req.unsignCookie(raw) : null;
-    if (!u?.valid || !u.value?.startsWith(`${purpose}:`)) throw new LedgerError('passkey_expired', 'That took too long. Try Face ID again.', 400);
+    if (!u?.valid || !u.value?.startsWith(`${purpose}:`)) throw new LedgerError('passkey_expired', 'That took too long. Try again.', 400);
     return u.value.slice(purpose.length + 1);
   };
 
@@ -227,7 +227,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
     const password = z.object({ password: z.string().min(1).max(200) }).parse(req.body).password;
     const k = `unlock:${req.userId}`;
     const att = loginAttempts.get(k);
-    if (att && att.n >= 5 && att.until > Date.now()) throw new LedgerError('rate_limited', 'Too many attempts. Try again in 15 minutes, or use Face ID.', 429);
+    if (att && att.n >= 5 && att.until > Date.now()) throw new LedgerError('rate_limited', 'Too many attempts. Try again in 15 minutes, or use Face ID / your fingerprint.', 429);
     const [u] = await sql<{ password_hash: string }[]>`select password_hash from app_user where id = ${req.userId!}`;
     if (!(await verifyPassword(password, u.password_hash))) {
       loginAttempts.set(k, { n: (att && att.until > Date.now() ? att.n : 0) + 1, until: Date.now() + 15 * 60_000 });

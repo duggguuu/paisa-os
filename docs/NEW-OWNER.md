@@ -1,6 +1,6 @@
 # Paisa OS: your own private finance app
 
-Paisa OS keeps track of your money: spending, budgets, salary and income tax, loans, FDs, goals and money you've lent. It runs on your phone like an app (Face ID included) and on your laptop in the browser.
+Paisa OS keeps track of your money: spending, budgets, salary and income tax, loans, FDs, goals and money you've lent. It runs on your phone like an app (iPhone with Face ID, or Android with your fingerprint) and on your laptop in the browser.
 
 This guide sets up **your own copy**. It takes about 45 minutes, once, and costs ₹0.
 
@@ -14,7 +14,9 @@ This guide sets up **your own copy**. It takes about 45 minutes, once, and costs
 4. [Neon: create your database](#4-neon-create-your-database)
 5. [Render: put the app online](#5-render-put-the-app-online)
 6. [First visit: create your login](#6-first-visit-create-your-login)
-7. [Your iPhone: install the app and turn on Face ID](#7-your-iphone-install-the-app-and-turn-on-face-id)
+7. [Your phone: install the app and turn on Face ID or fingerprint](#7-your-phone-install-the-app-and-turn-on-face-id-or-fingerprint)
+   - [Android](#android)
+   - [iPhone](#iphone)
 8. [Your laptop: set a PIN](#8-your-laptop-set-a-pin)
 9. [Getting started inside the app](#9-getting-started-inside-the-app)
    - [Reminders and notifications](#reminders-and-notifications)
@@ -158,7 +160,30 @@ You're in. You get two separate **books**:
 
 ---
 
-## 7. Your iPhone: install the app and turn on Face ID
+## 7. Your phone: install the app and turn on Face ID or fingerprint
+
+Follow the part for your phone.
+
+### Android
+
+Before you start, make sure the phone has a **screen lock and a fingerprint** set up (Android **Settings → Security**) and you're signed in to your Google account. The fingerprint login is stored in **Google Password Manager**, so use **your own Google account**.
+
+1. On your phone, open your address in **Chrome**.
+2. Install it: at the top of **Settings** in Paisa there's an **Install** button; tap it, then **Install**. If you don't see it, tap Chrome's **⋮** menu (top right) → **Install app** (or **Add to Home screen** → **Install**).
+3. Open **Paisa** from its new icon (it opens full-screen, like any app) and log in with your email and password.
+4. Go to **Settings → Security → Fingerprint (phone) → Set up Fingerprint on this device**, touch the sensor, and save the passkey when Android asks.
+5. Under **Lock Paisa**, keep both switches on:
+   - **Lock Paisa**: the lock itself.
+   - **Every time it opens**: asks for your fingerprint whenever you open the app.
+   - Then pick how long it can be idle before it locks again (5 minutes is a good default).
+
+From now on, opening Paisa asks for your fingerprint. If your phone also has face unlock, Android may offer that instead; either works.
+
+**Shortcuts:** touch and hold the Paisa icon for **Add expense**, **Say it**, **Transactions** and **Stats**. Drag one onto your home screen for a one-tap button.
+
+**Notifications** work in Chrome and in the installed app; see [Reminders and notifications](#reminders-and-notifications).
+
+### iPhone
 
 1. On your iPhone, open your address in **Safari** (it must be Safari).
 2. Tap **Share** (the square with an arrow) → **Add to Home Screen** → **Add**.
@@ -203,11 +228,11 @@ Do these once, in this order:
 6. **Zerodha (optional).** To see your stocks and mutual funds at market value, go to **Settings → Zerodha (Kite)**. It needs your own Kite Connect app from developers.kite.trade (Zerodha may charge for it); Settings shows the exact **redirect URL** to give that app. Then tap **Accounts → Holdings → Log in & sync** about once a day. Paisa only reads your holdings; it can't place orders.
 7. **Optional extras:** **Budget Planner**, **Goals**, **Bills & recurring**, **Owe & owed** (money you've lent, borrowed, or that friends owe you), **FDs** and **Splitwise** (import its exports or screenshots). In FDs you note which bank the FD is in and which account the money came from, set the duration (years, months, days), and see the expected return; the app suggests today's rate for that bank and tenure, and **Compare rates** lists banks side by side. If your FD receipt shows the maturity amount, type it in and the app uses that figure. Pick the bank from the list (your own accounts are at the top) and the exact scheme from the second list: each bank's 1-, 2-, 3- and 5-year rates, or for the Post Office its Time Deposits, NSC, KVP, Monthly Income Scheme and Senior Citizens scheme. Choosing where the money came from takes it out of that account. Tap an FD to edit or delete it.
 
-**Widgets:** on Home, the **Widgets** section → **Edit** lets you pick tiles (safe to spend, this month, net worth, budget, bills, FDs, goals, top spending), make each small, medium or large, and reorder them. For your iPhone home screen and Lock Screen, go to **Settings → Widgets → Set up iPhone widgets** and follow the steps; it uses the free Scriptable app.
+**Widgets:** on Home, the **Widgets** section → **Edit** lets you pick tiles (safe to spend, this month, net worth, budget, bills, FDs, goals, top spending), make each small, medium or large, and reorder them. For your iPhone home screen and Lock Screen, go to **Settings → Widgets → Set up iPhone widgets** and follow the steps; it uses the free Scriptable app (iPhone only). On Android, use the app shortcuts instead: touch and hold the Paisa icon, then drag **Add expense** or **Say it** onto your home screen.
 
 **Zerodha:** money you add to Kite, and mutual funds bought straight from your bank (Coin or a SIP), are **transfers** from your bank to Zerodha, not spending. Accounts → Holdings has buttons for both, plus **Withdraw to bank**, and shows your **unused funds in Kite** after each sync.
 
-**Offline:** once you've opened Paisa with internet, it opens without a connection too and shows your last-saved data. New entries you add offline are kept on the phone and sent when you're back online (the strip at the top shows how many are waiting). If the app lock is on, offline it unlocks with Face ID or your PIN, as long as you've used that once on this phone while online.
+**Offline:** once you've opened Paisa with internet, it opens without a connection too and shows your last-saved data. New entries you add offline are kept on the phone and sent when you're back online (the strip at the top shows how many are waiting). If the app lock is on, offline it unlocks with Face ID / your fingerprint or your PIN, as long as you've used that once on this phone while online.
 
 **Splitting a bill:** in Add transaction, pick the people under **Split with**, then **Equally**, **By %** or **By ₹**. Only your share counts as spending; the rest shows as money they owe you. Leave a share blank and it fills in the rest. If Splitwise is linked, **Also add to Splitwise** creates the expense there too. When someone pays you back, choose **Income** and pick them under **Someone paying you back?**: it lowers what they owe instead of counting as income.
 
@@ -229,7 +254,10 @@ Do these once, in this order:
 
 Paisa can nudge you three times a day (morning, afternoon, night) to add your expenses, and remind you before any **mandate or subscription** renews.
 
-1. **On your iPhone:** open Paisa **from the home-screen icon** (it doesn't work in plain Safari), then go to **Settings → Notifications → Turn on notifications** and tap **Allow**. Do the same on your laptop if you want them there too.
+1. **On your phone:**
+   - **Android:** open Paisa (the installed app or Chrome), go to **Settings → Notifications → Turn on notifications** and tap **Allow**.
+   - **iPhone:** open Paisa **from the home-screen icon** (it doesn't work in plain Safari), then do the same.
+   - Do the same on your laptop if you want them there too.
 2. Pick your three times (default 9 AM, 2 PM and 9 PM). **Show amounts in notifications** is off, because notifications appear on your lock screen.
 3. **One-time setup so reminders arrive on time.** The free server sleeps when unused, so an hourly "alarm" on GitHub wakes it:
    1. In the app: **Settings → Notifications → How**. You'll need two things from there, **your app address** and **Copy key**.
@@ -322,7 +350,7 @@ GitHub pauses scheduled jobs in a repository that has had no activity for 60 day
 - [ ] **Your own Apple ID**, phone passcode and laptop user account.
 - [ ] The **Neon connection string** is only in your password manager and in Render.
 - [ ] **Paisa password** is unique (used nowhere else).
-- [ ] **Face ID** on your phone, **PIN** on your laptop, **Lock Paisa** on.
+- [ ] **Face ID / fingerprint** on your phone, **PIN** on your laptop, **Lock Paisa** on.
 - [ ] **Your fork has no collaborators.**
 - [ ] **Show amounts in notifications** stays off unless your lock screen is private.
 - [ ] If you ask an AI assistant about your money, use **your own account**: conversations stay in the account that had them.
@@ -346,7 +374,7 @@ GitHub pauses scheduled jobs in a repository that has had no activity for 60 day
 
 All devices are logged out and the laptop PIN is cleared; set them up again in Settings.
 
-**Face ID stopped working, or I have a new phone.** Log in with your password, then go to **Settings → Security → Set up Face ID on this device**. You can remove old devices from the same screen.
+**Face ID / fingerprint stopped working, or I have a new phone.** Log in with your password, then go to **Settings → Security → Set up Face ID (or Fingerprint) on this device**. You can remove old devices from the same screen.
 
 **The PIN is "paused".** That happens after 5 wrong tries. Tap **Use password**; the PIN works again after that.
 

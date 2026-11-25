@@ -11,6 +11,7 @@
  * Logging out deletes all of it from the device.
  */
 import { dehydrate, hydrate, type QueryClient } from '@tanstack/react-query';
+import { bio } from './device';
 
 // ---------- tiny IndexedDB key-value store ----------
 const DB = 'paisa-offline', STORE = 'kv';
@@ -121,17 +122,18 @@ export function rememberPasskey(id: string) {
 export const hasOfflinePasskey = () => JSON.parse(ls.get('paisa.offline.passkeys') ?? '[]').length > 0;
 /** Face ID offline: the phone checks your face itself, so only a real Face ID match lets you in. */
 export async function unlockWithFaceId(): Promise<string | null> {
+  const name = bio();
   const ids: string[] = JSON.parse(ls.get('paisa.offline.passkeys') ?? '[]');
-  if (!ids.length) return 'Face ID hasn’t been used on this device yet. Unlock once while online.';
+  if (!ids.length) return `${name} hasn’t been used on this device yet. Unlock once while online.`;
   try {
     const cred = await navigator.credentials.get({ publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)), rpId: location.hostname, userVerification: 'required', timeout: 60_000,
       allowCredentials: ids.map((id) => ({ type: 'public-key' as const, id: Uint8Array.from(atob(id.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(id.length / 4) * 4, '=')), (c) => c.charCodeAt(0)) })),
     } });
-    if (!cred) return 'Face ID didn’t work. Try again or use your PIN.';
+    if (!cred) return `${name} didn’t work. Try again or use your PIN.`;
     markUnlocked();
     return null;
-  } catch { return 'Face ID was cancelled or didn’t match.'; }
+  } catch { return `${name} was cancelled or didn’t match.`; }
 }
 
 // ---------- outbox: entries saved offline ----------
